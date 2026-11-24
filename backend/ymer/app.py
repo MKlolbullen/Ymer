@@ -16,6 +16,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     settings = get_settings()
     if overrides:
         settings = settings.model_copy(update=overrides)
+    if settings.env == "production" and (
+        settings.secret_key == "change-me" or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError("Set YMER_SECRET_KEY to a random value of at least 32 characters.")
 
     app = Flask(__name__)
     app.config.update(
@@ -42,7 +46,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     @app.errorhandler(HTTPException)
     def _http_error(err: HTTPException):
-        return jsonify(error=err.name, message=err.description), err.code
+        body = {"error": err.name, "message": err.description}
+        if errors := getattr(err, "errors", None):
+            body["errors"] = errors
+        return jsonify(body), err.code
 
     return app
 

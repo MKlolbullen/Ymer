@@ -15,7 +15,8 @@ from ymer.config import get_settings
 from ymer.db import Base
 
 config = context.config
-if config.config_file_name is not None:
+# Tests set configure_logger=False so running migrations does not reset pytest's logging.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # Register all models on Base.metadata. ymer/models/__init__.py should import

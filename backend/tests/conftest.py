@@ -7,8 +7,11 @@ without Docker.
 """
 
 import os
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
@@ -16,6 +19,10 @@ os.environ["YMER_ENV"] = "test"
 
 from ymer import create_app  # noqa: E402
 from ymer.config import get_settings  # noqa: E402
+from ymer.db import SessionLocal, db_session, get_engine  # noqa: E402
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+TEST_SECRET_KEY = "test-secret-key-that-is-at-least-32-bytes-long"
 
 
 @pytest.fixture(scope="session")
@@ -39,7 +46,7 @@ def _skip_without_database(request, database_available):
 
 @pytest.fixture
 def app():
-    app = create_app({"env": "test"})
+    app = create_app({"env": "test", "secret_key": TEST_SECRET_KEY})
     yield app
     app.extensions["sqlalchemy_engine"].dispose()
 
@@ -47,3 +54,41 @@ def app():
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+def alembic_config() -> Config:
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    config.attributes["configure_logger"] = False
+    return config
+
+
+@pytest.fixture(scope="session")
+def migrated_database(database_available):
+    """Rebuild the test database schema from the migrations once per test run."""
+    if not database_available:
+        pytest.skip("Postgres not reachable at YMER_TEST_DATABASE_URL (run `docker compose up -d`)")
+    config = alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+
+@pytest.fixture
+def db(app, migrated_database):
+    """A session whose work is rolled back after the test.
+
+    The test and every request it makes share one connection inside an outer
+    transaction; ``commit()`` in app code only releases a savepoint, so nothing
+    leaks between tests.
+    """
+    engine = get_engine(app)
+    connection = engine.connect()
+    outer = connection.begin()
+    SessionLocal.configure(bind=connection, join_transaction_mode="create_savepoint")
+    try:
+        yield db_session
+    finally:
+        db_session.remove()
+        outer.rollback()
+        connection.close()
+        SessionLocal.configure(bind=engine, join_transaction_mode="conservative_savepoint")
