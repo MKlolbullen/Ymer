@@ -17,10 +17,10 @@ def init_redis(app: Flask, settings: Settings) -> None:
     )
 
 
-def init_s3(app: Flask, settings: Settings) -> None:
-    app.extensions["s3"] = boto3.client(
+def _s3_client(settings: Settings, endpoint_url: str | None):
+    return boto3.client(
         "s3",
-        endpoint_url=settings.s3_endpoint_url,
+        endpoint_url=endpoint_url,
         aws_access_key_id=settings.s3_access_key,
         aws_secret_access_key=settings.s3_secret_key,
         region_name=settings.s3_region,
@@ -34,9 +34,22 @@ def init_s3(app: Flask, settings: Settings) -> None:
     )
 
 
+def init_s3(app: Flask, settings: Settings) -> None:
+    app.extensions["s3"] = _s3_client(settings, settings.s3_endpoint_url)
+    # Presigned URLs embed the host they were signed for, so sign browser-facing ones
+    # with the public endpoint when it differs.
+    public = settings.s3_public_endpoint_url
+    app.extensions["s3_public"] = _s3_client(settings, public) if public else app.extensions["s3"]
+
+
 def get_redis() -> redis.Redis:
     return current_app.extensions["redis"]
 
 
 def get_s3():
     return current_app.extensions["s3"]
+
+
+def get_public_s3():
+    """S3 client for presigning URLs that the browser will open."""
+    return current_app.extensions["s3_public"]

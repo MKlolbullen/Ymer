@@ -23,6 +23,7 @@ from ymer.db import SessionLocal, db_session, get_engine  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 TEST_SECRET_KEY = "test-secret-key-that-is-at-least-32-bytes-long"
+TEST_COLLAB_SECRET = "test-collab-secret"
 
 
 @pytest.fixture(scope="session")
@@ -46,7 +47,9 @@ def _skip_without_database(request, database_available):
 
 @pytest.fixture
 def app():
-    app = create_app({"env": "test", "secret_key": TEST_SECRET_KEY})
+    app = create_app(
+        {"env": "test", "secret_key": TEST_SECRET_KEY, "collab_secret": TEST_COLLAB_SECRET}
+    )
     yield app
     app.extensions["sqlalchemy_engine"].dispose()
 

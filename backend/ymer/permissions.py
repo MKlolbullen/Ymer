@@ -220,6 +220,17 @@ class WorkspaceScope:
             self._page_roles[page.id] = role
         return result
 
+    def subtree_ids(self, page_id: uuid.UUID) -> list[uuid.UUID]:
+        """Ids of ``page_id`` and every page beneath it."""
+        sub = (
+            select(Page.id)
+            .where(Page.id == page_id, Page.workspace_id == self.workspace.id)
+            .cte("sub", recursive=True)
+        )
+        child = aliased(Page)
+        sub = sub.union_all(select(child.id).join(sub, child.parent_id == sub.c.id))
+        return list(self.session.scalars(select(sub.c.id)))
+
     def is_descendant(self, candidate_id: uuid.UUID, ancestor_id: uuid.UUID) -> bool:
         """True if ``candidate_id`` is ``ancestor_id`` or lies beneath it."""
         sub = (

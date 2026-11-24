@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     jwt_access_ttl: int = 15 * 60
     jwt_refresh_ttl: int = 30 * 24 * 60 * 60
 
+    # Browser-facing S3 endpoint for presigned download URLs, when it differs from
+    # s3_endpoint_url (e.g. the backend reaches MinIO as http://minio:9000 inside Docker).
+    s3_public_endpoint_url: str | None = None
+    # Largest upload accepted, in bytes.
+    max_upload_bytes: int = 25 * 1024 * 1024
+
+    # Shared secret the collab service (collab/) sends on /internal/collab/* requests.
+    collab_secret: str = "change-me-collab"
+    # An automatic version snapshot is taken on save when the newest one is older than this.
+    version_interval: int = 10 * 60
+
     # Seconds each dependency check in /api/health/ready may take.
     health_check_timeout: float = 2.0
 

@@ -23,7 +23,8 @@ from ymer.api.validation import parse_body
 from ymer.api.workspaces import scope_for
 from ymer.auth import current_user, login_required
 from ymer.db import db_session
-from ymer.models import Page, PagePermission, PageType, Role, User
+from ymer.files import delete_stored_objects
+from ymer.models import File, Page, PagePermission, PageType, Role, User
 from ymer.permissions import WorkspaceScope
 
 pages_bp = Blueprint("pages", __name__, url_prefix="/workspaces/<uuid:workspace_id>/pages")
@@ -134,8 +135,11 @@ def update_page(workspace_id: uuid.UUID, page_id: uuid.UUID):
 def delete_page(workspace_id: uuid.UUID, page_id: uuid.UUID):
     scope = scope_for(workspace_id)
     page = scope.get_page(page_id, Role.EDITOR)
+    subtree = scope.subtree_ids(page.id)
+    keys = db_session.scalars(select(File.storage_key).where(File.page_id.in_(subtree))).all()
     db_session.delete(page)
     db_session.commit()
+    delete_stored_objects(keys)
     return "", 204
 
 
