@@ -1,5 +1,7 @@
 # Ymer — multi-user creator platform combining collaborative documents, Notion-style notebooks/databases, mind mapping, note-taking, charts/visuals, and general file handling.
 
+> **Running the code:** see [DEVELOPMENT.md](DEVELOPMENT.md) for setup, services and commands.
+
 ### 1. High-Level Architecture
 
 ```
