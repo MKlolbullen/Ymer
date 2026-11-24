@@ -6,14 +6,16 @@ The architecture and roadmap are in [README.md](README.md). This file covers run
 
 ```
 backend/     Flask 3 API (Python package `ymer`), SQLAlchemy 2, Alembic migrations
-frontend/    Vite + React 18 + TypeScript + Tailwind CSS 4
+collab/      Realtime collaboration service: Hocuspocus (Yjs over WebSockets), Node 22
+frontend/    Vite + React 18 + TypeScript + Tailwind CSS 4, TipTap editor
 infra/       Init scripts for the Docker Compose services
 docker-compose.yml   Postgres 16 + pgvector, Redis 7, MinIO
 ```
 
 ## Prerequisites
 
-Docker (with Compose v2), Python 3.12+, [uv](https://docs.astral.sh/uv/) (or plain `pip`), Node 22+.
+Docker (with Compose v2), Python 3.12+, [uv](https://docs.astral.sh/uv/) (or plain `pip`), Node 22.18+
+(the collab service runs its TypeScript directly with Node's type stripping).
 
 ## First run
 
@@ -22,7 +24,8 @@ make setup       # .env from .env.example, backend venv, npm install
 make infra-up    # Postgres, Redis, MinIO (also creates the `ymer` bucket)
 make migrate     # alembic upgrade head
 make backend     # API on http://localhost:5000
-make frontend    # app on http://localhost:5173 (proxies /api to :5000)
+make collab      # collab service on ws://localhost:1234
+make frontend    # app on http://localhost:5173 (proxies /api to :5000, /collab to :1234)
 ```
 
 Without `make` or `uv`: `python -m venv backend/.venv && backend/.venv/bin/pip install -e 'backend[dev]'`.
@@ -112,3 +115,42 @@ npm run dev | build | typecheck | test
 Tests: `tests/test_permissions.py` covers the rules above, `tests/test_auth.py` the
 tokens, `tests/test_schema.py` the constraints and that the migration matches the
 models. The `db` fixture wraps each test in a transaction that is rolled back.
+
+## Collaborative documents (Phase 1)
+
+```
+browser ──REST /api──────────▶ Flask ──▶ Postgres (document_content, document_versions,
+   │                             ▲                  comments, files) + S3 (file bytes)
+   └──WebSocket /collab──▶ collab (Hocuspocus)
+                                 └── /internal/collab/* : authorize, fetch, store
+```
+
+- **Live editing** (`collab/`): the browser opens a Hocuspocus connection per document,
+  named by its page id, with the user's access token. `onAuthenticate` asks Flask
+  (`POST /internal/collab/authorize`) whether that user can open the page; viewers and
+  commenters get a read-only connection, so their edits are dropped server-side. Flask
+  stays the only place that decides permissions and the only writer of the schema.
+- **Storage**: Hocuspocus loads and saves the merged Yjs state through Flask
+  (`GET/PUT /internal/collab/documents/<page_id>`), debounced (2 s, at most 10 s). These
+  routes are outside `/api`, need `X-Ymer-Collab-Secret` = `YMER_COLLAB_SECRET`, and should
+  not be routed from the internet by the production reverse proxy.
+- **Versions**: a save takes an automatic snapshot when the newest is older than
+  `YMER_VERSION_INTERVAL` (10 min). "Save version" sends the editor's live state.
+  Restoring replays an old version's content as a new edit, after snapshotting the
+  current one, so nothing is lost and everyone connected sees it.
+- **Comments**: threads (a first comment plus replies) can be anchored to a text range.
+  The anchor is two Yjs relative positions stored on the comment, so it follows edits and
+  commenters can anchor without write access. Clients tell each other to refetch with
+  Hocuspocus stateless messages (`comments-changed`, `versions-changed`); the collab
+  service relays only those.
+- **Files**: `POST .../pages/<id>/files` (multipart, editors, `YMER_MAX_UPLOAD_BYTES`,
+  25 MB) stores bytes in S3. Documents reference files by id; each viewer gets a 5-minute
+  presigned URL after a permission check. Only safe image types and PDF are served inline;
+  everything else (including SVG) downloads. Set `YMER_S3_PUBLIC_ENDPOINT_URL` when the
+  browser reaches S3 at a different host than the backend does.
+- **Editor** (`frontend/src/editor/`): TipTap 3 with StarterKit (headings, lists, quotes,
+  code, links), task lists, images and file attachments. `extensions.ts` is the document
+  schema; anything outside it is dropped on paste.
+
+Collab tests (`cd collab && npm test`) run the real Hocuspocus server against a stub of
+Flask's internal API and connect real providers.

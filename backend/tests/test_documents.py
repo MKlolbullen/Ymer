@@ -55,6 +55,18 @@ def test_save_version_needs_content_and_editor(client, team, db):
     assert resp.get_json()["version"]["created_by"]["id"] == str(team.editor.id)
 
 
+def test_save_version_from_the_editors_live_state(client, team):
+    path = url(team, team.doc, "/versions")
+    live = base64.b64encode(b"live-state").decode()
+    resp = client.post(path, json={"state": live}, headers=team.editor.headers)
+    assert resp.status_code == 201
+    vid = resp.get_json()["version"]["id"]
+    got = client.get(url(team, team.doc, f"/versions/{vid}"), headers=team.viewer.headers)
+    assert got.get_json()["version"]["state"] == live
+    assert client.post(path, json={"state": "%%%"}, headers=team.editor.headers).status_code == 400
+    assert client.post(path, json={"state": ""}, headers=team.editor.headers).status_code == 400
+
+
 def test_list_and_read_versions(client, team, db):
     save_state(db, team.doc.id, b"auto", user_id=team.owner.id, version_interval=600)
     db.commit()

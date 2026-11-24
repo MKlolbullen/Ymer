@@ -1,7 +1,7 @@
 """Version history and comments on document pages.
 
 - ``GET    /api/workspaces/<ws>/pages/<id>/versions``          viewer; newest first
-- ``POST   /api/workspaces/<ws>/pages/<id>/versions``          editor; snapshot now {label?}
+- ``POST   /api/workspaces/<ws>/pages/<id>/versions``          editor; snapshot {label?, state?}
 - ``GET    /api/workspaces/<ws>/pages/<id>/versions/<vid>``    viewer; includes base64 ``state``
 - ``GET    /api/workspaces/<ws>/pages/<id>/comments``          viewer; all threads, oldest first
 - ``POST   /api/workspaces/<ws>/pages/<id>/comments``          commenter
@@ -13,6 +13,7 @@ applies its content as a new edit, so everyone connected sees it and nothing is 
 """
 
 import base64
+import binascii
 import uuid
 from datetime import UTC, datetime
 
@@ -28,6 +29,8 @@ from ymer.auth import current_user, login_required
 from ymer.db import db_session
 from ymer.models import Comment, DocumentContent, DocumentVersion, Page, PageType, Role, User
 from ymer.permissions import WorkspaceScope
+
+MAX_STATE_B64 = 20 * 1024 * 1024
 
 documents_bp = Blueprint(
     "documents", __name__, url_prefix="/workspaces/<uuid:workspace_id>/pages/<uuid:page_id>"
@@ -52,6 +55,9 @@ def _person(user: User | None) -> dict | None:
 
 class CreateVersionBody(BaseModel):
     label: str | None = Field(default=None, max_length=200)
+    # Base64 Yjs state from the editor's live copy. Stored content trails live edits by
+    # the collab service's save debounce, so "Save version" sends what the user sees.
+    state: str | None = Field(default=None, max_length=MAX_STATE_B64)
 
     @field_validator("label")
     @classmethod
@@ -91,11 +97,20 @@ def list_versions(workspace_id: uuid.UUID, page_id: uuid.UUID):
 def create_version(workspace_id: uuid.UUID, page_id: uuid.UUID):
     page = _document(scope_for(workspace_id), page_id, Role.EDITOR)
     body = parse_body(CreateVersionBody)
-    content = db_session.get(DocumentContent, page.id)
-    if content is None:
-        raise Conflict("The document has no saved content yet.")
+    if body.state is not None:
+        try:
+            state = base64.b64decode(body.state, validate=True)
+        except binascii.Error as exc:
+            raise BadRequest("state must be base64.") from exc
+        if not state:
+            raise BadRequest("state is empty.")
+    else:
+        content = db_session.get(DocumentContent, page.id)
+        if content is None:
+            raise Conflict("The document has no saved content yet.")
+        state = content.state
     version = DocumentVersion(
-        page_id=page.id, state=content.state, label=body.label, created_by_id=current_user().id
+        page_id=page.id, state=state, label=body.label, created_by_id=current_user().id
     )
     db_session.add(version)
     db_session.commit()
