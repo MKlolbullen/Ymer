@@ -5,9 +5,13 @@ import { useSearchParams } from "react-router";
 
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { useDatabase, useDatabaseMutations, useRows } from "@/lib/queries";
-import { atLeast, type DatabaseView, type Page, type Property, type Row, type SelectOption } from "@/lib/types";
+import { atLeast, type DatabaseView, type Page, type Property, type Row, type SelectOption, type ViewType } from "@/lib/types";
+
+const VIEW_ICON: Record<ViewType, string> = { table: "▤", board: "▥", chart: "📊" };
+const VIEW_LABEL: Record<ViewType, string> = { table: "Table", board: "Board", chart: "Chart" };
 
 import { BoardView } from "./BoardView";
+import { ChartView } from "./ChartView";
 import { DatabaseContext, useDatabaseContext, type DatabaseContextValue } from "./context";
 import { normalizeConfig, OPTION_COLORS } from "./logic";
 import { RowPanel } from "./RowPanel";
@@ -32,7 +36,7 @@ function ViewTab({ view, active, onSelect, canDelete }: { view: DatabaseView; ac
         onClick={() => (active && canEdit ? setMenu(true) : onSelect())}
         className={`border-b-2 px-2 py-1.5 text-sm ${active ? "border-zinc-900 font-medium dark:border-white" : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white"}`}
       >
-        {view.type === "board" ? "▥" : "▤"} {view.name}
+        {VIEW_ICON[view.type]} {view.name}
       </button>
       {menu && (
         <Popover anchor={ref.current} onClose={() => setMenu(false)} label="View settings">
@@ -46,14 +50,19 @@ function ViewTab({ view, active, onSelect, canDelete }: { view: DatabaseView; ac
           >
             <input aria-label="View name" className={inputClass} value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
           </form>
-          <MenuItem
-            onClick={() => {
-              mutations.updateView.mutate({ viewId: view.id, type: view.type === "table" ? "board" : "table" });
-              setMenu(false);
-            }}
-          >
-            Show as {view.type === "table" ? "board" : "table"}
-          </MenuItem>
+          {(["table", "board", "chart"] as const)
+            .filter((t) => t !== view.type)
+            .map((t) => (
+              <MenuItem
+                key={t}
+                onClick={() => {
+                  mutations.updateView.mutate({ viewId: view.id, type: t });
+                  setMenu(false);
+                }}
+              >
+                Show as {t}
+              </MenuItem>
+            ))}
           {canDelete && (
             <MenuItem
               danger
@@ -75,11 +84,11 @@ function AddView({ onCreated, properties }: { onCreated: (id: string) => void; p
   const { mutations } = useDatabaseContext();
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const create = async (type: "table" | "board") => {
+  const create = async (type: ViewType) => {
     setOpen(false);
     const group = properties.find((p) => p.type === "select" || p.type === "multi_select");
     const view = await mutations.createView.mutateAsync({
-      name: type === "board" ? "Board" : "Table",
+      name: VIEW_LABEL[type],
       type,
       config: type === "board" && group ? { group_by: group.id } : {},
     });
@@ -94,6 +103,7 @@ function AddView({ onCreated, properties }: { onCreated: (id: string) => void; p
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={180} label="Add a view">
           <MenuItem onClick={() => void create("table")}>▤ Table</MenuItem>
           <MenuItem onClick={() => void create("board")}>▥ Board</MenuItem>
+          <MenuItem onClick={() => void create("chart")}>📊 Chart</MenuItem>
         </Popover>
       )}
     </>
@@ -193,6 +203,8 @@ export function DatabasePage({ page }: { page: Page }) {
       </div>
       {rows.isError ? (
         <p className="text-sm text-zinc-500">Could not load the rows.</p>
+      ) : view.type === "chart" ? (
+        <ChartView key={view.id} view={view} />
       ) : view.type === "board" ? (
         <BoardView view={view} rows={rows.data ?? []} />
       ) : (
