@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { ApiError } from "./lib/api";
 import { useSession } from "./lib/auth";
 import { AuthPage } from "./pages/AuthPage";
+import { MembersPage } from "./pages/MembersPage";
 import { PageView } from "./pages/PageView";
 import { Home, NewWorkspace, WorkspaceHome, WorkspaceLayout } from "./pages/workspace";
 
@@ -34,6 +35,7 @@ export function AppRoutes() {
       <Route path="/w/:workspaceId" element={<RequireAuth><WorkspaceLayout /></RequireAuth>}>
         <Route index element={<WorkspaceHome />} />
         <Route path="p/:pageId" element={<PageView />} />
+        <Route path="members" element={<MembersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

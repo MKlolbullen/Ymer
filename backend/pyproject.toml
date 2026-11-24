@@ -17,6 +17,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "pyjwt>=2.10",
   "email-validator>=2.2",
+  "pycrdt>=0.12",
 ]
 
 [project.optional-dependencies]

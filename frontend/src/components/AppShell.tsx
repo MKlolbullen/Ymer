@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router";
 
 import { logout, useSession } from "@/lib/auth";
-import { useCreatePage, usePages } from "@/lib/queries";
+import { usePages } from "@/lib/queries";
 import { atLeast, type Workspace } from "@/lib/types";
 
 import { ApiStatus } from "./ApiStatus";
-import { PageTree } from "./PageTree";
+import { NewPageButton, PageTree } from "./PageTree";
+import { SearchDialog } from "./SearchDialog";
 
 type Props = {
   workspace: Workspace;
@@ -20,14 +21,24 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
   const navigate = useNavigate();
   const session = useSession();
   const pages = usePages(workspace.id);
-  const create = useCreatePage(workspace.id);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  const newPage = async () => {
-    const page = await create.mutateAsync({ type: "document" });
-    setMenuOpen(false);
-    navigate(`/w/${workspace.id}/p/${page.id}`);
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const navClass = ({ isActive }: { isActive: boolean }) =>
+    `flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-zinc-200/60 dark:hover:bg-zinc-800 ${
+      isActive ? "font-medium text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400"
+    }`;
 
   const sidebar = (
     <>
@@ -50,18 +61,33 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           <option value="__new">+ New workspace…</option>
         </select>
       </div>
-      <div className="flex items-center justify-between px-3 pt-2 pb-1">
+      <div className="space-y-0.5 px-1">
+        <button
+          onClick={() => {
+            setMenuOpen(false);
+            setSearchOpen(true);
+          }}
+          className={navClass({ isActive: false })}
+        >
+          <span aria-hidden>🔍</span> Search
+          <kbd className="ml-auto text-xs text-zinc-400">Ctrl K</kbd>
+        </button>
+        {workspace.role !== null && (
+          <NavLink to={`/w/${workspace.id}/members`} className={navClass} onClick={() => setMenuOpen(false)}>
+            <span aria-hidden>👥</span> Members
+          </NavLink>
+        )}
+      </div>
+      <div className="flex items-center justify-between px-3 pt-3 pb-1">
         <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">Pages</span>
         {atLeast(workspace.role, "editor") && (
-          <button
-            onClick={newPage}
-            disabled={create.isPending}
+          <NewPageButton
+            workspaceId={workspace.id}
+            parentId={null}
+            label="New page"
+            onCreated={() => setMenuOpen(false)}
             className="rounded px-1.5 text-sm text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-            title="New page"
-            aria-label="New page"
-          >
-            +
-          </button>
+          />
         )}
       </div>
       <nav aria-label="Pages" className="flex-1 overflow-y-auto px-1 pb-2" onClick={() => setMenuOpen(false)}>
@@ -111,6 +137,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">{children}</main>
       </div>
+      {searchOpen && <SearchDialog workspaceId={workspace.id} onClose={() => setSearchOpen(false)} />}
     </div>
   );
 }

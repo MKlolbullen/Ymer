@@ -6,7 +6,8 @@ should not route ``/internal`` from the internet at all; the secret is a second 
 
 - ``POST /internal/collab/authorize``      {token, document} -> who connects and can they write
 - ``GET  /internal/collab/documents/<id>`` current Yjs state (204 when there is none yet)
-- ``PUT  /internal/collab/documents/<id>`` store Yjs state; ``X-Ymer-User-Id`` = last editor
+- ``PUT  /internal/collab/documents/<id>`` store Yjs state; ``X-Ymer-User-Id`` = last editor.
+  Also refreshes the page's search text and outgoing links (``ymer.content``).
 """
 
 import hmac
@@ -19,6 +20,7 @@ from werkzeug.exceptions import BadRequest, NotFound, Unauthorized
 from ymer.api.validation import parse_body
 from ymer.app import settings_for
 from ymer.auth.current import load_user_from_token
+from ymer.content import index_document
 from ymer.db import db_session
 from ymer.documents import save_state
 from ymer.models import DocumentContent, Page, PageType, Role, User
@@ -86,7 +88,7 @@ def fetch_document(page_id: uuid.UUID):
 
 @internal_bp.put("/documents/<uuid:page_id>")
 def store_document(page_id: uuid.UUID):
-    _document_page(page_id)
+    page = _document_page(page_id)
     state = request.get_data()
     if not state:
         raise BadRequest("Empty document state.")
@@ -104,5 +106,6 @@ def store_document(page_id: uuid.UUID):
         user_id=user_id,
         version_interval=settings_for(current_app).version_interval,
     )
+    index_document(db_session, page, state)
     db_session.commit()
     return "", 204

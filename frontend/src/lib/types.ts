@@ -57,3 +57,86 @@ const RANK: Record<Role, number> = { viewer: 0, commenter: 1, editor: 2, owner: 
 export function atLeast(role: Role | null | undefined, minimum: Role): boolean {
   return role != null && RANK[role] >= RANK[minimum];
 }
+
+export type Member = { user_id: string; email: string; display_name: string; role: Role };
+export type Grant = { user_id: string; email: string; display_name: string; role: Role };
+
+// --- databases --------------------------------------------------------------------------
+
+export type PropertyType =
+  | "title"
+  | "text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "date"
+  | "checkbox"
+  | "url"
+  | "person"
+  | "relation"
+  | "rollup";
+
+export type SelectOption = { id: string; name: string; color: string };
+
+export type PropertyConfig = {
+  options?: SelectOption[];
+  format?: "number" | "percent" | "currency";
+  database_id?: string;
+  reverse_property_id?: string;
+  reverse_of?: string;
+  relation_property_id?: string;
+  target_property_id?: string;
+  function?: RollupFunction;
+};
+
+export type RollupFunction =
+  | "show_original"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "sum"
+  | "average"
+  | "min"
+  | "max"
+  | "percent_checked";
+
+export type Property = { id: string; name: string; type: PropertyType; config: PropertyConfig; position: number };
+
+export type FilterOp =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "not_contains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "is_empty"
+  | "is_not_empty";
+
+export type ViewFilter = { property_id: string; op: FilterOp; value?: unknown };
+export type ViewSort = { property_id: string; direction: "asc" | "desc" };
+export type ViewConfig = {
+  sorts: ViewSort[];
+  filters: ViewFilter[];
+  group_by: string | null;
+  hidden: string[];
+  widths: Record<string, number>;
+};
+export type DatabaseView = { id: string; name: string; type: "table" | "board"; config: ViewConfig; position: number };
+
+export type RelationRef = { id: string; title: string | null };
+/** Values by property id, as the API returns them (relations and people as refs). */
+export type RowValues = Record<string, unknown>;
+export type Row = { id: string; position: number; values: RowValues; created_at: string; updated_at: string };
+
+export type SearchResult = {
+  kind: "page" | "row";
+  page_id: string;
+  row_id?: string;
+  type: PageType | "row";
+  title: string;
+  database_title?: string;
+  snippet: string | null;
+  my_role: Role;
+};

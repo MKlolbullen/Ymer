@@ -83,6 +83,7 @@ function CollabEditor({
   onPanel: (panel: Panel) => void;
 }) {
   const me = useSession()!.user;
+  const qc = useQueryClient();
   const files = { workspaceId: page.workspace_id, pageId: page.id };
   const canEdit = atLeast(page.my_role, "editor") && !readOnly;
   const canComment = atLeast(page.my_role, "commenter");
@@ -130,7 +131,10 @@ function CollabEditor({
   const editor = useEditor(
     {
       extensions: [
-        ...baseExtensions(files, { collaborative: true }),
+        ...baseExtensions(files, {
+          collaborative: true,
+          pages: () => qc.getQueryData<Page[]>(keys.pages(page.workspace_id)) ?? [],
+        }),
         Collaboration.configure({ document: session.doc }),
         CollaborationCaret.configure({
           provider: session.provider,

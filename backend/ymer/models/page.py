@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -11,12 +12,13 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.orm import Mapped, deferred, mapped_column
 
 from ymer.db import Base
 from ymer.models.base import TimestampMixin, uuid_pk
@@ -48,6 +50,13 @@ class Page(TimestampMixin, Base):
         CheckConstraint("parent_id IS NULL OR parent_id <> id", name="not_own_parent"),
         Index("ix_pages_workspace_id_parent_id", "workspace_id", "parent_id"),
         Index("ix_pages_parent_id", "parent_id"),
+        Index("ix_pages_search_vector", "search_vector", postgresql_using="gin"),
+        Index(
+            "ix_pages_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -72,6 +81,38 @@ class Page(TimestampMixin, Base):
     )
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Plain text of a document's content, extracted from its Yjs state on every save
+    # (``ymer.content``). Deferred: only search reads it.
+    content_text: Mapped[str] = deferred(
+        mapped_column(Text, nullable=False, default="", server_default=text("''"))
+    )
+    search_vector: Mapped[str] = deferred(
+        mapped_column(
+            TSVECTOR,
+            Computed(
+                "setweight(to_tsvector('simple'::regconfig, title), 'A') || "
+                "setweight(to_tsvector('simple'::regconfig, content_text), 'B')",
+                persisted=True,
+            ),
+        )
+    )
+
+
+class PageLink(Base):
+    """A mention of ``target`` inside document ``source`` (what backlinks are made from).
+
+    Rebuilt from the document's Yjs state each time the collab service saves it.
+    """
+
+    __tablename__ = "page_links"
+    __table_args__ = (Index("ix_page_links_target_page_id", "target_page_id"),)
+
+    source_page_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="CASCADE"), primary_key=True
+    )
+    target_page_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="CASCADE"), primary_key=True
     )
 
 

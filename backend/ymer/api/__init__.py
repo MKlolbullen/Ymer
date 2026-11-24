@@ -3,10 +3,12 @@
 from flask import Blueprint
 
 from ymer.api.auth import auth_bp
+from ymer.api.databases import databases_bp
 from ymer.api.documents import documents_bp
 from ymer.api.files import files_bp
 from ymer.api.health import health_bp
 from ymer.api.pages import pages_bp
+from ymer.api.search import search_bp
 from ymer.api.workspaces import workspaces_bp
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -16,5 +18,7 @@ api_bp.register_blueprint(workspaces_bp)
 api_bp.register_blueprint(pages_bp)
 api_bp.register_blueprint(documents_bp)
 api_bp.register_blueprint(files_bp)
+api_bp.register_blueprint(databases_bp)
+api_bp.register_blueprint(search_bp)
 
 __all__ = ["api_bp"]
