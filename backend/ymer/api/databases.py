@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from werkzeug.exceptions import BadRequest, Forbidden, NotFound
 
+from ymer.ai.indexing import mark_dirty
 from ymer.api.validation import InvalidBody, parse_body
 from ymer.api.workspaces import scope_for
 from ymer.auth import current_user, login_required
@@ -233,6 +234,7 @@ def create_row(workspace_id: uuid.UUID, database_id: uuid.UUID):
     db_session.add(row)
     db_session.flush()  # links need the row id
     _write_values(scope, page, props, row, body.values)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(row=_one_row(scope, page, props, row)), 201
 
@@ -248,6 +250,7 @@ def update_row(workspace_id: uuid.UUID, database_id: uuid.UUID, row_id: uuid.UUI
     _write_values(scope, page, props, row, body.values)
     if body.position is not None:
         row.position = body.position
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     db_session.refresh(row)
     return jsonify(row=_one_row(scope, page, props, row))
@@ -259,6 +262,7 @@ def delete_row(workspace_id: uuid.UUID, database_id: uuid.UUID, row_id: uuid.UUI
     scope = scope_for(workspace_id)
     page = _database(scope, database_id, Role.EDITOR)
     db_session.delete(_get_row(page, row_id))  # links go with it (FK cascade)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return "", 204
 
@@ -375,6 +379,7 @@ def create_property(workspace_id: uuid.UUID, database_id: uuid.UUID):
 
     if body.type is T.RELATION:
         prop, reverse = _create_relation(scope, page, body)
+        mark_dirty(db_session, [page.id])
         db_session.commit()
         result = {"property": property_json(prop)}
         if reverse is not None:
@@ -390,6 +395,7 @@ def create_property(workspace_id: uuid.UUID, database_id: uuid.UUID):
         position=_next_property_position(page.id),
     )
     db_session.add(prop)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(property=property_json(prop)), 201
 
@@ -462,6 +468,7 @@ def update_property(workspace_id: uuid.UUID, database_id: uuid.UUID, prop_id: uu
         if prop.type is T.RELATION:
             raise _invalid("config", "A relation's database cannot be changed.")
         prop.config = _clean_config(scope, page, prop.type, body.config)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(property=property_json(prop))
 
@@ -546,6 +553,7 @@ def delete_property(workspace_id: uuid.UUID, database_id: uuid.UUID, prop_id: uu
         ):
             row.values = {k: v for k, v in row.values.items() if k != key}
     db_session.delete(prop)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return "", 204
 

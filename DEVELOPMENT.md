@@ -265,3 +265,87 @@ Assumptions made for this phase, open to change:
   a chart's data inside the document.
 - Comments are for documents only; mind maps and drawings have version history but no
   comment threads.
+
+## AI layer (Phase 4)
+
+Migration `0006` adds `ai_chunks`, `ai_index_queue`, `ai_conversations` and
+`ai_messages`. The AI code lives in `backend/ymer/ai/` and runs inside Flask: the browser
+never talks to a model or sees a key, and every read goes through `WorkspaceScope`.
+
+- **Providers** (`ai/providers.py`, `ai/fake.py`, `ai/__init__.py`): `build_services`
+  picks a chat provider and an embedder from settings and stores them on the app
+  (`get_ai()`).
+  - `anthropic`: the Anthropic SDK, streamed (`get_final_message()`), with structured
+    JSON output for generation, an effort level, and a refusal turned into a 422.
+  - `openai`: any OpenAI-compatible `/chat/completions` server, hosted or local.
+  - `fake` (the default): an offline stand-in with deterministic output, used by tests
+    and by anyone without a key. Every response says `demo: true`, and the UI labels it.
+  - `off`: AI endpoints answer 503.
+  - Embeddings are separate, because Claude has no embeddings API: `fake` is a
+    256-dimension hashing embedder (it matches shared words, not meaning), `openai` calls
+    any OpenAI-compatible `/embeddings` endpoint. The `embedding` column has no fixed
+    dimension, and each chunk records its model, so switching models only needs
+    `flask --app wsgi ai-reindex`.
+- **Indexing** (`ai/indexing.py`): `content.outline()` turns a document or mind map into
+  Markdown-like text; database rows become "Prop: value" lines. Text is split into chunks
+  of about 1,000 characters on paragraph boundaries. A chunk whose hash (model + content)
+  already exists is not embedded again. Saves from collab, page create and rename, and
+  row and property changes call `mark_dirty`, which adds the page to `ai_index_queue`.
+  `flask --app wsgi ai-worker` (`make ai-worker`) drains it with `FOR UPDATE SKIP LOCKED`,
+  so several workers can run; a failing page keeps its error and is retried. With
+  `YMER_AI_INDEX_INLINE=true` pages are indexed in the request instead (handy in dev).
+- **Retrieval** (`ai/retrieval.py`): cosine distance in pgvector, filtered to the pages
+  the user can see, at most one hit per page or row, and a distance cut-off so unrelated
+  pages are left out.
+- **Routes** (`api/ai.py`), all under `/api`:
+  - `GET /ai/status`: whether AI is on, the provider and models, and `demo`.
+  - `POST /workspaces/<ws>/pages/<id>/ai/assist` `{action, text?, instruction?}`:
+    improve, fix, shorten, expand, summarize, bullets or custom. Summarize needs viewer
+    access; every other action needs editor.
+  - `GET /workspaces/<ws>/ai/search?q=`: semantic search.
+  - `POST /workspaces/<ws>/ai/ask` `{question, conversation_id?}`: retrieves with the
+    question (plus a few hits for the previous question on a follow-up), answers with
+    `[n]` citations and stores both messages. `GET`/`DELETE` on
+    `/workspaces/<ws>/ai/conversations[/<id>]` are private to the author, and stored
+    sources are filtered again by current access when read.
+  - `POST /workspaces/<ws>/ai/generate` `{kind: mindmap|database, source_page_id? | text?,
+    parent_id?, title?}`: needs viewer on the source and editor on the parent. A mind map
+    is written as a Yjs state with a tidy layout; a database gets properties, select
+    options, rows, a table view and a board view when it has a select property.
+  - Assist, ask and generate are rate limited per user per minute in Redis
+    (`YMER_AI_RATE_LIMIT`, 0 turns it off; the check is skipped if Redis is down).
+  - Provider errors answer 502, refusals 422, AI turned off 503.
+- **Prompts** (`ai/prompts.py`): page text is wrapped in tags and the system prompts tell
+  the model to treat it as data, not instructions. Generation uses JSON schemas
+  (`MINDMAP_SCHEMA`, `DATABASE_SCHEMA`), and the server checks sizes and cleans values
+  before writing anything.
+- **Frontend** (`frontend/src/ai/`): `AssistMenu` (✨ AI in the editor toolbar),
+  `GenerateMenu` (✨ Generate in the page header), `AskPage` (`/w/<ws>/ask`) and the
+  *Related by meaning* section in the search dialog.
+
+Settings (all `YMER_` prefixed):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `AI_PROVIDER` | `fake` | `anthropic`, `openai`, `fake` or `off` |
+| `AI_MODEL` | `claude-opus-5-5` | Chat model name sent to the provider |
+| `AI_API_KEY` / `AI_BASE_URL` | empty | Key and base URL for the chat provider |
+| `AI_EFFORT` | `medium` | Claude effort level |
+| `AI_FALLBACKS` | `true` | Retry a declined Claude request on Anthropic's recommended fallback model |
+| `AI_TIMEOUT` | `120` | Seconds per model call |
+| `AI_EMBEDDING_PROVIDER` | `fake` | `openai`, `fake` or `off` |
+| `AI_EMBEDDING_MODEL` | `hash-256` | Embedding model name |
+| `AI_EMBEDDING_API_KEY` / `AI_EMBEDDING_BASE_URL` | empty | For the embeddings endpoint |
+| `AI_INDEX_INLINE` | `false` (`true` in `.env.example`) | Index in the request instead of the worker |
+| `AI_RATE_LIMIT` | `30` | AI requests per user per minute |
+
+Assumptions made for this phase, open to change:
+
+- The default provider is the offline demo model, so a fresh checkout works without a
+  key. Real deployments set `YMER_AI_PROVIDER`.
+- The default Claude model is `claude-opus-5-5` with medium effort.
+- Generation and summaries read the last saved state of a page. The collab service saves
+  about 2 seconds after the last keystroke, so a change made a moment earlier may be
+  missing.
+- Answers are not streamed to the browser yet; the UI shows a waiting state.
+- There is no per-workspace AI switch or usage accounting yet.

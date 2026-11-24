@@ -23,6 +23,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, Forbidden, NotFound
 
+from ymer.ai.indexing import mark_dirty
 from ymer.api.validation import parse_body
 from ymer.api.workspaces import scope_for
 from ymer.auth import current_user, login_required
@@ -115,6 +116,8 @@ def create_page(workspace_id: uuid.UUID):
     if page.type is PageType.DATABASE:
         db_session.flush()
         create_default_schema(db_session, page)
+    db_session.flush()
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(page=page_json(page, scope.page_role(page))), 201
 
@@ -133,8 +136,9 @@ def update_page(workspace_id: uuid.UUID, page_id: uuid.UUID):
     scope = scope_for(workspace_id)
     page = scope.get_page(page_id, Role.EDITOR)
     body = parse_body(UpdatePageBody)
-    if body.title is not None:
+    if body.title is not None and body.title != page.title:
         page.title = body.title
+        mark_dirty(db_session, [page.id])
     if body.position is not None:
         page.position = body.position
     if "parent_id" in body.model_fields_set and body.parent_id != page.parent_id:

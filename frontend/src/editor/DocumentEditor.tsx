@@ -203,6 +203,8 @@ function CollabEditor({
       <div className="min-w-0 flex-1">
         <Toolbar
           editor={editor}
+          workspaceId={page.workspace_id}
+          pageId={page.id}
           canEdit={canEdit}
           canComment={canComment}
           onComment={startComment}

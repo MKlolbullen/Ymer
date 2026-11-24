@@ -6,7 +6,7 @@ COLLAB := collab
 VENV := $(BACKEND)/.venv
 PY := $(VENV)/bin
 
-.PHONY: help setup infra-up infra-down migrate backend collab frontend test lint
+.PHONY: help setup infra-up infra-down migrate backend collab frontend ai-worker test lint
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -34,6 +34,9 @@ collab: ## Run the realtime collab service (Hocuspocus) on :1234
 
 frontend: ## Run the Vite dev server on :5173
 	cd $(FRONTEND) && npm run dev
+
+ai-worker: ## Embed changed pages for semantic search and Q&A (not needed with YMER_AI_INDEX_INLINE=true)
+	cd $(BACKEND) && .venv/bin/flask --app wsgi ai-worker
 
 test: ## Run backend, collab and frontend tests
 	cd $(BACKEND) && .venv/bin/pytest

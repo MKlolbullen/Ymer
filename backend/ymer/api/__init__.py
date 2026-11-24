@@ -2,6 +2,7 @@
 
 from flask import Blueprint
 
+from ymer.api.ai import ai_bp, ai_status_bp
 from ymer.api.auth import auth_bp
 from ymer.api.databases import databases_bp
 from ymer.api.documents import documents_bp
@@ -20,5 +21,7 @@ api_bp.register_blueprint(documents_bp)
 api_bp.register_blueprint(files_bp)
 api_bp.register_blueprint(databases_bp)
 api_bp.register_blueprint(search_bp)
+api_bp.register_blueprint(ai_status_bp)
+api_bp.register_blueprint(ai_bp)
 
 __all__ = ["api_bp"]

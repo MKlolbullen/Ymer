@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router";
 
+import { useAiStatus } from "@/ai/api";
 import { logout, useSession } from "@/lib/auth";
 import { usePages } from "@/lib/queries";
 import { atLeast, type Workspace } from "@/lib/types";
@@ -23,6 +24,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
   const pages = usePages(workspace.id);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const ai = useAiStatus();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +74,11 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           <span aria-hidden>🔍</span> Search
           <kbd className="ml-auto text-xs text-zinc-400">Ctrl K</kbd>
         </button>
+        {ai.data?.enabled && (
+          <NavLink to={`/w/${workspace.id}/ask`} className={navClass} onClick={() => setMenuOpen(false)}>
+            <span aria-hidden>✨</span> Ask AI
+          </NavLink>
+        )}
         {workspace.role !== null && (
           <NavLink to={`/w/${workspace.id}/members`} className={navClass} onClick={() => setMenuOpen(false)}>
             <span aria-hidden>👥</span> Members

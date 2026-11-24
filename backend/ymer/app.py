@@ -40,6 +40,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     init_redis(app, settings)
     init_s3(app, settings)
 
+    from ymer.ai import init_ai
+
+    init_ai(app, settings)
+
     CORS(app, resources={r"/api/*": {"origins": settings.cors_origins}}, supports_credentials=True)
 
     from ymer.api import api_bp

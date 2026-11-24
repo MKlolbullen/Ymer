@@ -145,3 +145,128 @@ def index_document(session: Session, page: Page, state: bytes) -> None:
             .values([{"source_page_id": page.id, "target_page_id": t} for t in targets])
             .on_conflict_do_nothing()
         )
+
+
+# --- outlines (structured text for the AI layer) --------------------------------------
+
+
+def outline(state: bytes | None, page_type: PageType) -> str:
+    """The page as Markdown-like text that keeps its structure.
+
+    Search text (:func:`summarize`) collapses whitespace; the AI layer wants headings,
+    list items and paragraphs on their own lines, and a mind map as an indented list.
+    Returns "" for an empty or unreadable state.
+    """
+    if not state:
+        return ""
+    doc = pycrdt.Doc()
+    lines: list[str] = []
+    try:
+        doc.apply_update(state)
+        if page_type is PageType.MINDMAP:
+            _mindmap_outline(doc.get(MINDMAP_MAP, type=pycrdt.Map), lines)
+        elif page_type is PageType.DRAWING:
+            parts: list[str] = []
+            _drawing(doc.get(DRAWING_MAP, type=pycrdt.Map), parts)
+            lines = [p.strip() for p in parts if p.strip()]
+        else:
+            _block_outline(doc.get(FRAGMENT, type=pycrdt.XmlFragment), lines, depth=0)
+    except Exception:  # noqa: BLE001
+        log.warning("Could not decode a page's Yjs state for its outline.")
+        return ""
+    return "\n".join(line for line in lines if line.strip())[:_MAX_TEXT]
+
+
+def _inline_text(node) -> str:
+    parts: list[str] = []
+    for child in node.children:
+        if isinstance(child, pycrdt.XmlText):
+            parts.extend(run for run, _ in child.diff() if isinstance(run, str))
+        elif isinstance(child, pycrdt.XmlElement):
+            if child.tag == MENTION_NODE:
+                parts.append(str(dict(child.attributes).get("label") or "page"))
+            else:
+                parts.append(_inline_text(child))
+    return " ".join("".join(parts).split())
+
+
+def _block_outline(node, lines: list[str], depth: int) -> None:
+    for child in node.children:
+        if isinstance(child, pycrdt.XmlText):
+            text = " ".join("".join(r for r, _ in child.diff() if isinstance(r, str)).split())
+            if text:
+                lines.append(text)
+            continue
+        if not isinstance(child, pycrdt.XmlElement):
+            continue
+        tag = child.tag
+        indent = "  " * depth
+        if tag == "heading":
+            level = int(dict(child.attributes).get("level") or 1)
+            lines.append(f"{'#' * max(1, min(level, 6))} {_inline_text(child)}")
+        elif tag in {"paragraph", "codeBlock"}:
+            if text := _inline_text(child):
+                lines.append(f"{indent}{text}")
+        elif tag in {"bulletList", "orderedList", "taskList"}:
+            _list_outline(child, lines, depth, ordered=tag == "orderedList")
+        elif tag == "blockquote":
+            inner: list[str] = []
+            _block_outline(child, inner, 0)
+            lines.extend(f"> {line}" for line in inner)
+        elif tag == "horizontalRule":
+            lines.append("---")
+        elif tag in {"listItem", "taskItem"}:
+            _list_item(child, lines, depth, "-")
+        else:
+            _block_outline(child, lines, depth)
+
+
+def _list_outline(node, lines: list[str], depth: int, *, ordered: bool) -> None:
+    for index, item in enumerate(node.children, start=1):
+        if isinstance(item, pycrdt.XmlElement):
+            prefix = f"{index}." if ordered else "-"
+            if item.tag == "taskItem":
+                checked = str(dict(item.attributes).get("checked")).lower() == "true"
+                prefix = f"- [{'x' if checked else ' '}]"
+            _list_item(item, lines, depth, prefix)
+
+
+def _list_item(item, lines: list[str], depth: int, prefix: str) -> None:
+    indent = "  " * depth
+    first = True
+    for child in item.children:
+        if not isinstance(child, pycrdt.XmlElement):
+            continue
+        if child.tag in {"bulletList", "orderedList", "taskList"}:
+            _list_outline(child, lines, depth + 1, ordered=child.tag == "orderedList")
+        elif first:
+            lines.append(f"{indent}{prefix} {_inline_text(child)}")
+            first = False
+        else:
+            lines.append(f"{indent}  {_inline_text(child)}")
+
+
+def _mindmap_outline(nodes: pycrdt.Map, lines: list[str]) -> None:
+    plain = {}
+    for node_id, raw in nodes.items():
+        node = _plain(raw)
+        if isinstance(node, dict):
+            plain[str(node_id)] = node
+    children: dict[str | None, list[tuple[float, str]]] = {}
+    for node_id, node in plain.items():
+        parent = node.get("parent") if node.get("parent") in plain else None
+        if node_id == "root":
+            parent = None
+        y = node.get("y") if isinstance(node.get("y"), int | float) else 0
+        children.setdefault(parent, []).append((y, node_id))
+
+    def walk(parent: str | None, depth: int, seen: set[str]) -> None:
+        for _, node_id in sorted(children.get(parent, [])):
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            label = str(plain[node_id].get("label") or "").strip() or "(untitled idea)"
+            lines.append(f"{'  ' * depth}- {label}" if depth or parent else f"# {label}")
+            walk(node_id, depth + (1 if parent or depth else 0), seen)
+
+    walk(None, 0, set())
