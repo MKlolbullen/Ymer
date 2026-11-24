@@ -14,6 +14,7 @@ viewer role on the database page, changing anything needs editor.
 - ``POST   /views``                  {name, type, config?}
 - ``PATCH  /views/<view_id>``        {name?, type?, config?, position?}
 - ``DELETE /views/<view_id>``        a database keeps at least one view
+- ``POST   /chart``                  {config, view_id?} -> chart data (read-only query)
 
 Values are keyed by property id. A relation value is written as a list of row ids and
 read back as ``[{id, title}]``; ``title`` is null when the related database is hidden
@@ -31,6 +32,7 @@ from werkzeug.exceptions import BadRequest, Forbidden, NotFound
 from ymer.api.validation import InvalidBody, parse_body
 from ymer.api.workspaces import scope_for
 from ymer.auth import current_user, login_required
+from ymer.charts import ChartConfig, ChartError, chart_data
 from ymer.databases import (
     CONVERTIBLE_TYPES,
     FILTER_OPS,
@@ -588,6 +590,8 @@ class ViewConfig(BaseModel):
     group_by: uuid.UUID | None = None
     hidden: list[uuid.UUID] = Field(default_factory=list)
     widths: dict[str, int] = Field(default_factory=dict)
+    # Chart views only: what the chart groups and measures (``ymer.charts``).
+    chart: ChartConfig | None = None
 
 
 class CreateViewBody(BaseModel):
@@ -674,3 +678,30 @@ def delete_view(workspace_id: uuid.UUID, database_id: uuid.UUID, view_id: uuid.U
     db_session.delete(view)
     db_session.commit()
     return "", 204
+
+
+# --- charts ---------------------------------------------------------------------------
+
+
+class ChartBody(BaseModel):
+    config: ChartConfig = Field(default_factory=ChartConfig)
+    # Apply this view's filters first (a chart block can point at any view).
+    view_id: uuid.UUID | None = None
+
+
+@databases_bp.post("/chart")
+@login_required
+def chart(workspace_id: uuid.UUID, database_id: uuid.UUID):
+    """Grouped and aggregated rows for a chart. A read: viewers may call it."""
+    scope = scope_for(workspace_id)
+    page = _database(scope, database_id, Role.VIEWER)
+    body = parse_body(ChartBody)
+    props = properties_of(db_session, page.id)
+    rows = RowReader(scope, page, props).load()
+    if body.view_id is not None:
+        rows = apply_view(props, rows, _get_view(page, body.view_id).config)
+    try:
+        data = chart_data(props, rows, body.config)
+    except ChartError as exc:
+        raise _invalid("config", str(exc)) from exc
+    return jsonify(chart=data)
