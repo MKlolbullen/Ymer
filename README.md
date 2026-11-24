@@ -1,144 +1,68 @@
-# Ymer — multi-user creator platform combining collaborative documents, Notion-style notebooks/databases, mind mapping, note-taking, charts/visuals, and general file handling.
+# Ymer
 
-> **Running the code:** see [DEVELOPMENT.md](DEVELOPMENT.md) for setup, services and commands.
+Ymer is a multi-user workspace for organizing creative work around a shared tree of pages. The goal is to keep a team's notes, documents, structured data, mind maps, and files together, with control over who can see or edit each branch.
 
-### 1. High-Level Architecture
+Today you can use the Flask API to create a workspace, build its page tree, and share a folder with another user. The React app opens to a workspace shell with an API status indicator. The sidebar previews the planned editors.
 
+![A guest has viewer access to Field notes and its child Trip log. Team notes is a sibling outside the shared branch.](docs/images/guest-access.svg)
+
+## How sharing works
+
+In the Expedition example above, the team can give a guest access to *Field notes* without adding them as a workspace member. A new page under *Field notes* inherits the grant. A query for the guest's visible pages includes *Trip log* and omits *Team notes*.
+
+For each page, Ymer uses the closest grant it finds, starting at the page and walking up through its parents. If it finds none, it uses the user's workspace role. Workspace owners retain owner access throughout the tree. The API returns the effective role as `my_role` on each visible page. [Permission rules](backend/ymer/permissions.py) · [Permission tests](backend/tests/test_permissions.py)
+
+## What you can use today
+
+| Area | Available on `main` |
+| --- | --- |
+| Accounts | Register with an email and password, sign in, refresh a JWT access token, and sign out across sessions. |
+| Workspaces | Create and rename workspaces. Owners manage members with owner, editor, commenter, or viewer roles. |
+| Pages | Create, list, rename, reorder, move, and delete pages. Each page has a type (`document`, `database`, `mindmap`, or `folder`), a position, and an optional parent in the same workspace. |
+| Sharing | Grant an existing user access to a page and its descendants. A closer grant can widen or narrow access on a particular branch. |
+| Web app | Open the Home shell and see whether the API is reachable. Workspace and page operations are available through the API. |
+
+## Run locally
+
+Install Git, Make, Python 3.12+, uv, Node.js 22+ with npm, and Docker with Compose v2. From a terminal, clone the repository and start the API:
+
+```sh
+git clone https://github.com/MKlolbullen/Ymer.git
+cd Ymer
+make setup
+make infra-up
+make migrate
+make backend
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     React + Tailwind                    │
-│  (TipTap/Slate, React Flow, Chart.js/D3, Yjs clients)  │
-└───────────────────────┬─────────────────────────────────┘
-                        │ REST + WebSocket
-┌───────────────────────▼─────────────────────────────────┐
-│                    Flask API Gateway                    │
-│         (Auth, Permissions, Rate limiting, Routing)     │
-└───────┬─────────────────────┬───────────────────────────┘
-        │                     │
-┌───────▼────────┐   ┌────────▼────────┐   ┌──────────────┐
-│  Core Services │   │  Realtime Collab│   │   AI Service │
-│  (Documents,   │   │  (Yjs + SocketIO│   │  (LLM proxy, │
-│   Databases,   │   │   or separate   │   │   embeddings)│
-│   Mind maps)   │   │   collab server)│   │              │
-└───────┬────────┘   └────────┬────────┘   └──────┬───────┘
-        │                     │                   │
-┌───────▼─────────────────────▼───────────────────▼───────┐
-│              PostgreSQL + Redis + Object Storage        │
-│         (S3-compatible: MinIO / Cloudflare R2 / S3)     │
-└─────────────────────────────────────────────────────────┘
+
+In a second terminal, run `make frontend` from the same repository directory and open [localhost:5173](http://localhost:5173). The status indicator reads the version from Flask. To check the database, cache service, and storage bucket as well, run:
+
+```sh
+curl -fsS http://localhost:5000/api/health/ready
 ```
 
-- **Frontend**: React (Vite) + Tailwind CSS + TypeScript.  
-- **Backend**: Flask (or FastAPI if you later want async-first; start with Flask as requested).  
-- **Real-time**: Yjs (CRDT) + WebSocket layer (Flask-SocketIO or a small dedicated collab service).  
-- **Database**: PostgreSQL (primary) + Redis (sessions, presence, rate limits, queues).  
-- **Storage**: S3-compatible for images, attachments, exports.  
-- **AI**: Pluggable LLM layer (OpenAI, Anthropic, local Ollama/vLLM, or Grok). Embeddings in pgvector.
+Look for `"status": "ok"` for each of `database`, `redis`, and `storage`. For configuration, test setup, and migration commands, see the [development guide](DEVELOPMENT.md).
 
-### 2. Core Feature Modules
+## How the local stack fits together
 
-| Module              | Key Capabilities                                      | Primary Libraries / Approach                  |
-|---------------------|-------------------------------------------------------|-----------------------------------------------|
-| **Auth & Workspaces** | Multi-user, teams, roles (Owner/Editor/Commenter/Viewer), sharing links, SSO later | Flask-Login / JWT + Casbin or custom RBAC    |
-| **Documents**       | Rich text, collaborative editing, comments, versions  | TipTap (ProseMirror) + Yjs                   |
-| **Notebooks / Collections** | Hierarchical pages, nested notes, backlinks         | Custom tree + full-text search (pg_trgm or Meilisearch) |
-| **Databases**       | Notion-style tables, properties (text, select, date, relation, formula), views (table/board/gallery/calendar) | Custom schema + JSONB + generated columns    |
-| **Mind Maps**       | Infinite canvas, nodes, edges, grouping, export      | React Flow + Yjs                              |
-| **Visuals & Charts**| Embedded charts, diagrams, image annotation, Excalidraw-style drawings | Chart.js / Recharts / D3 + Excalidraw or tldraw |
-| **AI Layer**        | Summarize, expand, rewrite, generate mind maps from notes, auto-tag, Q&A over workspace, image descriptions | LLM proxy + RAG (pgvector) + background jobs |
-| **Files & Media**   | Upload, preview, embed, versioning                    | Presigned S3 + thumbnail service              |
+```mermaid
+flowchart TD
+    browser["Browser"] --> vite["Vite dev server · React app"]
+    vite -->|"Proxies /api"| api["Flask API"]
+    client["API client"] --> api
+    api -->|"Users, roles and pages"| db[("PostgreSQL 16")]
+    api -->|"Readiness ping"| redis["Redis 7"]
+    api -->|"Bucket check"| storage["MinIO · S3 API"]
+```
 
-### 3. Suggested Data Model (PostgreSQL)
+Flask and Vite run on the host. Docker Compose runs PostgreSQL, Redis, and MinIO. SQLAlchemy models and Alembic migrations define the workspace data in PostgreSQL. [API routes](backend/ymer/api) · [Data model](backend/ymer/models) · [Compose services](docker-compose.yml)
 
-Core tables (simplified):
+## Where the project is headed
 
-- `users`, `workspaces`, `workspace_members` (roles)
-- `pages` (polymorphic: document | database | mindmap | folder)
-- `page_permissions`
-- `blocks` or `document_content` (for TipTap/Yjs snapshots + operational log)
-- `database_properties`, `database_rows` (JSONB for flexible properties)
-- `relations` (many-to-many between rows/pages)
-- `mindmap_nodes` / `mindmap_edges` (or store as Yjs doc)
-- `files` (metadata + S3 key)
-- `ai_conversations` / `embeddings` (pgvector)
-- `activity_log` / `versions`
+The four page types already share a hierarchy and permission model. The roadmap adds the tools for working with their contents:
 
-Use JSONB heavily for flexibility (Notion-style properties) while keeping relational integrity for permissions and structure.
-
-### 4. Development Roadmap
-
-**Phase 0 – Foundation (2–3 weeks)**  
-- Project scaffolding (Flask + React monorepo or separate repos)  
-- Auth (email/password + JWT, basic workspaces)  
-- PostgreSQL schema + migrations (Alembic)  
-- Basic page CRUD + permissions  
-- Tailwind design system + layout shell
-
-**Phase 1 – Collaborative Documents (3–4 weeks)**  
-- TipTap editor with basic blocks  
-- Yjs + WebSocket collaboration (presence, cursors)  
-- Comments + version history  
-- File uploads
-
-**Phase 2 – Notebooks + Databases (4–5 weeks)**  
-- Hierarchical pages & sidebar  
-- Database engine (properties, rows, basic views: table + board)  
-- Relations & rollups (simplified)  
-- Full-text search
-
-**Phase 3 – Mind Maps + Visuals (3 weeks)**  
-- React Flow mind map with collaboration  
-- Chart embedding blocks  
-- Drawing canvas (Excalidraw or tldraw integration)
-
-**Phase 4 – AI Layer (3–4 weeks)**  
-- LLM proxy service  
-- Summarize / rewrite / expand actions on selection  
-- Generate mind map or database from notes  
-- Workspace RAG (embed pages, semantic search)  
-- Background job queue (Celery or RQ)
-
-**Phase 5 – Polish & Multi-user Hardening (ongoing)**  
-- Real-time presence everywhere  
-- Advanced permissions & public sharing  
-- Export (Markdown, PDF, PNG)  
-- Mobile-responsive + offline-ish (service worker + local Yjs)  
-- Admin / audit logs  
-- Rate limiting, abuse prevention
-
-### 5. Key Technical Decisions & Recommendations
-
-- **Collaboration**: Prefer **Yjs** (CRDT) over operational transformation. It is battle-tested for this exact use case and works well with TipTap and React Flow.
-- **Backend style**: Start with Flask + Flask-RESTful or Flask-Smorest. Keep services modular so you can later extract the AI or collab pieces.
-- **Search**: Start with PostgreSQL `pg_trgm` + full-text. Add Meilisearch or Typesense later if needed.
-- **AI**: Abstract the LLM calls behind a single service so you can swap providers or run local models. Use background workers for anything longer than a few seconds.
-- **Frontend state**: Zustand or Jotai + React Query for server state. Yjs for collaborative documents.
-- **Security** (especially relevant for you):  
-  - Strict workspace-scoped permissions on every query  
-  - Content Security Policy + sanitization on rich text  
-  - Rate limiting + abuse detection on AI endpoints  
-  - Audit logging for sensitive actions  
-  - Optional self-hosted / air-gapped mode later
-
-### 6. Potential Risks & Mitigations
-
-| Risk                        | Mitigation                                      |
-|-----------------------------|-------------------------------------------------|
-| Real-time complexity        | Start with single-document collab, use Yjs     |
-| Database flexibility vs performance | JSONB + careful indexing, later materialize hot paths |
-| AI cost & latency           | Caching, user quotas, optional local models    |
-| Scope creep                 | Strict phase gates; ship MVP documents + basic databases first |
-| Multi-user permissions bugs | Comprehensive tests + Casbin or explicit query filters |
-
-### 7. Recommended Starting Stack (Concrete)
-
-- **Backend**: Flask 3.x, SQLAlchemy 2.0, Alembic, Flask-SocketIO, Celery + Redis, Pydantic for validation
-- **Frontend**: Vite + React 18 + TypeScript + Tailwind + TipTap + React Flow + Yjs
-- **Infra (dev)**: Docker Compose (Postgres + Redis + MinIO)
-- **Later**: Kubernetes or simple VPS + Caddy, or self-hosted friendly packaging
-
----
-
-This gives you a realistic path from zero to a usable multi-user creator platform without trying to clone the entire Notion surface area on day one. The highest-leverage early wins are solid auth/workspaces, collaborative documents with Yjs, and a flexible page + database model.
-
-Would you like me to expand any phase into a more detailed technical spec, create a starter project structure (folder layout + key files), or prioritize a specific module (e.g., the AI layer or the database engine) first?
+- **Collaborative documents** — rich-text editing, live cursors, comments, version history, and file attachments.
+- **Notebooks and databases** — a navigable page tree, searchable notes, typed properties, and table and board views.
+- **Mind maps and visuals** — a shared canvas for connected ideas, drawings, and charts embedded in pages.
+- **AI-assisted work** — summarize a selection, turn notes into a mind map, or ask questions across a workspace.
+- **Sharing and portability** — public links, exports, offline editing, and an audit trail.
