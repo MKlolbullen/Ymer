@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="288" viewBox="0 0 840 288" role="img" aria-labelledby="title desc">
+  <title id="title">Inside a Ymer workspace</title>
+  <desc id="desc">Field notes and Team notes are siblings in the Expedition workspace. A guest receives viewer access on Field notes, inherits it on Trip log, and has no access to Team notes.</desc>
+  <defs>
+    <linearGradient id="surface" x2="100%" y2="100%">
+      <stop stop-color="#15152e"/><stop offset="1" stop-color="#22213d"/>
+    </linearGradient>
+  </defs>
+  <rect width="840" height="288" rx="16" fill="url(#surface)"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="28" y="22" width="32" height="32" rx="8" fill="#4f46e5"/>
+    <path d="M37 31l7 8 7-8m-7 8v7" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="74" y="46" fill="#fff" font-size="23" font-weight="600">Inside a Ymer workspace</text>
+    <path d="M28 72h784" stroke="#48455e"/>
+    <g fill="none" stroke-width="2">
+      <path d="M198 175h30q10 0 10-10v-31q0-10 10-10h30" stroke="#aba5ff"/>
+      <path d="M228 175q10 0 10 10v33q0 10 10 10h30" stroke="#88869d"/>
+      <path d="M495 124h80" stroke="#aba5ff"/>
+    </g>
+    <g fill="#26263f" stroke="#74728b">
+      <rect x="28" y="140" width="170" height="70" rx="10"/>
+      <rect x="278" y="193" width="217" height="70" rx="10"/>
+    </g>
+    <g fill="#343052" stroke="#aba5ff">
+      <rect x="278" y="89" width="217" height="70" rx="10"/>
+      <rect x="575" y="89" width="237" height="70" rx="10"/>
+    </g>
+    <g fill="#f6f5ff" font-size="20" font-weight="600">
+      <text x="44" y="170">Expedition</text>
+      <text x="295" y="119">Field notes</text>
+      <text x="592" y="119">Trip log</text>
+      <text x="295" y="223">Team notes</text>
+    </g>
+    <g font-size="15">
+      <text x="44" y="193" fill="#cac8d8">Workspace</text>
+      <text x="295" y="143" fill="#d6d1ff">Viewer grant for guest</text>
+      <text x="592" y="143" fill="#d6d1ff">Inherits viewer access</text>
+      <text x="295" y="247" fill="#cac8d8">No access for guest</text>
+    </g>
+  </g>
+</svg>
