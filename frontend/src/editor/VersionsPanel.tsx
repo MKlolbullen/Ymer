@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react";
 import { yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 
@@ -18,8 +18,12 @@ type Props = {
   canEdit: boolean;
   /** The live document's Yjs state, base64. */
   liveState: () => string;
-  /** Replace the live document's content (as a normal, shared edit). */
-  onRestore: (content: JSONContent) => void;
+  /** Replace the live content with a version's (base64 Yjs state), as a normal, shared edit. */
+  onRestore: (state: string) => void;
+  /** Show a version (base64 Yjs state) read-only. Defaults to a document preview. */
+  renderPreview?: (state: string) => ReactNode;
+  /** A wider preview dialog, for canvases. */
+  wide?: boolean;
   onChanged: () => void;
 };
 
@@ -32,7 +36,7 @@ export function versionContent(state: string): JSONContent {
   return json;
 }
 
-function Preview({ workspaceId, pageId, content }: { workspaceId: string; pageId: string; content: JSONContent }) {
+export function DocumentPreview({ workspaceId, pageId, content }: { workspaceId: string; pageId: string; content: JSONContent }) {
   const editor = useEditor(
     {
       extensions: baseExtensions({ workspaceId, pageId }, { collaborative: false }),
@@ -44,13 +48,13 @@ function Preview({ workspaceId, pageId, content }: { workspaceId: string; pageId
   return <EditorContent editor={editor} className="ymer-prose" />;
 }
 
-export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onRestore, onChanged }: Props) {
+export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onRestore, renderPreview, wide, onChanged }: Props) {
   const qc = useQueryClient();
   const versions = useVersions(workspaceId, pageId);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ version: Version; content: JSONContent } | null>(null);
+  const [preview, setPreview] = useState<{ version: Version; state: string } | null>(null);
 
   const refresh = () => {
     onChanged();
@@ -73,7 +77,7 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
 
   const open = async (version: Version) => {
     const full = await fetchVersion(workspaceId, pageId, version.id);
-    setPreview({ version: full, content: versionContent(full.state!) });
+    setPreview({ version: full, state: full.state! });
   };
 
   const restore = async () => {
@@ -86,7 +90,7 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
       setPreview(null);
       return;
     }
-    onRestore(preview.content);
+    onRestore(preview.state);
     setPreview(null);
     await refresh();
   };
@@ -146,7 +150,7 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
           onClick={() => setPreview(null)}
         >
           <div
-            className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-white shadow-xl dark:bg-zinc-900"
+            className={`flex max-h-full w-full flex-col rounded-xl bg-white shadow-xl dark:bg-zinc-900 ${wide ? "h-full max-w-6xl" : "max-w-3xl"}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
@@ -168,9 +172,13 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
                 )}
               </div>
             </div>
-            <div className="overflow-y-auto px-8 py-6">
-              <Preview workspaceId={workspaceId} pageId={pageId} content={preview.content} />
-            </div>
+            {renderPreview ? (
+              <div className="min-h-0 flex-1">{renderPreview(preview.state)}</div>
+            ) : (
+              <div className="overflow-y-auto px-8 py-6">
+                <DocumentPreview workspaceId={workspaceId} pageId={pageId} content={versionContent(preview.state)} />
+              </div>
+            )}
           </div>
         </div>,
           document.body,

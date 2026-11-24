@@ -6,10 +6,12 @@ import { ancestorsOf, PAGE_ICON } from "@/components/PageTree";
 import { Popover } from "@/components/Popover";
 import { ShareDialog } from "@/components/ShareDialog";
 import { DatabasePage } from "@/database/DatabasePage";
+import { DrawingPage } from "@/drawing/DrawingPage";
 import { DocumentEditor, type Panel } from "@/editor/DocumentEditor";
 import { ApiError } from "@/lib/api";
+import { MindMapPage } from "@/mindmap/MindMapPage";
 import { useCreatePage, useDeletePage, usePage, usePages, useUpdatePage } from "@/lib/queries";
-import { atLeast, type Page, type PageType } from "@/lib/types";
+import { atLeast, LIVE_PAGE_TYPES, type Page, type PageType } from "@/lib/types";
 
 import { useWorkspaceLayout } from "./workspace";
 
@@ -118,6 +120,12 @@ function FolderView({ page }: { page: Page }) {
           <button onClick={() => void add("database")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
             + Database
           </button>
+          <button onClick={() => void add("mindmap")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            + Mind map
+          </button>
+          <button onClick={() => void add("drawing")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            + Drawing
+          </button>
         </div>
       )}
     </div>
@@ -155,14 +163,14 @@ export function PageView() {
         <Breadcrumbs page={data} />
         {presence}
         {data.type === "document" && (
-          <>
-            <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")}>
-              Comments
-            </HeaderButton>
-            <HeaderButton active={panel === "history"} onClick={() => toggle("history")}>
-              History
-            </HeaderButton>
-          </>
+          <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")}>
+            Comments
+          </HeaderButton>
+        )}
+        {LIVE_PAGE_TYPES.includes(data.type) && (
+          <HeaderButton active={panel === "history"} onClick={() => toggle("history")}>
+            History
+          </HeaderButton>
         )}
         {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
         {atLeast(data.my_role, "editor") && (
@@ -188,6 +196,22 @@ export function PageView() {
   }
   if (!data) return null;
 
+  if (data.type === "mindmap" || data.type === "drawing") {
+    const Canvas = data.type === "mindmap" ? MindMapPage : DrawingPage;
+    return (
+      <div className="mx-auto max-w-[96rem]">
+        <TitleInput page={data} />
+        <Canvas
+          key={data.id}
+          page={data}
+          panel={panel === "history" ? "history" : null}
+          onPanel={setPanel}
+          onPresence={setPresence}
+        />
+      </div>
+    );
+  }
+
   if (data.type === "database") {
     return (
       <div className="mx-auto max-w-7xl">
@@ -211,9 +235,7 @@ export function PageView() {
         </>
       ) : data.type === "folder" ? (
         <FolderView page={data} />
-      ) : (
-        <p className="text-sm text-zinc-500">This page type arrives in a later phase.</p>
-      )}
+      ) : null}
     </div>
   );
 }

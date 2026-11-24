@@ -16,7 +16,7 @@ import { CommentsPanel, type Draft } from "./CommentsPanel";
 import { baseExtensions } from "./extensions";
 import { Presence } from "./Presence";
 import { Toolbar } from "./Toolbar";
-import { VersionsPanel } from "./VersionsPanel";
+import { versionContent, VersionsPanel } from "./VersionsPanel";
 
 export type Panel = "comments" | "history" | null;
 
@@ -239,7 +239,7 @@ function CollabEditor({
               pageId={page.id}
               canEdit={canEdit}
               liveState={() => bytesToBase64(Y.encodeStateAsUpdate(session.doc))}
-              onRestore={(content) => editor.commands.setContent(content)}
+              onRestore={(state) => editor.commands.setContent(versionContent(state))}
               onChanged={() => notify(session, "versions-changed")}
             />
           )}
