@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="Ymer architecture: browser, Flask API, Hocuspocus collab service, Postgres, Redis and MinIO">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#52525b"/>
+    </marker>
+    <marker id="arrow-brand" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4f46e5"/>
+    </marker>
+    <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#a1a1aa"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #18181b; }
+      .title { font-size: 16px; font-weight: 700; }
+      .body { font-size: 12.5px; fill: #3f3f46; }
+      .small { font-size: 11.5px; fill: #52525b; }
+      .label { font-size: 11.5px; fill: #4f46e5; font-weight: 600; }
+      .muted { fill: #a1a1aa; }
+      .box { fill: #ffffff; stroke: #d4d4d8; stroke-width: 1.5; }
+      .brand { fill: #eef2ff; stroke: #6366f1; stroke-width: 1.5; }
+      .store { fill: #f4f4f5; stroke: #a1a1aa; stroke-width: 1.5; }
+      .planned { fill: #fafafa; stroke: #a1a1aa; stroke-width: 1.5; stroke-dasharray: 6 5; }
+      .line { stroke: #52525b; stroke-width: 1.6; fill: none; }
+      .line-brand { stroke: #4f46e5; stroke-width: 1.8; fill: none; }
+      .line-muted { stroke: #a1a1aa; stroke-width: 1.5; fill: none; stroke-dasharray: 5 5; }
+    </style>
+  </defs>
+
+  <rect width="960" height="600" rx="16" fill="#ffffff"/>
+
+  <!-- Browser -->
+  <rect class="brand" x="250" y="24" width="460" height="92" rx="12"/>
+  <text class="title" x="270" y="52">Browser: React 18 + TypeScript + Tailwind 4</text>
+  <text class="body" x="270" y="74">TipTap 3 editor bound to a Yjs doc, live cursors and presence</text>
+  <text class="body" x="270" y="94">React Query for server state, react-router 7 (Vite dev server :5173)</text>
+
+  <!-- Flask API -->
+  <rect class="box" x="60" y="200" width="380" height="150" rx="12"/>
+  <text class="title" x="80" y="228">Flask 3 API  (:5000)</text>
+  <text class="body" x="80" y="252">JWT auth, workspaces, members, page tree</text>
+  <text class="body" x="80" y="272">WorkspaceScope permissions (404, never 403)</text>
+  <text class="body" x="80" y="292">Comments, versions, file uploads</text>
+  <text class="body" x="80" y="312">SQLAlchemy 2 + Alembic migrations</text>
+  <text class="small" x="80" y="336">Only writer of the schema. Only place permissions are decided.</text>
+
+  <!-- Collab -->
+  <rect class="box" x="520" y="200" width="380" height="150" rx="12"/>
+  <text class="title" x="540" y="228">Collab service  (:1234)</text>
+  <text class="body" x="540" y="252">Hocuspocus 4 on Node 22, Yjs over WebSockets</text>
+  <text class="body" x="540" y="272">One room per page; read-only for viewers</text>
+  <text class="body" x="540" y="292">Relays comments / versions / files "changed"</text>
+  <text class="body" x="540" y="312">Debounced saves (2 s, at most 10 s)</text>
+  <text class="small" x="540" y="336">Never touches Postgres directly.</text>
+
+  <!-- Browser -> API -->
+  <path class="line-brand" d="M330 116 L250 198" marker-end="url(#arrow-brand)"/>
+  <text class="label" x="182" y="158">REST  /api</text>
+  <!-- Browser -> collab -->
+  <path class="line-brand" d="M630 116 L710 198" marker-end="url(#arrow-brand)"/>
+  <text class="label" x="684" y="158">WebSocket  /collab</text>
+
+  <!-- collab -> API internal -->
+  <path class="line" d="M518 275 L442 275" marker-end="url(#arrow)"/>
+  <text class="small" x="451" y="264">/internal/</text>
+  <text class="small" x="451" y="296">collab/*</text>
+
+  <!-- Stores -->
+  <rect class="store" x="60" y="430" width="250" height="120" rx="12"/>
+  <text class="title" x="80" y="458">PostgreSQL 16</text>
+  <text class="body" x="80" y="480">pgvector + pg_trgm enabled</text>
+  <text class="body" x="80" y="500">users, pages, permissions,</text>
+  <text class="body" x="80" y="520">Yjs state, versions, comments,</text>
+  <text class="body" x="80" y="540">file metadata</text>
+
+  <rect class="store" x="350" y="430" width="200" height="120" rx="12"/>
+  <text class="title" x="370" y="458">Redis 7</text>
+  <text class="body" x="370" y="480">Connected and</text>
+  <text class="body" x="370" y="500">health-checked; kept for</text>
+  <text class="body" x="370" y="520">queues, presence and</text>
+  <text class="body" x="370" y="540">rate limits later</text>
+
+  <rect class="store" x="590" y="430" width="160" height="120" rx="12"/>
+  <text class="title" x="610" y="458">MinIO (S3)</text>
+  <text class="body" x="610" y="480">File bytes;</text>
+  <text class="body" x="610" y="500">browser reads via</text>
+  <text class="body" x="610" y="520">5-minute presigned</text>
+  <text class="body" x="610" y="540">URLs</text>
+
+  <rect class="planned" x="790" y="430" width="140" height="120" rx="12"/>
+  <text class="title muted" x="808" y="458">AI service</text>
+  <text class="small" x="808" y="480">Planned (Phase 4)</text>
+  <text class="small" x="808" y="500">LLM proxy, RAG</text>
+  <text class="small" x="808" y="520">over pgvector,</text>
+  <text class="small" x="808" y="540">background jobs</text>
+
+  <!-- API -> stores -->
+  <path class="line" d="M170 352 L170 428" marker-end="url(#arrow)"/>
+  <path class="line" d="M330 352 L430 428" marker-end="url(#arrow)"/>
+  <path class="line" d="M420 352 L630 428" marker-end="url(#arrow)"/>
+  <path class="line-muted" d="M440 340 C640 380 780 390 840 428" marker-end="url(#arrow-muted)"/>
+
+  <!-- Browser -> MinIO presigned (around the right side) -->
+  <path class="line-brand" d="M712 70 L930 70 L930 380 L720 380 L700 428" marker-end="url(#arrow-brand)" stroke-dasharray="2 4"/>
+  <text class="label" x="790" y="62">presigned GET</text>
+
+  <!-- Legend -->
+  <rect class="planned" x="60" y="572" width="22" height="14" rx="3"/>
+  <text class="small" x="90" y="583">dashed = on the roadmap, not built yet</text>
+</svg>
