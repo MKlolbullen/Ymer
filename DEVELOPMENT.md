@@ -86,3 +86,29 @@ Tests use pytest. Tests marked `@pytest.mark.db` need Postgres at
 ```sh
 npm run dev | build | typecheck | test
 ```
+
+## Auth and permissions
+
+- **Schema** (migration `0002`): `users`, `workspaces`, `workspace_members` (role:
+  owner / editor / commenter / viewer), `pages` (a tree; type document / database /
+  mindmap / folder; a parent must be in the same workspace) and `page_permissions`
+  (per-user grants on a page and everything beneath it).
+- **Auth** (`ymer/auth/`, routes in `ymer/api/auth.py`): email/password sign-up and
+  login with scrypt hashes, then JWT bearer tokens signed with `YMER_SECRET_KEY`. Access
+  tokens last `YMER_JWT_ACCESS_TTL` seconds (15 min), refresh tokens
+  `YMER_JWT_REFRESH_TTL` (30 days). `POST /api/auth/logout` revokes all of a user's
+  tokens by bumping `users.token_version`. In production the app refuses to start
+  unless the secret key is at least 32 characters.
+- **Scoping** (`ymer/permissions.py`): every workspace route builds a `WorkspaceScope`
+  for the signed-in user and reads pages only through it, so queries are always filtered
+  by `workspace_id`. Users with no access get 404, never 403, so ids cannot be probed.
+- **Effective role on a page**: workspace owners are owners everywhere; otherwise the
+  nearest grant on the page or an ancestor wins (it can widen access for a guest or
+  narrow it for a member); otherwise the workspace role applies. Viewers read,
+  commenters also comment, editors also edit, create, move, delete and share (up to
+  their own role). Only owners manage members and the workspace; a workspace always
+  keeps one owner; removing a member also removes their page grants there.
+
+Tests: `tests/test_permissions.py` covers the rules above, `tests/test_auth.py` the
+tokens, `tests/test_schema.py` the constraints and that the migration matches the
+models. The `db` fixture wraps each test in a transaction that is rolled back.

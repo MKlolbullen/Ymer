@@ -43,6 +43,10 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"]
     )
 
+    # JWT lifetimes in seconds. Access tokens are short-lived; refresh tokens mint new ones.
+    jwt_access_ttl: int = 15 * 60
+    jwt_refresh_ttl: int = 30 * 24 * 60 * 60
+
     # Seconds each dependency check in /api/health/ready may take.
     health_check_timeout: float = 2.0
 
