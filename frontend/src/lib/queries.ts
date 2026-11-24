@@ -205,6 +205,7 @@ export function useDatabase(workspaceId: string, databaseId: string) {
   return useQuery({
     queryKey: keys.database(workspaceId, databaseId),
     queryFn: () => api<{ properties: Property[]; views: DatabaseView[] }>(dbPath(workspaceId, databaseId)),
+    enabled: !!databaseId,
   });
 }
 

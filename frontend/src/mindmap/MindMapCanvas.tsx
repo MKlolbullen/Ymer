@@ -19,7 +19,7 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme, type Theme } from "@/charts/palette";
 
@@ -55,13 +55,29 @@ function IdeaEditor({ data }: { data: IdeaData }) {
   const [value, setValue] = useState(data.draft ?? data.label);
   const ref = useRef<HTMLTextAreaElement>(null);
   const done = useRef(false);
+  // Keys typed before the box had focus arrive as a draft (see MindMapPage).
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    const end = el.value.length;
-    el.setSelectionRange(data.draft !== null ? end : 0, end);
+    if (data.draft !== null) setValue(data.draft);
   }, [data.draft]);
+  useLayoutEffect(() => {
+    // React Flow keeps a new node hidden until it has measured it, and hidden elements
+    // cannot take focus, so try again for a few frames.
+    let tries = 0;
+    let frame = 0;
+    const focus = () => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      if (document.activeElement !== el) {
+        if (tries++ < 20) frame = requestAnimationFrame(focus);
+        return;
+      }
+      const end = el.value.length;
+      el.setSelectionRange(data.draft !== null ? end : 0, end);
+    };
+    focus();
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const finish = (fn: () => void) => {
     if (done.current) return;
     done.current = true;
@@ -198,6 +214,9 @@ function Canvas(props: CanvasProps) {
           id: n.id,
           type: "idea",
           position: { x: n.x, y: n.y },
+          // A size guess shows (and lets us focus) a new idea before React Flow measures it.
+          initialWidth: 120,
+          initialHeight: 36,
           selected: n.id === selectedId,
           draggable: !readOnly && n.id !== editingId,
           data: {

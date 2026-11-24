@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ChartSettings } from "@/charts/ChartSettings";
 import { normalizeChartConfig } from "@/charts/config";
@@ -10,10 +10,19 @@ import { useDatabaseContext } from "./context";
 /** A database view drawn as a chart. Its filters (toolbar) apply before grouping. */
 export function ChartView({ view }: { view: DatabaseView }) {
   const { workspaceId, databaseId, properties, canEdit, mutations } = useDatabaseContext();
-  const config = normalizeChartConfig(view.config.chart, properties);
+  // Edits apply here at once (and save in the background), so quick changes in a row
+  // never build on a stale copy; a change saved elsewhere replaces the local copy.
+  const stored = JSON.stringify(view.config.chart ?? null);
+  const [config, setConfig] = useState(() => normalizeChartConfig(view.config.chart, properties));
+  useEffect(() => {
+    setConfig(normalizeChartConfig(JSON.parse(stored) as ChartConfig | null, properties));
+  }, [stored, properties]);
   const [editing, setEditing] = useState(!view.config.chart && canEdit);
 
-  const save = (chart: ChartConfig) => mutations.updateView.mutate({ viewId: view.id, config: { ...view.config, chart } });
+  const save = (chart: ChartConfig) => {
+    setConfig(chart);
+    mutations.updateView.mutate({ viewId: view.id, config: { ...view.config, chart } });
+  };
 
   return (
     <div className="space-y-3">

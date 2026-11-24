@@ -163,8 +163,12 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
   const linkButton = useRef<HTMLButtonElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
 
-  const undo = useMemo(() => new Y.UndoManager(nodesMap(doc), { trackedOrigins: new Set([LOCAL]), captureTimeout: 400 }), [doc]);
-  useEffect(() => () => undo.destroy(), [undo]);
+  const [undo, setUndo] = useState<Y.UndoManager | null>(null);
+  useEffect(() => {
+    const manager = new Y.UndoManager(nodesMap(doc), { trackedOrigins: new Set([LOCAL]), captureTimeout: 400 });
+    setUndo(manager);
+    return () => manager.destroy();
+  }, [doc]);
 
   // Name and colour for the presence avatars, plus which idea this person has selected.
   useEffect(() => {
@@ -195,9 +199,10 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
     setEditing(id);
   };
   const stopEditing = () => {
+    // Focus moves back right away so the next shortcut reaches the canvas.
+    focusCanvas();
     setEditing(null);
     setDraft(null);
-    requestAnimationFrame(focusCanvas);
   };
 
   const add = (kind: "child" | "sibling") => {
@@ -220,16 +225,27 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (editing) return;
+    if (editing) {
+      // The idea's text box takes a frame or two to appear; keep what is typed meanwhile.
+      if (e.target !== wrapper.current) return;
+      e.preventDefault();
+      if (e.key === "Enter" || e.key === "Escape") {
+        const label = draft ?? byId.get(editing)?.label ?? "";
+        if (e.key === "Enter") updateNode(doc, editing, { label: label.trim() });
+        stopEditing();
+      } else if (e.key === "Backspace") setDraft((d) => (d ?? "").slice(0, -1));
+      else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) setDraft((d) => (d ?? "") + e.key);
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "z") {
       e.preventDefault();
-      if (canEdit) (e.shiftKey ? undo.redo() : undo.undo());
+      if (canEdit) (e.shiftKey ? undo?.redo() : undo?.undo());
       return;
     }
     if (mod && e.key.toLowerCase() === "y") {
       e.preventDefault();
-      if (canEdit) undo.redo();
+      if (canEdit) undo?.redo();
       return;
     }
     const node = selected ? byId.get(selected) : undefined;
@@ -330,10 +346,10 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
                 </span>
               )}
               <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
-              <ToolButton label="Undo (Ctrl+Z)" onClick={() => undo.undo()}>
+              <ToolButton label="Undo (Ctrl+Z)" onClick={() => undo?.undo()}>
                 ↶
               </ToolButton>
-              <ToolButton label="Redo (Ctrl+Shift+Z)" onClick={() => undo.redo()}>
+              <ToolButton label="Redo (Ctrl+Shift+Z)" onClick={() => undo?.redo()}>
                 ↷
               </ToolButton>
               <ToolButton

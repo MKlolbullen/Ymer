@@ -44,9 +44,13 @@ export function LiveDrawing({ doc, awareness, me, readOnly, theme, name }: LiveP
       const merged = reconcileElements(api.getSceneElementsIncludingDeleted(), remote, api.getAppState());
       api.updateScene({ elements: merged, captureUpdate: CaptureUpdateAction.NEVER });
     };
-    api.updateScene({ elements: storedElements(doc) as unknown as OrderedExcalidrawElement[], captureUpdate: CaptureUpdateAction.NEVER });
     map.observeDeep(apply);
-    return () => map.unobserveDeep(apply);
+    // Pick up anything that arrived between the initial load and this point.
+    const catchUp = window.setTimeout(() => apply(null, { origin: null } as unknown as Y.Transaction), 0);
+    return () => {
+      window.clearTimeout(catchUp);
+      map.unobserveDeep(apply);
+    };
   }, [api, doc]);
 
   // Everyone else's pointer, from Yjs awareness.
@@ -83,6 +87,8 @@ export function LiveDrawing({ doc, awareness, me, readOnly, theme, name }: LiveP
       name={name}
       viewModeEnabled={readOnly}
       isCollaborating
+      // Read when Excalidraw initialises; anything later comes through the observer.
+      initialData={() => ({ elements: storedElements(doc) as unknown as OrderedExcalidrawElement[], scrollToContent: true })}
       UIOptions={UI_OPTIONS}
       onChange={(elements) => {
         if (readOnly) return;

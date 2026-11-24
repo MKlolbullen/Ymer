@@ -173,7 +173,13 @@ export function ChartCanvas({ data, config, height = 320, label }: { data: Chart
     chartRef.current = new Chart(canvasRef.current, next);
   }, [data, config, theme, supported]);
 
-  useEffect(() => () => chartRef.current?.destroy(), []);
+  useEffect(
+    () => () => {
+      chartRef.current?.destroy();
+      chartRef.current = null;
+    },
+    [],
+  );
 
   return (
     <div style={{ height }} className="relative">
