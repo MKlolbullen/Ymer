@@ -14,6 +14,7 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
 import { FileAttachmentView, FileImageView } from "./FileViews";
+import { pageMention, type MentionContext } from "./mentions";
 
 export type FileContext = { workspaceId: string; pageId: string };
 
@@ -73,7 +74,10 @@ export const FileAttachment = Node.create<FileContext>({
   },
 });
 
-export function baseExtensions(files: FileContext, { collaborative }: { collaborative: boolean }): Extensions {
+export function baseExtensions(
+  files: FileContext,
+  { collaborative, pages = () => [] }: { collaborative: boolean; pages?: MentionContext["pages"] },
+): Extensions {
   return [
     StarterKit.configure({
       // Yjs keeps the undo history when collaborating (Collaboration adds its own).
@@ -81,10 +85,11 @@ export function baseExtensions(files: FileContext, { collaborative }: { collabor
       heading: { levels: [1, 2, 3] },
       link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     }),
-    Placeholder.configure({ placeholder: "Write something, or paste an image…" }),
+    Placeholder.configure({ placeholder: "Write something, type @ to link a page, or paste an image…" }),
     TaskList,
     TaskItem.configure({ nested: true }),
     FileImage.configure(files),
     FileAttachment.configure(files),
+    pageMention({ workspaceId: files.workspaceId, pages }, files.pageId),
   ];
 }

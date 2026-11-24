@@ -95,18 +95,27 @@ export function WorkspaceHome() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
       <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-        Pick a page in the sidebar{canCreate ? ", or start a new document." : "."}
+        Pick a page in the sidebar{canCreate ? ", or start something new." : "."} Press Ctrl K (⌘K on a Mac) to search.
       </p>
       {canCreate && (
-        <button
-          onClick={async () => {
-            const page = await create.mutateAsync({ type: "document" });
-            navigate(`/w/${workspace.id}/p/${page.id}`);
-          }}
-          className="mt-6 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          New document
-        </button>
+        <div className="mt-6 flex gap-2">
+          {(["document", "database"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={async () => {
+                const page = await create.mutateAsync({ type });
+                navigate(`/w/${workspace.id}/p/${page.id}`);
+              }}
+              className={
+                type === "document"
+                  ? "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                  : "rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              }
+            >
+              New {type}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

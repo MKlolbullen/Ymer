@@ -154,3 +154,62 @@ browser ──REST /api──────────▶ Flask ──▶ Postgre
 
 Collab tests (`cd collab && npm test`) run the real Hocuspocus server against a stub of
 Flask's internal API and connect real providers.
+
+## Notebooks and databases (Phase 2)
+
+Migration `0004` adds the tables below. Everything still hangs off `pages` and is read
+through `WorkspaceScope`, so the Phase 0 permission rules apply unchanged: viewers read a
+database, editors change its rows, properties and views.
+
+- **Databases** (`ymer/models/database.py`, rules in `ymer/databases.py`, routes in
+  `ymer/api/databases.py`). A page of type `database` gets a title property and a table view
+  when it is created.
+  - `database_properties`: name, type (title, text, number, select, multi_select, date,
+    checkbox, url, person, relation, rollup) and a JSONB `config` (select options, number
+    format, relation target, rollup settings).
+  - `database_rows`: one JSONB `values` object keyed by property id. The server validates
+    and normalises each value for its type (URLs must be http, https or mailto; people must
+    be workspace members; option ids must exist). Rows have a fractional `position` so a
+    drag can drop between two rows without renumbering.
+  - `database_relations`: one row per link, stored under the owning relation property. A
+    two-way relation adds a second property on the other database whose config has
+    `reverse_of`; it reads and writes the same links from the other side. Deleting either
+    half deletes both. Relation values are written as row ids and read as `[{id, title}]`;
+    `title` is null when the reader cannot see the related database.
+  - Rollups (`count`, `count_values`, `count_unique`, `sum`, `average`, `min`, `max`,
+    `percent_checked`, `show_original`) are computed on read over one relation. A rollup
+    over a database the reader cannot see is empty. Rollups of rollups are refused.
+  - `database_views`: table or board, with `config` = `{sorts, filters, group_by, hidden,
+    widths}`. `GET .../rows?view_id=` applies the filters (all must match) and sorts; empty
+    values sort last. Filtering and sorting run in Python over the loaded rows so computed
+    rollups behave like stored values; fine for a few thousand rows, and the place to move
+    into SQL if databases grow past that.
+  - Changing a property's type converts values where it can (text to select builds options
+    from the existing values). Title, relation and rollup properties cannot change type.
+- **Backlinks**: type `@` in a document to link a page (`frontend/src/editor/mentions.tsx`,
+  stored as a `pageMention` node with the page id). When the collab service saves a
+  document, Flask decodes the Yjs state with `pycrdt` (`ymer/content.py`), rebuilds the
+  page's rows in `page_links` and stores its plain text in `pages.content_text`.
+  `GET .../pages/<id>/backlinks` lists the linking pages the reader can see.
+- **Search**: `GET /api/workspaces/<ws>/search?q=` uses generated `tsvector` columns
+  (`pages.search_vector` over title and document text, `database_rows.search_vector` over
+  title and text values) with the `simple` configuration, every word matched as a prefix,
+  plus `pg_trgm` similarity on page titles for typos. Results are limited to pages and
+  databases the user can see. Ctrl/Cmd+K opens it in the app.
+- **Page tree**: `POST .../pages/<id>/move {parent_id, before_id}` places a page among its
+  new siblings and renumbers them; the sidebar uses it for drag and drop (top or bottom
+  quarter of a row = before or after it, middle = inside it).
+- **Sharing**: `POST .../pages/<id>/permissions {email, role}` shares with an existing
+  account by email. The app has a Share dialog on every page and a Members screen
+  (`/w/<id>/members`) for owners to add people, change roles and remove them.
+
+Assumptions made for this phase, open to change:
+
+- Database rows hold properties only; a page body per row (as in Notion) is not built yet.
+- Databases are not live over Yjs. The app refetches rows every 15 seconds and after each
+  change, so two people editing the same table see each other's edits with a short delay.
+- Search uses no stemming (`simple`), so it works the same for any language but "plans"
+  does not find "plan" unless typed as a prefix.
+- Sharing by email needs the person to have an account already; there are no invitations.
+- Renumbering siblings on a move also touches pages the mover cannot see. Positions only
+  order the tree, so this reveals and changes nothing anyone can read.

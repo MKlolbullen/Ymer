@@ -102,3 +102,20 @@
     @apply bg-amber-300 dark:bg-amber-500/60;
   }
 }
+
+/* --- Page mentions and search highlights ---------------------------------------------- */
+
+@layer components {
+  .page-mention-link {
+    @apply rounded px-0.5 font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:bg-zinc-100 dark:text-zinc-100 dark:decoration-zinc-600 dark:hover:bg-zinc-800;
+  }
+  .page-mention-missing {
+    @apply rounded px-0.5 text-zinc-400 line-through;
+  }
+  .ymer-prose .page-mention-link {
+    @apply text-zinc-800 underline decoration-zinc-300 dark:text-zinc-100 dark:decoration-zinc-600;
+  }
+  mark.search-hit {
+    @apply rounded-sm bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-500/40;
+  }
+}
