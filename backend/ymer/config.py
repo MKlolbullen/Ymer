@@ -61,6 +61,34 @@ class Settings(BaseSettings):
     # Seconds each dependency check in /api/health/ready may take.
     health_check_timeout: float = 2.0
 
+    # --- AI layer (ymer.ai) -----------------------------------------------------------
+    # Which model answers chat-style requests (assist, Q&A, generation):
+    #   fake       deterministic stand-in, no network, no key; for development and tests
+    #   anthropic  Claude through the Anthropic API (key: ANTHROPIC_API_KEY or YMER_AI_API_KEY)
+    #   openai     any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio...) at YMER_AI_BASE_URL
+    #   off        AI features are hidden and their routes answer 503
+    ai_provider: Literal["fake", "anthropic", "openai", "off"] = "fake"
+    ai_model: str = "claude-opus-5-5"
+    # Effort for Claude (low / medium / high / xhigh / max). Editor assists are short tasks.
+    ai_effort: str = "medium"
+    # Retry a declined Claude request on Anthropic's recommended fallback model.
+    ai_fallbacks: bool = True
+    ai_api_key: str | None = None
+    ai_base_url: str | None = None
+    ai_timeout: float = 120.0
+    # Embeddings for semantic search and Q&A. Claude has no embeddings API, so this is
+    # separate: "fake" (hashed bag of words, no network) or "openai" (an OpenAI-compatible
+    # /embeddings endpoint, e.g. Ollama with nomic-embed-text).
+    ai_embedding_provider: Literal["fake", "openai", "off"] = "fake"
+    ai_embedding_model: str = "hash-256"
+    ai_embedding_base_url: str | None = None
+    ai_embedding_api_key: str | None = None
+    # Index pages for semantic search in the request that changed them (handy in
+    # development) instead of leaving them to `flask --app wsgi ai-worker`.
+    ai_index_inline: bool = False
+    # AI requests per user per minute (0 = unlimited). Counted in Redis.
+    ai_rate_limit: int = 30
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

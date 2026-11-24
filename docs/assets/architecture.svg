@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="Ymer architecture: browser, Flask API, Hocuspocus collab service, Postgres, Redis and MinIO">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="Ymer architecture: browser, Flask API, Hocuspocus collab service, Postgres, Redis, MinIO and the AI layer">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#52525b"/>
@@ -70,14 +70,14 @@
   <text class="body" x="80" y="480">pgvector + pg_trgm enabled</text>
   <text class="body" x="80" y="500">users, pages, permissions,</text>
   <text class="body" x="80" y="520">Yjs state, versions, comments,</text>
-  <text class="body" x="80" y="540">file metadata, databases</text>
+  <text class="body" x="80" y="540">files, databases, AI chunks</text>
 
   <rect class="store" x="350" y="430" width="200" height="120" rx="12"/>
   <text class="title" x="370" y="458">Redis 7</text>
-  <text class="body" x="370" y="480">Connected and</text>
-  <text class="body" x="370" y="500">health-checked; kept for</text>
-  <text class="body" x="370" y="520">queues, presence and</text>
-  <text class="body" x="370" y="540">rate limits later</text>
+  <text class="body" x="370" y="480">Health-checked;</text>
+  <text class="body" x="370" y="500">AI rate limits per</text>
+  <text class="body" x="370" y="520">user per minute;</text>
+  <text class="body" x="370" y="540">kept for presence</text>
 
   <rect class="store" x="590" y="430" width="160" height="120" rx="12"/>
   <text class="title" x="610" y="458">MinIO (S3)</text>
@@ -86,24 +86,21 @@
   <text class="body" x="610" y="520">5-minute presigned</text>
   <text class="body" x="610" y="540">URLs</text>
 
-  <rect class="planned" x="790" y="430" width="140" height="120" rx="12"/>
-  <text class="title muted" x="808" y="458">AI service</text>
-  <text class="small" x="808" y="480">Planned (Phase 4)</text>
-  <text class="small" x="808" y="500">LLM proxy, RAG</text>
-  <text class="small" x="808" y="520">over pgvector,</text>
-  <text class="small" x="808" y="540">background jobs</text>
+  <rect class="box" x="790" y="430" width="140" height="120" rx="12"/>
+  <text class="title" x="808" y="458">AI layer</text>
+  <text class="small" x="808" y="480">LLM proxy (Claude,</text>
+  <text class="small" x="808" y="500">OpenAI-compatible,</text>
+  <text class="small" x="808" y="520">demo), embeddings</text>
+  <text class="small" x="808" y="540">+ ai-worker queue</text>
 
   <!-- API -> stores -->
   <path class="line" d="M170 352 L170 428" marker-end="url(#arrow)"/>
   <path class="line" d="M330 352 L430 428" marker-end="url(#arrow)"/>
   <path class="line" d="M420 352 L630 428" marker-end="url(#arrow)"/>
-  <path class="line-muted" d="M440 340 C640 380 780 390 840 428" marker-end="url(#arrow-muted)"/>
+  <path class="line" d="M440 340 C640 380 780 390 840 428" marker-end="url(#arrow)"/>
 
   <!-- Browser -> MinIO presigned (around the right side) -->
   <path class="line-brand" d="M712 70 L930 70 L930 380 L720 380 L700 428" marker-end="url(#arrow-brand)" stroke-dasharray="2 4"/>
   <text class="label" x="790" y="62">presigned GET</text>
 
-  <!-- Legend -->
-  <rect class="planned" x="60" y="572" width="22" height="14" rx="3"/>
-  <text class="small" x="90" y="583">dashed = on the roadmap, not built yet</text>
 </svg>

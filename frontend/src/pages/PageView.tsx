@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { GenerateMenu } from "@/ai/GenerateMenu";
 import { Backlinks } from "@/components/Backlinks";
 import { ancestorsOf, PAGE_ICON } from "@/components/PageTree";
 import { Popover } from "@/components/Popover";
@@ -172,6 +173,7 @@ export function PageView() {
             History
           </HeaderButton>
         )}
+        <GenerateMenu page={data} />
         {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
         {atLeast(data.my_role, "editor") && (
           <HeaderButton

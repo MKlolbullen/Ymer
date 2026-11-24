@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 
+import { AskPage } from "./ai/AskPage";
 import { ApiError } from "./lib/api";
 import { useSession } from "./lib/auth";
 import { AuthPage } from "./pages/AuthPage";
@@ -36,6 +37,8 @@ export function AppRoutes() {
         <Route index element={<WorkspaceHome />} />
         <Route path="p/:pageId" element={<PageView />} />
         <Route path="members" element={<MembersPage />} />
+        <Route path="ask" element={<AskPage />} />
+        <Route path="ask/:conversationId" element={<AskPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

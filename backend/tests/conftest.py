@@ -48,7 +48,17 @@ def _skip_without_database(request, database_available):
 @pytest.fixture
 def app():
     app = create_app(
-        {"env": "test", "secret_key": TEST_SECRET_KEY, "collab_secret": TEST_COLLAB_SECRET}
+        {
+            "env": "test",
+            "secret_key": TEST_SECRET_KEY,
+            "collab_secret": TEST_COLLAB_SECRET,
+            # Tests never reach a real model, whatever .env says.
+            "ai_provider": "fake",
+            "ai_embedding_provider": "fake",
+            "ai_embedding_model": "hash-256",
+            "ai_index_inline": False,
+            "ai_rate_limit": 0,
+        }
     )
     yield app
     app.extensions["sqlalchemy_engine"].dispose()

@@ -1,8 +1,12 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useRef, type ReactNode } from "react";
 
+import { AssistMenu } from "@/ai/AssistMenu";
+
 type Props = {
   editor: Editor;
+  workspaceId: string;
+  pageId: string;
   canEdit: boolean;
   canComment: boolean;
   onComment: () => void;
@@ -40,7 +44,7 @@ function Button({
 
 const Divider = () => <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-700" aria-hidden />;
 
-export function Toolbar({ editor, canEdit, canComment, onComment, onFiles }: Props) {
+export function Toolbar({ editor, workspaceId, pageId, canEdit, canComment, onComment, onFiles }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const state = useEditorState({
     editor,
@@ -77,6 +81,7 @@ export function Toolbar({ editor, canEdit, canComment, onComment, onFiles }: Pro
       aria-label="Formatting"
       className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b border-zinc-200 bg-white/95 px-2 py-1 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95"
     >
+      <AssistMenu editor={editor} workspaceId={workspaceId} pageId={pageId} canEdit={canEdit} />
       {canEdit && (
         <>
           <Button label="Undo" disabled={!state.canUndo} onClick={() => chain().undo().run()}>↶</Button>

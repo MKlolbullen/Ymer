@@ -20,6 +20,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from pydantic import BaseModel
 from werkzeug.exceptions import BadRequest, NotFound, Unauthorized
 
+from ymer.ai.indexing import mark_dirty
 from ymer.api.validation import parse_body
 from ymer.app import settings_for
 from ymer.auth.current import load_user_from_token
@@ -111,5 +112,6 @@ def store_document(page_id: uuid.UUID):
         version_interval=settings_for(current_app).version_interval,
     )
     index_document(db_session, page, state)
+    mark_dirty(db_session, [page.id])
     db_session.commit()
     return "", 204

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: Phase 3 of 5 done" src="https://img.shields.io/badge/status-phase%203%20of%205%20done-6366f1">
+  <img alt="Status: Phase 4 of 5 done" src="https://img.shields.io/badge/status-phase%204%20of%205%20done-6366f1">
   <img alt="Flask 3" src="https://img.shields.io/badge/backend-Flask%203-3f3f46">
   <img alt="React 18" src="https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind%204-3f3f46">
   <img alt="Yjs" src="https://img.shields.io/badge/realtime-Yjs%20%2B%20Hocuspocus-3f3f46">
@@ -104,6 +104,44 @@ what is planned.
   </tr>
 </table>
 
+### AI layer
+
+| Feature | What you get |
+|---|---|
+| **Writing assist** | ✨ AI in the editor toolbar. Select text and improve it, fix spelling and grammar, shorten, expand, summarize, turn it into bullets, or give your own instruction. You see the result first, then replace the selection, insert it below, or copy it. With nothing selected, anyone who can read the page can summarize it. |
+| **Generate from notes** | ✨ Generate in a page's header turns that page (or notes you paste) into a new mind map or a new database, created inside the page. Databases get typed properties, select options with colours, a table view and a board view. |
+| **Semantic search** | Ctrl/Cmd+K adds a *Related by meaning* section under the keyword results: pages and database rows that match what you meant, even without the same words. |
+| **Workspace Q&A** | ✨ Ask AI answers questions from your pages and rows, with numbered citations that link to each source. Follow-up questions keep the context. Conversations are private to the person who asked. |
+| **Permissions first** | Everything the AI reads goes through the same permission checks as the rest of the app: search hits, answer sources and summaries only use pages you can open, and rewriting needs edit access. |
+| **Pluggable models** | Claude through the Anthropic API, any OpenAI-compatible server (hosted, or local such as Ollama or vLLM), or a built-in offline demo model that needs no key. Embeddings are configured separately, and a background worker keeps them current. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/ai-assist.png" alt="The AI assist menu showing an improved version of the selected paragraph, with Replace selection and Insert below buttons"></td>
+    <td width="50%"><img src="docs/assets/screenshots/ai-ask.png" alt="Ask AI answering a question with numbered citations and source cards"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Writing assist: review the rewrite, then replace or insert it.</sub></td>
+    <td align="center"><sub>Workspace Q&A with citations that link to each source.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/ai-mindmap.png" alt="A mind map generated from a page of meeting notes"></td>
+    <td width="50%"><img src="docs/assets/screenshots/ai-database.png" alt="A database table generated from notes, with select and date properties"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A mind map generated from a page of notes.</sub></td>
+    <td align="center"><sub>A database generated from the same notes.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/assets/screenshots/ai-search.png" alt="The search dialog with keyword results and a Related by meaning section" width="900">
+  <br><sub>Search finds pages related by meaning, under the keyword matches.</sub>
+</p>
+
+> The screenshots use the offline demo model, which is why its output is simple and marked "Demo model". Set
+> `YMER_AI_PROVIDER=anthropic` (or `openai`) and a key to use a real model.
+
 ### Foundation
 
 | Area | What you get |
@@ -115,7 +153,7 @@ what is planned.
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/architecture.svg" alt="Architecture diagram: the browser talks REST to Flask and WebSocket to the Hocuspocus collab service; collab loads and saves through Flask's internal API; Flask uses Postgres, Redis and MinIO; the AI service is planned" width="900">
+  <img src="docs/assets/architecture.svg" alt="Architecture diagram: the browser talks REST to Flask and WebSocket to the Hocuspocus collab service; collab loads and saves through Flask's internal API; Flask uses Postgres, Redis, MinIO and the AI layer" width="900">
 </p>
 
 - **Frontend** (`frontend/`): Vite, React 18, TypeScript, Tailwind CSS 4, TipTap 3, React Flow 12, Excalidraw,
@@ -127,7 +165,12 @@ what is planned.
   Flask's internal API, so it never touches Postgres itself. Flask decodes each save (pycrdt) to refresh search text
   and backlinks.
 - **Storage**: Postgres for everything structured (Yjs state, versions, comments, databases, full-text search),
-  MinIO (any S3 API) for file bytes. Redis is connected and health-checked; it is reserved for queues, presence and rate limits in later phases.
+  MinIO (any S3 API) for file bytes. Redis holds the AI rate limit counters.
+- **AI layer** (`backend/ymer/ai/`): part of the Flask app, not a separate service. Flask proxies every model call,
+  so keys never reach the browser and every read goes through the permission checks. Pages and database rows are
+  split into chunks and embedded into pgvector; edits put the page on a queue that `make ai-worker` (`flask
+  ai-worker`) drains in the background. The chat model and the embedding model are configured separately with
+  `YMER_AI_*` settings.
 
 Deeper notes on each part (routes, settings, the permission rules, how collab storage works) are in
 [DEVELOPMENT.md](DEVELOPMENT.md).
@@ -148,11 +191,20 @@ Then run each service in its own terminal:
 make backend     # Flask API on http://localhost:5000
 make collab      # collab service on ws://localhost:1234
 make frontend    # the app on http://localhost:5173
+make ai-worker   # optional: keeps AI search embeddings up to date in the background
 ```
 
 Open http://localhost:5173, create an account, then a workspace. The **+** next to *Pages* creates a document,
 database, mind map, drawing or folder. To see live editing, sign up a second user in a private window, add them to
 the workspace under *Members*, and open the same page in both windows.
+
+AI features work out of the box with the offline demo model (`YMER_AI_PROVIDER=fake`), which needs no key and
+writes simple, clearly labelled stand-in output. `.env.example` also indexes pages as they are saved, so the worker
+is optional in development. To use Claude, set `YMER_AI_PROVIDER=anthropic` and `YMER_AI_API_KEY`; for an
+OpenAI-compatible server (including local ones) set `YMER_AI_PROVIDER=openai`, `YMER_AI_BASE_URL` and
+`YMER_AI_MODEL`. Claude has no embeddings API, so semantic search uses `YMER_AI_EMBEDDING_PROVIDER` (`fake` for a
+built-in hashing embedder, or `openai` for any OpenAI-compatible embeddings endpoint). After changing the embedding
+model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
 
 `curl localhost:5000/api/health/ready` should report `database`, `redis` and `storage` as `ok`.
 `make test` runs all test suites and `make lint` the linters and type checks. `make help` lists every target.
@@ -167,7 +219,7 @@ the workspace under *Members*, and open the same page in both windows.
 backend/     Flask API (Python package `ymer`), models, Alembic migrations, pytest suite
 collab/      Hocuspocus realtime service (TypeScript, run directly by Node 22)
 frontend/    React app: app shell and page tree, editor (src/editor), databases (src/database),
-             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts)
+             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai)
 infra/       Init scripts for the Compose services
 docs/assets/ Logo, architecture diagram and screenshots used in this README
 ```
@@ -180,19 +232,20 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **1. Collaborative documents** | TipTap + Yjs editing with presence and cursors, comments, version history, file uploads | ✅ Done |
 | **2. Notebooks and databases** | Page hierarchy and backlinks, database engine (properties, rows, table and board views), relations and rollups, full-text search, sharing | ✅ Done |
 | **3. Mind maps and visuals** | Collaborative React Flow mind maps, Excalidraw drawings, chart views and chart blocks from database data | ✅ Done |
-| **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ⏭️ Next |
-| **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, rate limiting | Planned |
+| **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ✅ Done |
+| **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | ⏭️ Next |
 
 ### Data model
 
 Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, database, mindmap, drawing, folder),
 `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live page type),
 `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views` (table, board,
-chart). Mind maps and drawings need no tables of their own: they are Yjs documents like the rest
-([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
+chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
+re-embedded), `ai_conversations` and `ai_messages`. Mind maps and drawings need no tables of their own: they are Yjs
+documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
-Later phases add, roughly, `embeddings` (pgvector) and `ai_conversations` for the AI layer and `activity_log` for
-auditing. These are sketches and will change as each phase is designed.
+Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will
+change when the phase is designed.
 
 ## Design principles
 
