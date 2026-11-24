@@ -4,6 +4,9 @@ The collab service is the only caller. Each request carries the shared secret in
 ``X-Ymer-Collab-Secret`` (``YMER_COLLAB_SECRET``). A reverse proxy in front of Flask
 should not route ``/internal`` from the internet at all; the secret is a second lock.
 
+Every page type edited live over Yjs (documents, mind maps, drawings; see
+``LIVE_PAGE_TYPES``) goes through these routes; the collab service does not care which.
+
 - ``POST /internal/collab/authorize``      {token, document} -> who connects and can they write
 - ``GET  /internal/collab/documents/<id>`` current Yjs state (204 when there is none yet)
 - ``PUT  /internal/collab/documents/<id>`` store Yjs state; ``X-Ymer-User-Id`` = last editor.
@@ -23,7 +26,7 @@ from ymer.auth.current import load_user_from_token
 from ymer.content import index_document
 from ymer.db import db_session
 from ymer.documents import save_state
-from ymer.models import DocumentContent, Page, PageType, Role, User
+from ymer.models import LIVE_PAGE_TYPES, DocumentContent, Page, Role, User
 from ymer.permissions import WorkspaceScope
 
 internal_bp = Blueprint("internal", __name__, url_prefix="/internal/collab")
@@ -52,7 +55,7 @@ def parse_document_name(name: str) -> uuid.UUID:
 
 def _document_page(page_id: uuid.UUID) -> Page:
     page = db_session.get(Page, page_id)
-    if page is None or page.type is not PageType.DOCUMENT:
+    if page is None or page.type not in LIVE_PAGE_TYPES:
         raise NotFound("Document not found.")
     return page
 
@@ -67,12 +70,13 @@ def authorize():
         raise NotFound("Document not found.")
     scope = WorkspaceScope.load(db_session, user, page.workspace_id)
     page = scope.get_page(page_id)  # 404 unless the user can at least view it
-    if page.type is not PageType.DOCUMENT:
+    if page.type not in LIVE_PAGE_TYPES:
         raise NotFound("Document not found.")
     role = scope.page_role(page)
     return jsonify(
         user={"id": str(user.id), "display_name": user.display_name},
         role=role.value,
+        page_type=page.type.value,
         read_only=not role.at_least(Role.EDITOR),
     )
 

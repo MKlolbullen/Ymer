@@ -98,6 +98,7 @@ export function Toolbar({ editor, canEdit, canComment, onComment, onFiles }: Pro
           <Button label="Quote" active={state.quote} onClick={() => chain().toggleBlockquote().run()}>❝</Button>
           <Button label="Code block" active={state.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>{"{}"}</Button>
           <Button label="Divider" onClick={() => chain().setHorizontalRule().run()}>―</Button>
+          <Button label="Chart from a database" onClick={() => chain().insertChart().run()}>📊</Button>
           <Divider />
           <Button label="Upload image or file" onClick={() => fileInput.current?.click()}>⤒</Button>
           <input

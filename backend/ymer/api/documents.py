@@ -1,4 +1,4 @@
-"""Version history and comments on document pages.
+"""Version history (documents, mind maps, drawings) and comments (documents).
 
 - ``GET    /api/workspaces/<ws>/pages/<id>/versions``          viewer; newest first
 - ``POST   /api/workspaces/<ws>/pages/<id>/versions``          editor; snapshot {label?, state?}
@@ -10,6 +10,7 @@
 
 Restoring a version happens in the editor: the client loads the version's state and
 applies its content as a new edit, so everyone connected sees it and nothing is lost.
+Versions work the same for every live (Yjs) page type; comments are for documents only.
 """
 
 import base64
@@ -27,7 +28,16 @@ from ymer.api.validation import parse_body
 from ymer.api.workspaces import scope_for
 from ymer.auth import current_user, login_required
 from ymer.db import db_session
-from ymer.models import Comment, DocumentContent, DocumentVersion, Page, PageType, Role, User
+from ymer.models import (
+    LIVE_PAGE_TYPES,
+    Comment,
+    DocumentContent,
+    DocumentVersion,
+    Page,
+    PageType,
+    Role,
+    User,
+)
 from ymer.permissions import WorkspaceScope
 
 MAX_STATE_B64 = 20 * 1024 * 1024
@@ -41,6 +51,14 @@ def _document(scope: WorkspaceScope, page_id: uuid.UUID, minimum: Role) -> Page:
     page = scope.get_page(page_id, minimum)
     if page.type is not PageType.DOCUMENT:
         raise NotFound("This page is not a document.")
+    return page
+
+
+def _live_page(scope: WorkspaceScope, page_id: uuid.UUID, minimum: Role) -> Page:
+    """A page whose content is a Yjs document (has versions)."""
+    page = scope.get_page(page_id, minimum)
+    if page.type not in LIVE_PAGE_TYPES:
+        raise NotFound("This page has no version history.")
     return page
 
 
@@ -81,7 +99,7 @@ def version_json(version: DocumentVersion, author: User | None, *, state: bool =
 @documents_bp.get("/versions")
 @login_required
 def list_versions(workspace_id: uuid.UUID, page_id: uuid.UUID):
-    page = _document(scope_for(workspace_id), page_id, Role.VIEWER)
+    page = _live_page(scope_for(workspace_id), page_id, Role.VIEWER)
     rows = db_session.execute(
         select(DocumentVersion, User)
         .outerjoin(User, User.id == DocumentVersion.created_by_id)
@@ -95,7 +113,7 @@ def list_versions(workspace_id: uuid.UUID, page_id: uuid.UUID):
 @documents_bp.post("/versions")
 @login_required
 def create_version(workspace_id: uuid.UUID, page_id: uuid.UUID):
-    page = _document(scope_for(workspace_id), page_id, Role.EDITOR)
+    page = _live_page(scope_for(workspace_id), page_id, Role.EDITOR)
     body = parse_body(CreateVersionBody)
     if body.state is not None:
         try:
@@ -120,7 +138,7 @@ def create_version(workspace_id: uuid.UUID, page_id: uuid.UUID):
 @documents_bp.get("/versions/<uuid:version_id>")
 @login_required
 def get_version(workspace_id: uuid.UUID, page_id: uuid.UUID, version_id: uuid.UUID):
-    page = _document(scope_for(workspace_id), page_id, Role.VIEWER)
+    page = _live_page(scope_for(workspace_id), page_id, Role.VIEWER)
     version = db_session.scalar(
         select(DocumentVersion).where(
             DocumentVersion.id == version_id, DocumentVersion.page_id == page.id

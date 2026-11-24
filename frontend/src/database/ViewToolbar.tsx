@@ -195,6 +195,9 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
           </div>
         )}
       </ToolbarButton>
+      {/* Charts group rows themselves: sorting, hiding and row search do not apply. */}
+      {view.type !== "chart" && (
+      <>
       <ToolbarButton label="Sort" count={sorts.length}>
         {() => (
           <div className="space-y-2 p-2">
@@ -278,6 +281,8 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
         onChange={(e) => onSearch(e.target.value)}
         className="ml-1 w-32 rounded-md border border-transparent bg-zinc-100 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none sm:w-44 dark:bg-zinc-800"
       />
+      </>
+      )}
     </div>
   );
 }

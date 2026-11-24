@@ -1,5 +1,8 @@
 export type Role = "owner" | "editor" | "commenter" | "viewer";
-export type PageType = "document" | "database" | "mindmap" | "folder";
+export type PageType = "document" | "database" | "mindmap" | "drawing" | "folder";
+
+/** Page types whose content is a Yjs document edited live (these have version history). */
+export const LIVE_PAGE_TYPES: PageType[] = ["document", "mindmap", "drawing"];
 
 export type User = { id: string; email: string; display_name: string };
 export type Person = { id: string; display_name: string };
@@ -122,8 +125,34 @@ export type ViewConfig = {
   group_by: string | null;
   hidden: string[];
   widths: Record<string, number>;
+  chart?: ChartConfig | null;
 };
-export type DatabaseView = { id: string; name: string; type: "table" | "board"; config: ViewConfig; position: number };
+export type ViewType = "table" | "board" | "chart";
+export type DatabaseView = { id: string; name: string; type: ViewType; config: ViewConfig; position: number };
+
+// --- charts -----------------------------------------------------------------------------
+
+export type ChartKind = "bar" | "horizontal_bar" | "line" | "area" | "pie" | "doughnut";
+export type ChartAggregate = "count" | "sum" | "average" | "min" | "max";
+export type DateBucket = "day" | "week" | "month" | "quarter" | "year";
+
+/** What a chart groups and measures (backend/ymer/charts.py). */
+export type ChartConfig = {
+  kind: ChartKind;
+  x: string | null;
+  date_bucket: DateBucket;
+  aggregate: ChartAggregate;
+  measure: string | null;
+  split_by: string | null;
+  stacked: boolean;
+  hide_empty: boolean;
+  sort: "x" | "value_desc" | "value_asc";
+  limit: number;
+  cumulative: boolean;
+};
+
+export type ChartSeries = { key: string | null; name: string; color: string | null; data: (number | null)[] };
+export type ChartData = { labels: string[]; colors: (string | null)[] | null; series: ChartSeries[]; row_count: number };
 
 export type RelationRef = { id: string; title: string | null };
 /** Values by property id, as the API returns them (relations and people as refs). */

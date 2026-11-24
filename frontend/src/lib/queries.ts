@@ -1,8 +1,10 @@
 /** Server state (React Query). Keys start with the workspace id so a switch is clean. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import type {
+  ChartConfig,
+  ChartData,
   Comment,
   CommentAnchor,
   DatabaseView,
@@ -20,6 +22,7 @@ import type {
   StoredFile,
   Version,
   ViewConfig,
+  ViewType,
   Workspace,
 } from "./types";
 
@@ -39,6 +42,7 @@ export const keys = {
   search: (w: string, q: string) => ["search", w, q] as const,
   database: (w: string, d: string) => ["database", w, d] as const,
   rows: (w: string, d: string) => ["rows", w, d] as const,
+  chart: (w: string, d: string) => ["rows", w, d, "chart"] as const,
 };
 
 export function useWorkspaces() {
@@ -201,6 +205,7 @@ export function useDatabase(workspaceId: string, databaseId: string) {
   return useQuery({
     queryKey: keys.database(workspaceId, databaseId),
     queryFn: () => api<{ properties: Property[]; views: DatabaseView[] }>(dbPath(workspaceId, databaseId)),
+    enabled: !!databaseId,
   });
 }
 
@@ -214,6 +219,25 @@ export function useRows(workspaceId: string, databaseId: string, viewId: string 
     queryFn: () => api<{ rows: Row[] }>(`${dbPath(workspaceId, databaseId)}/rows?${params}`).then((r) => r.rows),
     refetchInterval: 15_000,
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * Grouped and aggregated rows for a chart. Keyed under the database's rows, so any row
+ * change (which invalidates ["rows", workspace]) redraws charts too. Polls like rows do.
+ */
+export function useChartData(workspaceId: string, databaseId: string | null, config: ChartConfig, viewId: string | null = null) {
+  return useQuery({
+    queryKey: [...keys.chart(workspaceId, databaseId ?? ""), viewId, config],
+    queryFn: () =>
+      api<{ chart: ChartData }>(`${dbPath(workspaceId, databaseId!)}/chart`, {
+        method: "POST",
+        json: { config, view_id: viewId },
+      }).then((r) => r.chart),
+    enabled: !!databaseId,
+    refetchInterval: 15_000,
+    placeholderData: (previous) => previous,
+    retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
   });
 }
 
@@ -270,7 +294,7 @@ export function useDatabaseMutations(workspaceId: string, databaseId: string) {
       onSuccess: refreshSchema,
     }),
     createView: useMutation({
-      mutationFn: (body: { name: string; type: "table" | "board"; config?: Partial<ViewConfig> }) =>
+      mutationFn: (body: { name: string; type: ViewType; config?: Partial<ViewConfig> }) =>
         api<{ view: DatabaseView }>(`${base}/views`, { method: "POST", json: body }).then((r) => r.view),
       onSuccess: refreshSchema,
     }),
@@ -281,7 +305,7 @@ export function useDatabaseMutations(workspaceId: string, databaseId: string) {
       }: {
         viewId: string;
         name?: string;
-        type?: "table" | "board";
+        type?: ViewType;
         config?: ViewConfig;
       }) => api<{ view: DatabaseView }>(`${base}/views/${viewId}`, { method: "PATCH", json: body }).then((r) => r.view),
       onSuccess: refreshSchema,

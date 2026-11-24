@@ -31,6 +31,11 @@ class PageType(enum.StrEnum):
     DATABASE = "database"
     MINDMAP = "mindmap"
     FOLDER = "folder"
+    DRAWING = "drawing"
+
+
+# Page types whose content is a Yjs document edited live through the collab service.
+LIVE_PAGE_TYPES = frozenset({PageType.DOCUMENT, PageType.MINDMAP, PageType.DRAWING})
 
 
 class Page(TimestampMixin, Base):

@@ -64,11 +64,13 @@ export function dropTarget(
   return { parent_id: target.parent_id, before_id: next?.id ?? null };
 }
 
-export const PAGE_ICON: Record<PageType, string> = { document: "📄", folder: "📁", database: "🗃️", mindmap: "🧠" };
+export const PAGE_ICON: Record<PageType, string> = { document: "📄", folder: "📁", database: "🗃️", mindmap: "🧠", drawing: "✏️" };
 
 export const NEW_PAGE_TYPES: { type: PageType; label: string }[] = [
   { type: "document", label: "Document" },
   { type: "database", label: "Database" },
+  { type: "mindmap", label: "Mind map" },
+  { type: "drawing", label: "Drawing" },
   { type: "folder", label: "Folder" },
 ];
 

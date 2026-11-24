@@ -51,6 +51,7 @@ class PropertyType(enum.StrEnum):
 class ViewType(enum.StrEnum):
     TABLE = "table"
     BOARD = "board"
+    CHART = "chart"
 
 
 def _enum(cls: type[enum.StrEnum], name: str) -> Enum:

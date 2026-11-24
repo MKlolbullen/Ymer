@@ -13,6 +13,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
+import { DatabaseChartBlock } from "./ChartBlock";
 import { FileAttachmentView, FileImageView } from "./FileViews";
 import { pageMention, type MentionContext } from "./mentions";
 
@@ -91,5 +92,6 @@ export function baseExtensions(
     FileImage.configure(files),
     FileAttachment.configure(files),
     pageMention({ workspaceId: files.workspaceId, pages }, files.pageId),
+    DatabaseChartBlock.configure({ workspaceId: files.workspaceId }),
   ];
 }

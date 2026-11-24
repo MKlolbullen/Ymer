@@ -77,6 +77,7 @@ test("normalizeConfig fills in missing keys", () => {
     group_by: null,
     hidden: [],
     widths: {},
+    chart: null,
   });
 });
 

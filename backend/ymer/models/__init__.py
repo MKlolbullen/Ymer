@@ -10,7 +10,7 @@ from ymer.models.database import (
 )
 from ymer.models.document import Comment, DocumentContent, DocumentVersion
 from ymer.models.file import File
-from ymer.models.page import Page, PageLink, PagePermission, PageType
+from ymer.models.page import LIVE_PAGE_TYPES, Page, PageLink, PagePermission, PageType
 from ymer.models.role import Role
 from ymer.models.user import User
 from ymer.models.workspace import Workspace, WorkspaceMember
@@ -28,6 +28,7 @@ __all__ = [
     "PageLink",
     "PagePermission",
     "PageType",
+    "LIVE_PAGE_TYPES",
     "PropertyType",
     "Role",
     "User",

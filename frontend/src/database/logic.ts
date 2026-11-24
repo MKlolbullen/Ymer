@@ -112,6 +112,7 @@ export function normalizeConfig(config: Partial<ViewConfig> | undefined): ViewCo
     group_by: config?.group_by ?? null,
     hidden: config?.hidden ?? [],
     widths: config?.widths ?? {},
+    chart: config?.chart ?? null,
   };
 }
 

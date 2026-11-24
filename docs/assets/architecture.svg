@@ -39,7 +39,7 @@
   <text class="title" x="80" y="228">Flask 3 API  (:5000)</text>
   <text class="body" x="80" y="252">JWT auth, workspaces, members, page tree</text>
   <text class="body" x="80" y="272">WorkspaceScope permissions (404, never 403)</text>
-  <text class="body" x="80" y="292">Comments, versions, file uploads</text>
+  <text class="body" x="80" y="292">Comments, versions, files, databases, charts</text>
   <text class="body" x="80" y="312">SQLAlchemy 2 + Alembic migrations</text>
   <text class="small" x="80" y="336">Only writer of the schema. Only place permissions are decided.</text>
 
@@ -48,7 +48,7 @@
   <text class="title" x="540" y="228">Collab service  (:1234)</text>
   <text class="body" x="540" y="252">Hocuspocus 4 on Node 22, Yjs over WebSockets</text>
   <text class="body" x="540" y="272">One room per page; read-only for viewers</text>
-  <text class="body" x="540" y="292">Relays comments / versions / files "changed"</text>
+  <text class="body" x="540" y="292">Docs, mind maps and drawings live</text>
   <text class="body" x="540" y="312">Debounced saves (2 s, at most 10 s)</text>
   <text class="small" x="540" y="336">Never touches Postgres directly.</text>
 
@@ -70,7 +70,7 @@
   <text class="body" x="80" y="480">pgvector + pg_trgm enabled</text>
   <text class="body" x="80" y="500">users, pages, permissions,</text>
   <text class="body" x="80" y="520">Yjs state, versions, comments,</text>
-  <text class="body" x="80" y="540">file metadata</text>
+  <text class="body" x="80" y="540">file metadata, databases</text>
 
   <rect class="store" x="350" y="430" width="200" height="120" rx="12"/>
   <text class="title" x="370" y="458">Redis 7</text>

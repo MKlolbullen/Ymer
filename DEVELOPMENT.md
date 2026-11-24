@@ -213,3 +213,55 @@ Assumptions made for this phase, open to change:
 - Sharing by email needs the person to have an account already; there are no invitations.
 - Renumbering siblings on a move also touches pages the mover cannot see. Positions only
   order the tree, so this reveals and changes nothing anyone can read.
+
+## Mind maps, drawings and charts (Phase 3)
+
+Migration `0005` adds a `drawing` page type and a `chart` view type. Mind maps (page type
+`mindmap`, which existed since `0002`) and drawings are live pages like documents: one Yjs
+document per page, edited through the same collab service, stored in `document_content`
+and `document_versions`, with the same permission rules (viewers and commenters get
+read-only connections). `LIVE_PAGE_TYPES` in `ymer/models/page.py` lists them; the
+internal collab API and version history accept all three, comments stay document-only.
+
+- **Mind maps** (`frontend/src/mindmap/`): React Flow 12 over the Yjs map `mindmap`
+  (node id -> map `{label, parent, x, y, color?, pageId?}`; the root's id is always `root`).
+  Each node is its own Y.Map, so a rename and a move of the same node by two people both
+  survive. `model.ts` holds every change (add child or sibling, delete subtree, re-parent,
+  tidy layout, restore). Keyboard: Tab child, Enter sibling, F2 or typing renames, Delete,
+  arrow keys move the selection, Ctrl/Cmd+Z undo (only your own changes). Dragging moves a
+  subtree; dropping an idea onto another re-parents it. An idea can link to a page, which
+  shows up in that page's backlinks. Others' selections show as coloured rings (Yjs
+  awareness).
+- **Drawings** (`frontend/src/drawing/`): Excalidraw 0.18 over the Yjs map `drawing`
+  (element id -> element JSON). Excalidraw versions every element and keeps deleted ones
+  as tombstones, so the sync is "newest version wins" per element (`sync.ts`); remote
+  changes go through Excalidraw's `reconcileElements`. Live pointers use awareness.
+  Excalidraw is loaded lazily, and its fonts are served by the app at
+  `/excalidraw-assets/` (a small plugin in `vite.config.ts`) rather than from a CDN.
+- **Search and backlinks**: `ymer/content.py` reads mind map labels and linked pages, and
+  the text of drawing text elements, on every save.
+- **Charts** (`ymer/charts.py`, `frontend/src/charts/`): `POST /api/workspaces/<ws>/databases/<db>/chart`
+  takes `{config, view_id?}` and returns labels and series. It groups rows by a property
+  (select options in option order and colour, multi-select and people count a row in each
+  value, dates bucket by day/week/month/quarter/year, empty values go to "No value"),
+  measures a row count or the sum/average/min/max of a number or rollup, can split into
+  series by a second property, and can run a cumulative total. Rows are read with
+  `RowReader`, so relations and rollups follow the reader's permissions, and a view's
+  filters apply when `view_id` is given. Viewers may call it.
+  - A database **chart view** stores its config in `config.chart`.
+  - A **chart block** in a document (toolbar 📊) is the `databaseChart` node with
+    `databaseId`, `viewId` and the config as a JSON string. Readers who cannot see the
+    database get a notice instead of the chart.
+  - Chart.js draws them, with the categorical palette in `charts/palette.ts` (separate
+    light and dark steps) and a "Show data" table under every chart.
+
+Assumptions made for this phase, open to change:
+
+- Excalidraw rather than tldraw: Excalidraw is MIT licensed; tldraw needs a licence key
+  in production.
+- Drawings have no images yet. Pasted images would need their files synced and stored
+  alongside the drawing, so the image tool is turned off.
+- Charts read rows live (refetched every 15 seconds like tables). There is no snapshot of
+  a chart's data inside the document.
+- Comments are for documents only; mind maps and drawings have version history but no
+  comment threads.
