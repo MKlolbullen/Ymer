@@ -20,12 +20,18 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         settings.secret_key == "change-me" or len(settings.secret_key) < 32
     ):
         raise RuntimeError("Set YMER_SECRET_KEY to a random value of at least 32 characters.")
+    if settings.env == "production" and (
+        settings.collab_secret == "change-me-collab" or len(settings.collab_secret) < 32
+    ):
+        raise RuntimeError("Set YMER_COLLAB_SECRET to a random value of at least 32 characters.")
 
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=settings.secret_key,
         TESTING=settings.env == "test",
         JSON_SORT_KEYS=False,
+        # Multipart overhead on top of the largest file we accept.
+        MAX_CONTENT_LENGTH=settings.max_upload_bytes + 1024 * 1024,
     )
     app.extensions["ymer_settings"] = settings
 
@@ -39,6 +45,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     from ymer.api import api_bp
 
     app.register_blueprint(api_bp)
+
+    from ymer.internal import internal_bp
+
+    app.register_blueprint(internal_bp)
 
     from ymer.cli import register_cli
 

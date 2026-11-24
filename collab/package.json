@@ -1,0 +1,29 @@
+{
+  "name": "ymer-collab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ymer realtime collaboration service (Hocuspocus / Yjs)",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "^4.9.0",
+    "@hocuspocus/extension-logger": "^4.9.0",
+    "@hocuspocus/server": "^4.9.0",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@hocuspocus/provider": "^4.9.0",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "ws": "^8.23.0"
+  }
+}

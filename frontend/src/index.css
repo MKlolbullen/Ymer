@@ -19,3 +19,86 @@
     @apply bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
   }
 }
+
+/* --- Document editor ------------------------------------------------------------- */
+
+@layer components {
+  .ymer-prose {
+    @apply text-base leading-7 text-zinc-800 dark:text-zinc-200;
+  }
+  .ymer-prose > * + * {
+    @apply mt-3;
+  }
+  .ymer-prose h1 {
+    @apply mt-8 text-2xl font-bold tracking-tight;
+  }
+  .ymer-prose h2 {
+    @apply mt-6 text-xl font-semibold tracking-tight;
+  }
+  .ymer-prose h3 {
+    @apply mt-5 text-lg font-semibold;
+  }
+  .ymer-prose ul {
+    @apply list-disc pl-6;
+  }
+  .ymer-prose ol {
+    @apply list-decimal pl-6;
+  }
+  .ymer-prose li > p {
+    @apply my-0.5;
+  }
+  .ymer-prose ul[data-type="taskList"] {
+    @apply list-none pl-1;
+  }
+  .ymer-prose ul[data-type="taskList"] li {
+    @apply flex items-start gap-2;
+  }
+  .ymer-prose ul[data-type="taskList"] li > label {
+    @apply mt-1 select-none;
+  }
+  .ymer-prose ul[data-type="taskList"] li > div {
+    @apply flex-1;
+  }
+  .ymer-prose ul[data-type="taskList"] li[data-checked="true"] > div {
+    @apply text-zinc-400 line-through;
+  }
+  .ymer-prose blockquote {
+    @apply border-l-4 border-zinc-300 pl-4 text-zinc-600 italic dark:border-zinc-700 dark:text-zinc-400;
+  }
+  .ymer-prose code {
+    @apply rounded bg-zinc-100 px-1 py-0.5 font-mono text-[0.9em] dark:bg-zinc-800;
+  }
+  .ymer-prose pre {
+    @apply overflow-x-auto rounded-lg bg-zinc-900 p-4 font-mono text-sm text-zinc-100;
+  }
+  .ymer-prose pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+  .ymer-prose a {
+    @apply text-brand-600 underline underline-offset-2;
+  }
+  .ymer-prose hr {
+    @apply my-6 border-zinc-200 dark:border-zinc-800;
+  }
+  .ymer-prose p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-left h-0 text-zinc-400;
+  }
+
+  /* Other people's cursors and selections (CollaborationCaret). */
+  .collaboration-carets__caret {
+    @apply pointer-events-none relative -mx-px border-x;
+    word-break: normal;
+  }
+  .collaboration-carets__label {
+    @apply absolute -top-[1.35em] -left-px rounded-sm rounded-bl-none px-1 py-px text-xs leading-tight font-semibold whitespace-nowrap text-white select-none;
+  }
+
+  /* Text that a comment thread points at. */
+  .comment-anchor {
+    @apply cursor-pointer rounded-sm bg-amber-200/60 dark:bg-amber-500/30;
+  }
+  .comment-anchor-active {
+    @apply bg-amber-300 dark:bg-amber-500/60;
+  }
+}
