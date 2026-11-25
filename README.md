@@ -7,23 +7,25 @@
 
 <p align="center">
   <b>A self-hostable, multi-user workspace for writing, planning and thinking together.</b><br>
-  Live documents, databases, mind maps, drawings and charts today; an AI layer on the roadmap.
+  Live documents, databases, mind maps, drawings and charts, an AI layer, and a Factory that turns your specs into working apps.
 </p>
 
 <p align="center">
-  <img alt="Status: Phase 4 of 5 done" src="https://img.shields.io/badge/status-phase%204%20of%205%20done-6366f1">
+  <img alt="Status: Phases 0 to 4 done, Factory 3 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%203%2F5-6366f1">
   <img alt="Flask 3" src="https://img.shields.io/badge/backend-Flask%203-3f3f46">
   <img alt="React 18" src="https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind%204-3f3f46">
   <img alt="Yjs" src="https://img.shields.io/badge/realtime-Yjs%20%2B%20Hocuspocus-3f3f46">
   <img alt="Visuals" src="https://img.shields.io/badge/visuals-React%20Flow%20%C2%B7%20Excalidraw%20%C2%B7%20Chart.js-3f3f46">
+  <img alt="AI" src="https://img.shields.io/badge/AI-Claude%20%C2%B7%20OpenAI--compatible%20%C2%B7%20pgvector-3f3f46">
 </p>
 
 ---
 
 Ymer (it shares its name with the giant of Norse myth from whose body the world was shaped) aims to be one place for
-collaborative documents, Notion-style notebooks and databases, mind maps, charts and file handling, with
-an optional AI layer on top. Everything collaborative is live: two people on the same page see each other's
-edits, cursors and selections as they happen. It is built in phases; this README separates what runs today from
+collaborative documents, Notion-style notebooks and databases, mind maps, drawings, charts and file handling,
+with an optional AI layer on top. Everything collaborative is live: two people on the same page see each other's
+edits, cursors and selections as they happen. On top of that, the Factory turns the pages a team writes into a
+working app, one reviewed stage at a time. Ymer is built in phases; this README separates what runs today from
 what is planned.
 
 <p align="center">
@@ -32,8 +34,6 @@ what is planned.
 </p>
 
 ## What works today
-
-**Appearance.** Choose System, Light, Dark, Darcula, Midnight Blue/Teal, or GitHub Dark from the Theme picker at the bottom of the workspace sidebar. On a phone, open the navigation menu to find it. System follows your device, and this browser remembers your choice across visits.
 
 ### Collaborative documents
 
@@ -204,22 +204,33 @@ build) work today; the [roadmap](#roadmap) covers the rest.
 > rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` the agent writes real code
 > and the tests really run.
 
+### Appearance
+
+Choose System, Light, Dark, Darcula, Midnight Blue/Teal or GitHub Dark from the Theme picker at the bottom of the
+workspace sidebar. On a phone, open the navigation menu to find it. System follows your device, the choice applies
+to every page type (documents, canvases, charts and the Factory), and this browser remembers it across visits.
+
+<p align="center">
+  <img src="docs/assets/screenshots/theme-midnight.png" alt="A factory page in the Midnight Blue/Teal theme, with the Theme picker at the bottom of the sidebar" width="900">
+  <br><sub>The Midnight Blue/Teal theme, picked at the bottom of the sidebar.</sub>
+</p>
+
 ### Foundation
 
 | Area | What you get |
 |---|---|
 | **Accounts and workspaces** | Email/password sign-up, JWT access and refresh tokens, workspaces with members and roles (owner, editor, commenter, viewer). |
 | **Permissions** | Per-page grants that inherit down the tree and can widen access for guests or narrow it for members. Every query is workspace-scoped; no access answers 404, never 403. |
-| **Dev stack** | Docker Compose with Postgres 16 (pgvector and pg_trgm), Redis 7 and MinIO; a `make` target for each service; tests for backend, collab service and frontend. |
+| **Dev stack** | Docker Compose with Postgres 16 (pgvector and pg_trgm), Redis 7 and MinIO; a `make` target for each service, the AI worker, the Factory worker and the sandbox images; tests for backend, collab service and frontend. |
 
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/architecture.svg" alt="Architecture diagram: the browser talks REST to Flask and WebSocket to the Hocuspocus collab service; collab loads and saves through Flask's internal API; Flask uses Postgres, Redis, MinIO and the AI layer" width="900">
+  <img src="docs/assets/architecture.svg" alt="Architecture diagram: the browser talks REST to Flask and WebSocket to the Hocuspocus collab service; collab loads and saves through Flask's internal API; Flask uses Postgres, Redis, MinIO and the AI layer; the Factory worker uses Postgres and the AI layer and runs code in a Docker sandbox" width="900">
 </p>
 
 - **Frontend** (`frontend/`): Vite, React 18, TypeScript, Tailwind CSS 4, TipTap 3, React Flow 12, Excalidraw,
-  Chart.js 4, React Query, react-router 7.
+  Chart.js 4, React Query, react-router 7. Themes are CSS variables chosen per palette (`src/lib/appearance.ts`).
 - **API** (`backend/`): Flask 3, SQLAlchemy 2, Alembic, pydantic. It is the only writer of the schema and the only place
   that decides permissions.
 - **Realtime** (`collab/`): a small Hocuspocus service on Node 22. One Yjs room per page, whether the page is a
@@ -262,7 +273,7 @@ make factory-worker  # optional: runs Factory builds (.env.example runs them in 
 ```
 
 Open http://localhost:5173, create an account, then a workspace. The **+** next to *Pages* creates a document,
-database, mind map, drawing or folder. To see live editing, sign up a second user in a private window, add them to
+database, mind map, drawing, folder or factory. To see live editing, sign up a second user in a private window, add them to
 the workspace under *Members*, and open the same page in both windows.
 
 AI features work out of the box with the offline demo model (`YMER_AI_PROVIDER=fake`), which needs no key and
@@ -311,13 +322,13 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 
 ### Data model
 
-Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, database, mindmap, drawing, folder),
-`page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live page type),
-`comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views` (table, board,
-chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
+Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, database, mindmap, drawing, folder,
+factory), `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live
+page type), `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views`
+(table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
-`factory_questions`, `factory_runs`, `factory_run_events` and `factory_files`. Mind maps and drawings need no tables of their own: they are Yjs
-documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
+`factory_questions`, `factory_runs`, `factory_run_events` and `factory_files`. Mind maps and drawings need no
+tables of their own: they are Yjs documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will
 change when the phase is designed.
@@ -327,6 +338,9 @@ change when the phase is designed.
 - **Yjs (CRDT) for anything collaborative.** Documents, mind maps and drawings all go through one collab service.
 - **One authority.** Flask decides every permission and owns the schema; other services ask it.
 - **Workspace-scoped everything.** Every read goes through a scope object filtered by workspace, and tests cover the rules.
+- **Untrusted code stays out.** Code the Factory's agent writes runs only in a sandbox, never in the Ymer process,
+  and model output is cleaned and capped before it is stored.
+- **People approve each step.** The AI drafts; editors approve the brief and the plan before anything is built.
 - **Postgres first.** pg_trgm and full-text search before adding a search engine; JSONB before a document store.
 - **Swappable AI.** All model calls go behind one service, so providers or local models can be swapped.
 - **Self-hosting friendly.** Every dependency has an open-source, container-friendly option.
