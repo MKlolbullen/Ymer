@@ -1,4 +1,4 @@
-"""The Factory, stage F1: sources, the brief, its open questions and approval.
+"""The Factory, stages F1 (the brief) and F2 (the architecture).
 
 Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 
@@ -7,7 +7,9 @@ Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 - ``POST   /brief``                write (or rewrite) the brief from the sources
 - ``PATCH  /questions/<id>``       {answer?, status?}: answer, dismiss or reopen a question
 - ``POST   /approve``              approve the brief (no open questions left)
-- ``POST   /reopen``               take the approval back
+- ``POST   /architecture``         {stack?}: design the architecture from the approved brief
+- ``POST   /approve-plan``         approve the architecture and its tasks
+- ``POST   /reopen``               step back one approval (the plan, else the brief)
 
 Reading the factory needs viewer access; everything else needs editor. Sources are read
 with the caller's own access, so a source they cannot open is left out of the brief they
@@ -21,10 +23,11 @@ from typing import Literal
 
 from flask import Blueprint, current_app, jsonify
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, UnprocessableEntity
 
 from ymer.ai import AiError, ChatRequest, get_ai
+from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty
 from ymer.api.ai import ai_endpoint, page_text
 from ymer.api.documents import _person
@@ -36,6 +39,15 @@ from ymer.auth import current_user, login_required
 from ymer.content import index_document
 from ymer.db import db_session
 from ymer.documents import save_state
+from ymer.factory.architecture import (
+    ARCHITECTURE_SYSTEM,
+    architecture_blocks,
+    architecture_messages,
+    architecture_schema,
+    clean_architecture,
+    system_map_spec,
+    tasks_database_spec,
+)
 from ymer.factory.brief import (
     BRIEF_SCHEMA,
     BRIEF_SYSTEM,
@@ -45,7 +57,11 @@ from ymer.factory.brief import (
     fit_sources,
 )
 from ymer.factory.document import document_state
+from ymer.factory.stacks import STACKS, stacks_json
 from ymer.models import (
+    DatabaseProperty,
+    DatabaseRow,
+    DatabaseView,
     DocumentContent,
     DocumentVersion,
     FactoryProject,
@@ -57,6 +73,7 @@ from ymer.models import (
     QuestionStatus,
     Role,
     User,
+    ViewType,
 )
 from ymer.permissions import WorkspaceScope
 
@@ -118,8 +135,11 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+BRIEF_OPEN = {FactoryStage.SOURCES.value, FactoryStage.BRIEF.value}
+
+
 def _require_open(project: FactoryProject) -> None:
-    if project.stage == FactoryStage.APPROVED.value:
+    if project.stage not in BRIEF_OPEN:
         raise Conflict("The brief is approved. Reopen it to change it.")
 
 
@@ -153,10 +173,19 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
                     "visible": True,
                 }
             )
-    brief = None
-    if project.brief_page_id and (seen := _visible(scope, project.brief_page_id)):
-        brief = page_json(*seen)
-    approver = db_session.get(User, project.approved_by_id) if project.approved_by_id else None
+
+    def linked(page_id: uuid.UUID | None) -> dict | None:
+        seen = _visible(scope, page_id) if page_id else None
+        return page_json(*seen) if seen else None
+
+    def person(user_id: uuid.UUID | None) -> dict | None:
+        return _person(db_session.get(User, user_id) if user_id else None)
+
+    tasks = linked(project.tasks_page_id)
+    if tasks is not None:
+        tasks["count"] = db_session.scalar(
+            select(func.count()).where(DatabaseRow.database_id == project.tasks_page_id)
+        )
     role = scope.page_role(page)
     return {
         "page_id": str(page.id),
@@ -164,10 +193,18 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
         "can_edit": role is not None and role.at_least(Role.EDITOR),
         "sources": sources,
         "questions": [question_json(q) for q in _questions(project)],
-        "brief": brief,
+        "brief": linked(project.brief_page_id),
         "brief_generated_at": _iso(project.brief_generated_at),
         "approved_at": _iso(project.approved_at),
-        "approved_by": _person(approver),
+        "approved_by": person(project.approved_by_id),
+        "stack": project.stack,
+        "stacks": stacks_json(),
+        "architecture": linked(project.architecture_page_id),
+        "system_map": linked(project.map_page_id),
+        "tasks": tasks,
+        "architecture_generated_at": _iso(project.architecture_generated_at),
+        "plan_approved_at": _iso(project.plan_approved_at),
+        "plan_approved_by": person(project.plan_approved_by_id),
     }
 
 
@@ -246,33 +283,43 @@ def _source_texts(scope: WorkspaceScope, project: FactoryProject) -> list[tuple[
     return out
 
 
-def _write_brief_page(page: Page, project: FactoryProject, title: str, state: bytes) -> Page:
-    """A new brief page under the factory. An earlier brief stays, renamed, so nothing a
+def _new_child(
+    page: Page, previous_id: uuid.UUID | None, title: str, type: PageType, position: int
+) -> Page:
+    """A new page under the factory. The page it replaces stays, renamed, so nothing a
     person wrote in it is lost (it may be open in someone's editor right now)."""
-    user = current_user()
-    old = db_session.get(Page, project.brief_page_id) if project.brief_page_id else None
+    old = db_session.get(Page, previous_id) if previous_id else None
     if old is not None and not old.title.endswith("(earlier draft)"):
         old.title = f"{old.title} (earlier draft)"[:500]
         mark_dirty(db_session, [old.id])
-    brief = Page(
+    child = Page(
         workspace_id=page.workspace_id,
         parent_id=page.id,
-        type=PageType.DOCUMENT,
+        type=type,
         title=title[:500],
-        position=0,
-        created_by_id=user.id,
+        position=position,
+        created_by_id=current_user().id,
     )
-    db_session.add(brief)
+    db_session.add(child)
     db_session.flush()
+    return child
+
+
+def _store(child: Page, state: bytes) -> None:
     save_state(
         db_session,
-        brief.id,
+        child.id,
         state,
-        user_id=user.id,
+        user_id=current_user().id,
         version_interval=settings_for(current_app).version_interval,
     )
-    index_document(db_session, brief, state)
-    mark_dirty(db_session, [brief.id])
+    index_document(db_session, child, state)
+    mark_dirty(db_session, [child.id])
+
+
+def _write_brief_page(page: Page, project: FactoryProject, title: str, state: bytes) -> Page:
+    brief = _new_child(page, project.brief_page_id, title, PageType.DOCUMENT, 0)
+    _store(brief, state)
     return brief
 
 
@@ -425,12 +472,144 @@ def approve(workspace_id: uuid.UUID, page_id: uuid.UUID):
 @factory_bp.post("/reopen")
 @login_required
 def reopen(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    """Step back one approval: an approved plan goes back to review, otherwise an approved
+    brief opens for changes again (an architecture made from it stays, marked as earlier)."""
     scope = scope_for(workspace_id)
     page, project = _factory(scope, page_id, Role.EDITOR)
-    if project.stage == FactoryStage.APPROVED.value:
+    if project.stage == FactoryStage.PLANNED.value:
+        project.stage = FactoryStage.ARCHITECTURE.value
+        project.plan_approved_at = None
+        project.plan_approved_by_id = None
+    elif project.stage in (FactoryStage.APPROVED.value, FactoryStage.ARCHITECTURE.value):
         project.stage = FactoryStage.BRIEF.value
         project.approved_at = None
         project.approved_by_id = None
+    db_session.flush()
+    data = factory_json(scope, page, project)
+    db_session.commit()
+    return jsonify(factory=data)
+
+
+# --- architecture (stage F2) ----------------------------------------------------------
+
+
+class ArchitectureBody(BaseModel):
+    # A stack key, or None to let the model pick one for the brief.
+    stack: str | None = None
+
+
+def _approved_versions(page_id: uuid.UUID | None, label: str, user_id: uuid.UUID) -> None:
+    content = db_session.get(DocumentContent, page_id) if page_id else None
+    if content is not None:
+        db_session.add(
+            DocumentVersion(
+                page_id=page_id, state=content.state, label=label, created_by_id=user_id
+            )
+        )
+
+
+def _hide_on_board(database: Page, names: tuple[str, ...]) -> None:
+    """Keep board cards short: long text properties stay in the table and the row panel."""
+    db_session.flush()
+    hidden = [
+        str(p.id)
+        for p in db_session.scalars(
+            select(DatabaseProperty).where(DatabaseProperty.database_id == database.id)
+        )
+        if p.name in names
+    ]
+    for view in db_session.scalars(
+        select(DatabaseView).where(
+            DatabaseView.database_id == database.id, DatabaseView.type == ViewType.BOARD
+        )
+    ):
+        view.config = {**view.config, "hidden": hidden}
+
+
+@factory_bp.post("/architecture")
+@ai_endpoint
+def design_architecture(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    page, project = _factory(scope, page_id, Role.EDITOR)
+    if project.stage not in (FactoryStage.APPROVED.value, FactoryStage.ARCHITECTURE.value):
+        raise Conflict(
+            "Approve the brief first."
+            if project.stage in BRIEF_OPEN
+            else "The plan is approved. Reopen it to redesign the architecture."
+        )
+    body = parse_body(ArchitectureBody)
+    if body.stack is not None and body.stack not in STACKS:
+        raise BadRequest(f"Unknown stack. Choose one of: {', '.join(STACKS)}.")
+    chat = get_ai().require_chat()
+
+    # The brief as it reads now: people may have edited it after it was written.
+    brief_page = _visible(scope, project.brief_page_id) if project.brief_page_id else None
+    if brief_page is None:
+        raise Conflict("The brief is missing. Reopen the factory and write it again.")
+    brief_text = page_text(brief_page[0]).strip()
+    if not brief_text:
+        raise UnprocessableEntity("The brief is empty. Write it again before the architecture.")
+    brief_text = fit_sources([("Brief", brief_text)])[0][1]
+
+    raw = chat.complete(
+        ChatRequest(
+            task="factory.architecture",
+            system=ARCHITECTURE_SYSTEM,
+            messages=architecture_messages(page.title, brief_text, body.stack),
+            payload={"title": page.title, "brief": brief_text, "stack": body.stack},
+            schema=architecture_schema(),
+            max_tokens=32000,
+        )
+    )
+    try:
+        arch = clean_architecture(json.loads(raw), body.stack)
+    except ValueError as exc:
+        raise AiError("The model's answer was not in the expected format. Try again.") from exc
+    if not arch["components"] or not arch["tasks"]:
+        raise AiError("The model's design had no components or no tasks. Try again.")
+
+    user = current_user()
+    doc = _new_child(page, project.architecture_page_id, "Architecture", PageType.DOCUMENT, 1)
+    _store(doc, document_state(architecture_blocks(arch, (brief_page[0].id, brief_page[0].title))))
+
+    map_page = _new_child(page, project.map_page_id, "System map", PageType.MINDMAP, 2)
+    state, _count = mindmap_state(system_map_spec(page.title, arch))
+    _store(map_page, state)
+
+    tasks_page = _new_child(page, project.tasks_page_id, "Tasks", PageType.DATABASE, 3)
+    create_database(db_session, tasks_page, tasks_database_spec(arch), user_id=user.id)
+    _hide_on_board(tasks_page, ("Depends on", "Detail"))
+    mark_dirty(db_session, [tasks_page.id])
+
+    project.stack = arch["stack"]
+    project.architecture_page_id = doc.id
+    project.map_page_id = map_page.id
+    project.tasks_page_id = tasks_page.id
+    project.architecture_generated_at = datetime.now(UTC)
+    project.stage = FactoryStage.ARCHITECTURE.value
+    db_session.flush()
+    data = factory_json(scope, page, project)
+    db_session.commit()
+    return jsonify(factory=data, demo=get_ai().demo), 201
+
+
+@factory_bp.post("/approve-plan")
+@login_required
+def approve_plan(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    page, project = _factory(scope, page_id, Role.EDITOR)
+    if project.stage != FactoryStage.ARCHITECTURE.value:
+        raise Conflict(
+            "The plan is already approved."
+            if project.stage == FactoryStage.PLANNED.value
+            else "Design the architecture first."
+        )
+    user = current_user()
+    _approved_versions(project.architecture_page_id, "Approved architecture", user.id)
+    _approved_versions(project.map_page_id, "Approved system map", user.id)
+    project.stage = FactoryStage.PLANNED.value
+    project.plan_approved_at = datetime.now(UTC)
+    project.plan_approved_by_id = user.id
     db_session.flush()
     data = factory_json(scope, page, project)
     db_session.commit()

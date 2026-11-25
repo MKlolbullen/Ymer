@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Page } from "@/lib/types";
 
-import { candidateSources, newAnswers, type Factory } from "./api";
+import { briefApproved, candidateSources, newAnswers, stepStates, type Factory } from "./api";
 
 const page = (id: string, title: string, extra: Partial<Page> = {}): Page => ({
   id,
@@ -27,6 +27,14 @@ const factory = (extra: Partial<Factory> = {}): Factory => ({
   brief_generated_at: null,
   approved_at: null,
   approved_by: null,
+  stack: null,
+  stacks: [],
+  architecture: null,
+  system_map: null,
+  tasks: null,
+  architecture_generated_at: null,
+  plan_approved_at: null,
+  plan_approved_by: null,
   ...extra,
 });
 
@@ -63,5 +71,15 @@ describe("newAnswers", () => {
     });
     expect(newAnswers(f)).toBe(1);
     expect(newAnswers(factory())).toBe(0);
+  });
+});
+
+describe("stepStates", () => {
+  it("marks finished, current and next stages", () => {
+    expect(stepStates(factory({ stage: "brief" })).slice(0, 2)).toEqual(["current", "later"]);
+    expect(stepStates(factory({ stage: "architecture" })).slice(0, 3)).toEqual(["done", "current", "later"]);
+    expect(stepStates(factory({ stage: "planned" })).slice(0, 3)).toEqual(["done", "done", "next"]);
+    expect(briefApproved(factory({ stage: "brief" }))).toBe(false);
+    expect(briefApproved(factory({ stage: "planned" }))).toBe(true);
   });
 });

@@ -112,3 +112,168 @@ def fake_brief(payload: dict) -> str:
             "questions": questions,
         }
     )
+
+
+# --- architecture -----------------------------------------------------------------------
+
+STACK_COMPONENTS = {
+    "static-web": [
+        ("Page", "ui", "The single page: forms, lists and results, in plain HTML and JavaScript."),
+        ("Browser storage", "storage", "Keeps the data in the browser's local storage."),
+    ],
+    "python-cli": [
+        ("Command line", "cli", "Parses commands and prints results."),
+        ("Core logic", "library", "The rules of the app, free of input and output."),
+        ("Storage", "storage", "A SQLite file in the user's data folder."),
+    ],
+    "flask-react": [
+        ("Web UI", "ui", "React pages for every feature, talking to the API."),
+        ("API", "api", "Flask JSON endpoints that check input and apply the rules."),
+        ("Database", "database", "SQLite through SQLAlchemy, with a migration per change."),
+    ],
+}
+UI_WORDS = r"\b(show|shows|display|list|view|see|page|screen|history|chart|dashboard)\b"
+
+
+def _brief_sections(text: str) -> dict[str, list[tuple[str, str]]]:
+    """Bullets per section of the brief, with the subsection (Must have, ...) they sit in."""
+    sections: dict[str, list[tuple[str, str]]] = {}
+    current, sub = "", ""
+    for depth, kind, line, _checked in _outline_items(text):
+        if kind == "heading" and depth <= 1:
+            current, sub = line.casefold(), ""
+        elif kind == "heading":
+            sub = line.casefold()
+        elif kind == "item":
+            sections.setdefault(current, []).append((sub, line))
+    return sections
+
+
+def _pick_stack(text: str) -> tuple[str, str]:
+    lowered = text.lower()
+    if re.search(r"\b(cli|command[- ]line|terminal|script)\b", lowered):
+        return "python-cli", "The brief describes a tool people run from a terminal."
+    shared = r"\b(vote|votes|team|people|share|shared|history|accounts?|users|office)\b"
+    if re.search(shared, lowered):
+        return (
+            "flask-react",
+            "Several people use the same data, so it needs a server and a database.",
+        )
+    return "static-web", "One person uses it at a time and nothing has to be shared."
+
+
+def _entity(name: str, detail: str) -> dict | None:
+    """'Suggest a place' + 'name, cuisine and walking time' -> a Place with three fields."""
+    fields = [f.strip() for f in re.split(r",|\band\b", detail) if f.strip()]
+    if len(fields) < 2:
+        return None
+    noun = re.sub(r"^(an?|the)\s+", "", name.split()[-1] if name.split() else "").strip(".")
+    if not noun:
+        return None
+    return {
+        "entity": noun[:1].upper() + noun[1:],
+        "fields": [{"name": "id", "type": "integer", "note": "primary key"}]
+        + [{"name": f.replace(" ", "_").lower(), "type": "text", "note": ""} for f in fields],
+    }
+
+
+def fake_architecture(payload: dict) -> str:
+    text = payload.get("brief") or ""
+    stack = payload.get("stack")
+    reason = "The team chose this stack."
+    if not stack:
+        stack, reason = _pick_stack(text)
+    comps = STACK_COMPONENTS[stack]
+    ui_name, main_name = comps[0][0], comps[1][0] if len(comps) > 1 else comps[0][0]
+
+    sections = _brief_sections(text)
+    features: list[tuple[str, str, str]] = []
+    for key, items in sections.items():
+        if "feature" in key:
+            for sub, line in items:
+                priority = next((p for p in ("must", "should", "could") if p in sub), "should")
+                name, _, detail = line.partition(": ")
+                features.append((name.strip(), detail.strip(), priority))
+
+    setup = "Set up the project skeleton"
+    tasks = [
+        {
+            "title": setup,
+            "component": main_name,
+            "priority": "must",
+            "size": "S",
+            "detail": f"Create the {STACKS_NAMES[stack]} layout, linting and an empty test run.",
+            "depends_on": [],
+        }
+    ]
+    entities = []
+    for name, detail, priority in features:
+        component = ui_name if re.search(UI_WORDS, name.lower()) else main_name
+        tasks.append(
+            {
+                "title": name[:1].upper() + name[1:],
+                "component": component,
+                "priority": priority,
+                "size": "M" if detail else "S",
+                "detail": detail,
+                "depends_on": [setup],
+            }
+        )
+        if entity := _entity(name, detail):
+            entities.append(entity)
+    tasks.append(
+        {
+            "title": "End-to-end tests for the must-haves",
+            "component": main_name,
+            "priority": "must",
+            "size": "M",
+            "detail": "",
+            "depends_on": [t["title"] for t in tasks[1:] if t["priority"] == "must"][:6],
+        }
+    )
+
+    interfaces = []
+    if stack == "flask-react":
+        for e in entities:
+            plural = e["entity"].lower() + "s"
+            interfaces += [
+                {"name": f"GET /api/{plural}", "purpose": f"List {plural}."},
+                {"name": f"POST /api/{plural}", "purpose": f"Add a {e['entity'].lower()}."},
+            ]
+    elif stack == "python-cli":
+        for name, _detail, _p in features[:8]:
+            verb = name.split()[0].lower() if name.split() else "run"
+            interfaces.append({"name": f"app {verb}", "purpose": name})
+
+    constraints = [
+        line for key, items in sections.items() if "constraint" in key for _s, line in items
+    ]
+    decisions = [line for key, items in sections.items() if "decision" in key for _s, line in items]
+    summary = next((line for _d, kind, line, _c in _outline_items(text) if kind == "text"), "")
+    return json.dumps(
+        {
+            "stack": stack,
+            "stack_reason": reason,
+            "overview": summary,
+            "components": [
+                {
+                    "name": name,
+                    "kind": kind,
+                    "responsibility": what,
+                    "depends_on": [comps[i + 1][0]] if i + 1 < len(comps) else [],
+                }
+                for i, (name, kind, what) in enumerate(comps)
+            ],
+            "data_model": entities,
+            "interfaces": interfaces,
+            "tasks": tasks,
+            "risks": constraints + [f"Decided: {d}" for d in decisions],
+        }
+    )
+
+
+STACKS_NAMES = {
+    "static-web": "static web",
+    "python-cli": "Python package",
+    "flask-react": "Flask + React",
+}

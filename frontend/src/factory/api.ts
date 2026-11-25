@@ -5,7 +5,17 @@ import { api } from "@/lib/api";
 import { keys as baseKeys } from "@/lib/queries";
 import type { Page, PageType, Person } from "@/lib/types";
 
-export type FactoryStage = "sources" | "brief" | "approved";
+export type FactoryStage = "sources" | "brief" | "approved" | "architecture" | "planned";
+
+export type Stack = {
+  key: string;
+  name: string;
+  summary: string;
+  good_for: string;
+  languages: string;
+  test_command: string;
+  delivers: string;
+};
 
 export type FactorySource =
   | { page_id: string; title: string; type: PageType; visible: true }
@@ -31,7 +41,18 @@ export type Factory = {
   brief_generated_at: string | null;
   approved_at: string | null;
   approved_by: Person | null;
+  stack: string | null;
+  stacks: Stack[];
+  architecture: Page | null;
+  system_map: Page | null;
+  tasks: (Page & { count: number }) | null;
+  architecture_generated_at: string | null;
+  plan_approved_at: string | null;
+  plan_approved_by: Person | null;
 };
+
+/** Brief approved, so the architecture step is open (or already done). */
+export const briefApproved = (f: Factory) => f.stage === "approved" || f.stage === "architecture" || f.stage === "planned";
 
 const base = (w: string, p: string) => `/workspaces/${w}/factories/${p}`;
 export const factoryKey = (w: string, p: string) => ["factory", w, p] as const;
@@ -69,6 +90,18 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
         api<{ factory: Factory }>(`${url}/questions/${id}`, { method: "PATCH", json: body }),
       ...opts,
     }),
+    designArchitecture: useMutation({
+      mutationFn: (stack: string | null) =>
+        api<{ factory: Factory; demo: boolean }>(`${url}/architecture`, { method: "POST", json: { stack } }),
+      onSuccess: (r: { factory: Factory }) => {
+        settle(r.factory);
+        void qc.invalidateQueries({ queryKey: baseKeys.pages(workspaceId) });
+      },
+    }),
+    approvePlan: useMutation({
+      mutationFn: () => api<{ factory: Factory }>(`${url}/approve-plan`, { method: "POST" }),
+      ...opts,
+    }),
     approve: useMutation({
       mutationFn: () => api<{ factory: Factory }>(`${url}/approve`, { method: "POST" }),
       ...opts,
@@ -104,4 +137,14 @@ export function candidateSources(pages: Page[], factory: Factory, query: string)
         (!q || p.title.toLowerCase().includes(q)),
     )
     .slice(0, 50);
+}
+
+export type StepState = "done" | "current" | "next" | "later";
+
+/** Brief, Architecture, Build, Review, Deliver: which are done, current or coming next. */
+export function stepStates(f: Factory): StepState[] {
+  const done = f.stage === "planned" ? 2 : briefApproved(f) ? 1 : 0;
+  return [0, 1, 2, 3, 4].map((i) =>
+    i < done ? "done" : i === done ? (done >= 2 ? "next" : "current") : "later",
+  );
 }

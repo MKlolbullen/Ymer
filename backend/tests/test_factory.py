@@ -280,3 +280,163 @@ def test_ai_off_means_no_brief(app, client, team):
     set_settings(app, ai_provider="off")
     init_ai(app, app.extensions["ymer_settings"])
     assert client.post(f"{team.url}/brief", headers=h).status_code == 503
+
+
+# --- stage F2: architecture ---------------------------------------------------------------
+
+
+def test_fake_architecture_picks_a_stack_and_plans_tasks():
+    from ymer.factory.architecture import clean_architecture, system_map_spec, tasks_database_spec
+    from ymer.factory.fake import fake_architecture
+
+    brief = (
+        "A web app where the team votes on lunch.\n## Features\n### Must have\n"
+        "- Suggest a place: name, cuisine and walking time\n- Show the winner\n"
+        "### Could have\n- Dark mode\n"
+    )
+    arch = clean_architecture(json.loads(fake_architecture({"brief": brief})))
+    assert arch["stack"] == "flask-react"
+    titles = [t["title"] for t in arch["tasks"]]
+    assert titles[0] == "Set up the project skeleton"
+    assert "Suggest a place" in titles and "Dark mode" in titles
+    by_title = {t["title"]: t for t in arch["tasks"]}
+    assert by_title["Dark mode"]["priority"] == "could"
+    assert by_title["Show the winner"]["component"] == "Web UI"
+    assert by_title["Suggest a place"]["depends_on"] == ["Set up the project skeleton"]
+    assert arch["data_model"][0]["entity"] == "Place"
+    assert {"name": "POST /api/places", "purpose": "Add a place."} in arch["interfaces"]
+
+    cli = clean_architecture(
+        json.loads(fake_architecture({"brief": "A command-line tool to rename photos."}))
+    )
+    assert cli["stack"] == "python-cli"
+    chosen = clean_architecture(
+        json.loads(fake_architecture({"brief": brief, "stack": "static-web"})), "static-web"
+    )
+    assert chosen["stack"] == "static-web"
+
+    mind = system_map_spec("Lunch", arch)
+    assert [i["label"] for i in mind["ideas"]] == ["Web UI", "API", "Database"]
+    db_spec = tasks_database_spec(arch)
+    assert [p["name"] for p in db_spec["properties"]][:2] == ["Task", "Status"]
+    assert len(db_spec["rows"]) == len(arch["tasks"])
+
+
+def test_clean_architecture_drops_unknown_references():
+    from ymer.factory.architecture import clean_architecture
+
+    arch = clean_architecture(
+        {
+            "stack": "cobol-mainframe",
+            "components": [
+                {"name": "API", "kind": "api", "depends_on": ["Ghost", "API", "DB"]},
+                {"name": "DB", "kind": "nonsense"},
+                {"name": "api"},
+            ],
+            "tasks": [
+                {"title": "A", "component": "api", "depends_on": ["B", "Nope", "A"], "size": "XL"},
+                {"title": "B", "priority": "must"},
+            ],
+        }
+    )
+    assert arch["stack"] == "flask-react"
+    assert [c["name"] for c in arch["components"]] == ["API", "DB"]
+    assert arch["components"][0]["depends_on"] == ["DB"]
+    assert arch["components"][1]["kind"] == "library"
+    assert arch["tasks"][0]["component"] == "API"
+    assert arch["tasks"][0]["depends_on"] == ["B"]
+    assert arch["tasks"][0]["size"] == "M"
+
+
+def _approved_brief(client, team):
+    h = team.editor.headers
+    client.put(f"{team.url}/sources", json={"page_ids": [str(team.spec.id)]}, headers=h)
+    data = client.post(f"{team.url}/brief", headers=h).get_json()["factory"]
+    for q in data["questions"]:
+        client.patch(f"{team.url}/questions/{q['id']}", json={"status": "dismissed"}, headers=h)
+    return client.post(f"{team.url}/approve", headers=h).get_json()["factory"]
+
+
+def test_architecture_needs_an_approved_brief(client, team):
+    resp = client.post(f"{team.url}/architecture", json={}, headers=team.editor.headers)
+    assert resp.status_code == 409 and "Approve the brief" in resp.get_json()["message"]
+
+
+def test_architecture_map_tasks_and_plan_approval(app, client, team):
+    from ymer.models import DatabaseProperty, DatabaseView, FactoryProject
+
+    h = team.editor.headers
+    _approved_brief(client, team)
+    assert (
+        client.post(f"{team.url}/architecture", json={"stack": "cobol"}, headers=h).status_code
+        == 400
+    )
+    resp = client.post(f"{team.url}/architecture", json={}, headers=h)
+    assert resp.status_code == 201
+    first = resp.get_json()["factory"]
+    assert first["stage"] == "architecture"
+    assert first["stack"] == "static-web"  # one person logging expenses
+    assert {s["key"] for s in first["stacks"]} == {"static-web", "python-cli", "flask-react"}
+    assert first["architecture"]["type"] == "document"
+    assert first["system_map"]["type"] == "mindmap"
+    assert first["tasks"]["type"] == "database" and first["tasks"]["count"] >= 4
+    for key in ("architecture", "system_map", "tasks"):
+        assert first[key]["parent_id"] == team.factory["id"]
+
+    with app.app_context():
+        text = outline(
+            db_session.get(DocumentContent, first["architecture"]["id"]).state,
+            PageType.DOCUMENT,
+        )
+        assert "## Stack" in text and "Static web tool" in text
+        assert "## Components" in text and "## Data model" in text and "### Expense" in text
+        assert "## Designed from" in text
+        mind = outline(
+            db_session.get(DocumentContent, first["system_map"]["id"]).state, PageType.MINDMAP
+        )
+        assert mind.splitlines()[0] == "# Expense app" and "- Page" in mind
+        props = db_session.query(DatabaseProperty).filter_by(database_id=first["tasks"]["id"])
+        assert [p.name for p in props.order_by(DatabaseProperty.position)][:3] == [
+            "Task",
+            "Status",
+            "Component",
+        ]
+        views = db_session.query(DatabaseView).filter_by(database_id=first["tasks"]["id"])
+        assert sorted(v.name for v in views) == ["Board", "Table"]
+        board = next(v for v in views if v.name == "Board")
+        hidden = {p.name for p in props if str(p.id) in board.config["hidden"]}
+        assert hidden == {"Depends on", "Detail"}
+
+    # Redesigning with a chosen stack keeps the earlier pages as drafts.
+    second = client.post(
+        f"{team.url}/architecture", json={"stack": "flask-react"}, headers=h
+    ).get_json()["factory"]
+    assert second["stack"] == "flask-react"
+    assert second["architecture"]["id"] != first["architecture"]["id"]
+    with app.app_context():
+        assert db_session.get(Page, first["tasks"]["id"]).title == "Tasks (earlier draft)"
+
+    assert client.post(f"{team.url}/approve-plan", headers=team.viewer.headers).status_code == 403
+    planned = client.post(f"{team.url}/approve-plan", headers=h).get_json()["factory"]
+    assert planned["stage"] == "planned"
+    assert planned["plan_approved_by"]["id"] == str(team.editor.id)
+    with app.app_context():
+        labels = {
+            v.label
+            for v in db_session.query(DocumentVersion).filter(
+                DocumentVersion.page_id.in_(
+                    [second["architecture"]["id"], second["system_map"]["id"]]
+                )
+            )
+        }
+        assert labels - {None} == {"Approved architecture", "Approved system map"}
+    assert client.post(f"{team.url}/architecture", json={}, headers=h).status_code == 409
+    assert client.post(f"{team.url}/approve-plan", headers=h).status_code == 409
+
+    # Reopen steps back one approval at a time.
+    back = client.post(f"{team.url}/reopen", headers=h).get_json()["factory"]
+    assert back["stage"] == "architecture" and back["plan_approved_at"] is None
+    back = client.post(f"{team.url}/reopen", headers=h).get_json()["factory"]
+    assert back["stage"] == "brief" and back["architecture"] is not None
+    with app.app_context():
+        assert db_session.get(FactoryProject, team.factory["id"]).stack == "flask-react"

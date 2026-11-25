@@ -4,7 +4,8 @@ A factory is a page of type ``factory``. Everything a person reads or edits alon
 way is an ordinary page under it (the brief is a document), so these tables only keep
 the bookkeeping:
 
-- ``factory_projects``: one row per factory page: its stage and its current brief.
+- ``factory_projects``: one row per factory page: its stage, its current brief and, from
+  stage F2, its stack and the architecture, system map and task pages.
 - ``factory_sources``: the pages the factory works from. Reads always go through the
   reader's own access, so a source someone cannot open is left out for them.
 - ``factory_questions``: gaps the AI found in the sources, and the answers people gave.
@@ -26,6 +27,8 @@ class FactoryStage(enum.StrEnum):
     SOURCES = "sources"  # choosing pages; no brief yet
     BRIEF = "brief"  # a brief exists and is open for questions and edits
     APPROVED = "approved"  # an editor approved the brief
+    ARCHITECTURE = "architecture"  # an architecture was designed from the approved brief
+    PLANNED = "planned"  # an editor approved the architecture and its tasks
 
 
 class QuestionStatus(enum.StrEnum):
@@ -49,6 +52,22 @@ class FactoryProject(TimestampMixin, Base):
     brief_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Stage F2: the architecture, designed from the approved brief.
+    stack: Mapped[str | None] = mapped_column(String(40))
+    architecture_page_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="SET NULL")
+    )
+    map_page_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="SET NULL")
+    )
+    tasks_page_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="SET NULL")
+    )
+    architecture_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    plan_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    plan_approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
 

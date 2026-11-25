@@ -11,8 +11,10 @@ import { usePages } from "@/lib/queries";
 import type { Page } from "@/lib/types";
 
 import {
+  briefApproved,
   candidateSources,
   newAnswers,
+  stepStates,
   useFactory,
   useFactoryMutations,
   type Factory,
@@ -38,13 +40,13 @@ function errorText(error: unknown, fallback: string) {
 }
 
 function Stepper({ factory }: { factory: Factory }) {
-  const done = factory.stage === "approved";
+  const states = stepStates(factory);
   return (
     <ol className="mb-8 flex flex-wrap items-center gap-2 text-sm" aria-label="Factory stages">
       {STEPS.map((step, i) => {
-        const current = i === 0 && !done;
-        const complete = i === 0 && done;
-        const next = i === 1 && done;
+        const current = states[i] === "current";
+        const complete = states[i] === "done";
+        const next = states[i] === "next";
         return (
           <li key={step.key} className="flex items-center gap-2">
             {i > 0 && <span aria-hidden className="h-px w-5 bg-zinc-300 dark:bg-zinc-700" />}
@@ -254,7 +256,7 @@ export function FactoryPage({ page }: { page: Page }) {
   if (factory.isLoading) return <p className="text-sm text-zinc-500">Loading…</p>;
   if (!factory.data) return <p className="text-sm text-zinc-500">Could not load the factory.</p>;
   const f = factory.data;
-  const approved = f.stage === "approved";
+  const approved = briefApproved(f);
   const editable = f.can_edit && !approved;
   const open = f.questions.filter((q) => q.status === "open").length;
   const fresh = newAnswers(f);
@@ -349,10 +351,9 @@ export function FactoryPage({ page }: { page: Page }) {
               {f.approved_at ? ` on ${formatDateTime(f.approved_at)}` : ""}.
             </p>
             <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
-              The approved text is saved as a named version of the brief. Designing the architecture is the next
-              Factory stage.
+              The approved text is saved as a named version of the brief. Next, design the architecture below.
             </p>
-            {f.can_edit && (
+            {f.can_edit && f.stage !== "planned" && (
               <button onClick={() => reopen.mutate()} className={`${quiet} mt-2`}>
                 Reopen the brief
               </button>
@@ -380,6 +381,158 @@ export function FactoryPage({ page }: { page: Page }) {
           </>
         )}
       </Section>
+
+      <Architecture page={page} factory={f} aiOff={!!aiOff} demo={!!status.data?.demo} />
     </div>
+  );
+}
+
+const PLAN_PAGES = [
+  { key: "architecture", icon: "📄", label: "Architecture", note: "Stack, components, data model and interfaces" },
+  { key: "system_map", icon: "🧠", label: "System map", note: "The components and the tasks in each" },
+  { key: "tasks", icon: "🗃️", label: "Tasks", note: "Status, component, priority and size" },
+] as const;
+
+function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: Factory; aiOff: boolean; demo: boolean }) {
+  const { designArchitecture, approvePlan, reopen } = useFactoryMutations(page.workspace_id, page.id);
+  const [stack, setStack] = useState<string | null>(f.stack);
+  const open = briefApproved(f);
+  const planned = f.stage === "planned";
+  const editable = f.can_edit && open && !planned;
+  const designed = !!f.architecture;
+
+  return (
+    <Section
+      n={4}
+      title="Architecture"
+      hint={
+        open
+          ? "From the approved brief, the AI picks a stack and designs the app: an architecture document, a system map and the task list the build will follow."
+          : "Opens once the brief is approved."
+      }
+    >
+      {open && (
+        <>
+          <fieldset className="mb-4" disabled={!editable}>
+            <legend className="mb-2 text-sm font-medium">Stack</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[{ key: null, name: "Let the AI choose", summary: "It picks the stack that fits the brief and says why.", good_for: "" }, ...f.stacks].map(
+                (option) => {
+                  const chosen = stack === option.key;
+                  return (
+                    <label
+                      key={option.key ?? "auto"}
+                      className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm ${
+                        chosen ? "border-brand-500 bg-brand-50/50 dark:bg-zinc-900" : "border-zinc-200 dark:border-zinc-800"
+                      } ${editable ? "" : "cursor-default opacity-70"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="factory-stack"
+                        checked={chosen}
+                        onChange={() => setStack(option.key)}
+                        className="mt-1 accent-brand-600"
+                      />
+                      <span>
+                        <span className="block font-medium">
+                          {option.name}
+                          {option.key && option.key === f.stack && designed && (
+                            <span className="ml-1.5 text-xs font-normal text-zinc-500">(current design)</span>
+                          )}
+                        </span>
+                        <span className="block text-zinc-500">{option.summary}</span>
+                        {option.good_for && <span className="block text-xs text-zinc-500">Good for: {option.good_for}</span>}
+                      </span>
+                    </label>
+                  );
+                },
+              )}
+            </div>
+          </fieldset>
+
+          {editable && !aiOff && (
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => designArchitecture.mutate(stack)}
+                disabled={designArchitecture.isPending}
+                className={designed ? secondary : primary}
+              >
+                {designArchitecture.isPending
+                  ? "Designing the architecture…"
+                  : designed
+                    ? "Redesign the architecture"
+                    : "Design the architecture"}
+              </button>
+              {designed && <span className="text-xs text-zinc-500">Redesigning keeps the current pages as earlier drafts.</span>}
+            </div>
+          )}
+          {demo && editable && <DemoNote className="mb-3" />}
+          {designArchitecture.isError && (
+            <p role="alert" className="mb-3 text-sm text-rose-600">
+              {errorText(designArchitecture.error, "The architecture could not be designed.")}
+            </p>
+          )}
+
+          {designed && (
+            <ul className="mb-4 grid gap-2 sm:grid-cols-3">
+              {PLAN_PAGES.map(({ key, icon, label, note }) => {
+                const target = f[key];
+                if (!target) return null;
+                return (
+                  <li key={key}>
+                    <Link
+                      to={`/w/${page.workspace_id}/p/${target.id}`}
+                      className="flex h-full flex-col gap-1 rounded-lg border border-zinc-200 p-3 hover:border-brand-500 dark:border-zinc-800"
+                    >
+                      <span className="flex items-center gap-2 font-medium">
+                        <span aria-hidden>{icon}</span>
+                        {label}
+                        {key === "tasks" && f.tasks && <span className="text-xs font-normal text-zinc-500">{f.tasks.count} tasks</span>}
+                      </span>
+                      <span className="text-xs text-zinc-500">{note}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {planned ? (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm dark:border-emerald-800 dark:bg-emerald-950">
+              <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                ✓ Plan approved by {f.plan_approved_by?.display_name ?? "someone"}
+                {f.plan_approved_at ? ` on ${formatDateTime(f.plan_approved_at)}` : ""}.
+              </p>
+              <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
+                The architecture and system map are saved as named versions. Building it, task by task in a sandbox, is
+                the next Factory stage.
+              </p>
+              {f.can_edit && (
+                <button onClick={() => reopen.mutate()} className={`${quiet} mt-2`}>
+                  Reopen the plan
+                </button>
+              )}
+            </div>
+          ) : (
+            designed &&
+            f.can_edit && (
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => approvePlan.mutate()} disabled={approvePlan.isPending} className={primary}>
+                  Approve the plan
+                </button>
+                <span className="text-xs text-zinc-500">
+                  Read the architecture and tasks first; edit them like any page.
+                </span>
+              </div>
+            )
+          )}
+          {approvePlan.isError && (
+            <p role="alert" className="mt-2 text-sm text-rose-600">
+              {errorText(approvePlan.error, "The plan could not be approved.")}
+            </p>
+          )}
+        </>
+      )}
+    </Section>
   );
 }

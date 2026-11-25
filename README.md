@@ -145,8 +145,8 @@ what is planned.
 ### Factory (in progress)
 
 The Factory turns what your team writes in Ymer into a working app, one reviewed stage at a time:
-brief, architecture, build, review and delivery. Stage F1, the brief, works today; the
-[plan](#roadmap) covers the rest.
+brief, architecture, build, review and delivery. The first two stages, the brief and the architecture, work
+today; the [roadmap](#roadmap) covers the rest.
 
 | Feature | What you get |
 |---|---|
@@ -154,6 +154,7 @@ brief, architecture, build, review and delivery. Stage F1, the brief, works toda
 | **The brief** | The AI writes a brief as an ordinary document under the factory: summary, users, features by priority, constraints, out of scope, decisions and links to the sources. Edit it like any page. Rewriting keeps the earlier draft. |
 | **Questions** | What the sources do not say (who uses it, where it runs, what it stores, sign-in) comes back as questions. Answer them or mark them not needed, and the next brief includes your answers as decisions. |
 | **Approval** | An editor approves the brief once no questions are open. The approved text is saved as a named version, and the brief is frozen until someone reopens it. |
+| **Architecture** | From the approved brief, the AI picks one of three stacks (static web tool, Python command-line tool, Flask + React web app), or uses the one you choose, and designs the app: an Architecture document (stack, components, data model, interfaces, risks), a System map mind map, and a Tasks database with status, component, priority, size and dependencies, shown as a table and a board. An editor approves the plan; redesigning keeps earlier drafts. |
 
 <table>
   <tr>
@@ -164,7 +165,20 @@ brief, architecture, build, review and delivery. Stage F1, the brief, works toda
     <td align="center"><sub>A factory: sources, the brief and the AI's questions.</sub></td>
     <td align="center"><sub>The brief it wrote, as an editable document.</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-architecture.png" alt="The architecture step: stack choices, links to the architecture, system map and tasks, and the approved plan"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-map.png" alt="The system map: the app, its components and the tasks in each"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The architecture step, with the plan approved.</sub></td>
+    <td align="center"><sub>The system map it drew: components and their tasks.</sub></td>
+  </tr>
 </table>
+
+<p align="center">
+  <img src="docs/assets/screenshots/factory-tasks.png" alt="The generated task database as a board grouped by status" width="900">
+  <br><sub>The plan's tasks, ready for the build stage: a database like any other, shown as a board.</sub>
+</p>
 
 ### Foundation
 
@@ -258,8 +272,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **3. Mind maps and visuals** | Collaborative React Flow mind maps, Excalidraw drawings, chart views and chart blocks from database data | ✅ Done |
 | **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ✅ Done |
 | **F1. Factory: brief** | Factory pages, source pages, AI brief with open questions, answers and approval | ✅ Done |
-| **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ⏭️ Next |
-| **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | Planned |
+| **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ✅ Done |
+| **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ⏭️ Next |
 | **F4. Factory: deliver** | Zip download, preview of web apps, push to a git repository, container images | Planned |
 | **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | Planned |
 | **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |

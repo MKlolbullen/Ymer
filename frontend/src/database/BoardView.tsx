@@ -96,7 +96,7 @@ export function BoardView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                 <p className="font-medium">{rowTitle(row, properties) || <span className="text-zinc-400">Untitled</span>}</p>
                 {shown.map((p) =>
                   row.values[p.id] === null || row.values[p.id] === undefined ? null : (
-                    <div key={p.id} className="text-xs text-zinc-600 dark:text-zinc-400" title={p.name}>
+                    <div key={p.id} className="truncate text-xs text-zinc-600 dark:text-zinc-400" title={p.name}>
                       {p.type === "checkbox" ? `✓ ${p.name}` : <CellValue property={p} value={row.values[p.id]} />}
                     </div>
                   ),

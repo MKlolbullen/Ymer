@@ -350,7 +350,7 @@ Assumptions made for this phase, open to change:
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
 
-## Factory, stage F1: the brief
+## Factory, stages F1 and F2: the brief and the architecture
 
 The Factory turns a workspace's notes into a working app in reviewed stages (brief,
 architecture, build, review, deliver). The plan for all stages lives in the project's
@@ -393,3 +393,40 @@ Assumptions for F1, open to change:
 - The brief reads the last saved state of each source (collab saves about 2 seconds
   after the last edit).
 - Only editors approve; there is no separate "approver" role yet.
+
+### Stage F2: the architecture
+
+Migration `0008` adds to `factory_projects` the chosen `stack`, the ids of the
+architecture, system map and task pages, and the plan's approval. Stages now run
+`sources` → `brief` → `approved` (brief approved) → `architecture` → `planned`.
+
+- **Stacks** (`ymer/factory/stacks.py`): `static-web`, `python-cli` and `flask-react`,
+  each with its languages, test command and what gets delivered. Building on a few known
+  project shapes is what will make the build stage reliable.
+- **Routes**:
+  - `POST /architecture` `{stack?}`: editor, rate limited; needs an approved brief.
+    Reads the brief page as it is now (people may have edited it), asks the model for an
+    architecture (`architecture_schema()`), and writes three pages under the factory:
+    *Architecture* (document), *System map* (mind map: app, components, each
+    component's tasks) and *Tasks* (database: Task, Status, Component, Priority, Size,
+    Depends on, Detail; a table view and a board by Status that hides the long text
+    columns). Redesigning renames the earlier pages "(earlier draft)".
+  - `POST /approve-plan`: editor; saves named versions "Approved architecture" and
+    "Approved system map" and freezes the design.
+  - `POST /reopen` now steps back one approval: an approved plan goes back to review,
+    otherwise the brief opens again (the architecture pages stay).
+- **Cleaning**: the model's components, tasks and dependencies are capped (12
+  components, 20 entities, 60 tasks), unknown stacks fall back to `flask-react`, and
+  dependencies on components or tasks that do not exist are dropped.
+- **Demo model** (`fake_architecture`): picks a stack from words in the brief (terminal
+  or CLI → `python-cli`; shared use, votes, accounts, history → `flask-react`;
+  otherwise `static-web`), makes a setup task, one task per feature with its priority,
+  and an end-to-end test task, and guesses entities from features like "Suggest a place:
+  name, cuisine and walking time".
+
+Assumptions for F2, open to change:
+
+- Three stacks to start; which ones matter most is an open question in the plan.
+- Task dependencies are stored as text ("Depends on") rather than a relation, so the
+  board stays simple; the build stage will read them from there.
+- Designing runs in the request like the brief. With Claude it can take a minute.
