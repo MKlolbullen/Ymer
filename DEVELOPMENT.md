@@ -350,7 +350,7 @@ Assumptions made for this phase, open to change:
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
 
-## Factory, stages F1 to F4: the brief, the architecture, the build and delivery
+## Factory, stages F1 to F5: the brief, the architecture, the build, delivery and iterating
 
 The Factory turns a workspace's notes into a working app in reviewed stages (brief,
 architecture, build, review, deliver). The plan for all stages lives in the project's
@@ -541,4 +541,52 @@ Assumptions for F4, open to change:
   asks for one; a stored deploy key per factory could come later.
 - Releases store a full copy of the files in Postgres (JSONB). That is fine for apps of a
   few hundred files; large apps would move to object storage.
+
+### Stage F5: iterating on a built app
+
+Migration `0012` adds `factory_changes` (change requests, numbered per factory, with
+origin `review` or `spec`, status `open → planned → built → released` or `dismissed`, the
+titles of the tasks planned for them, and the release that shipped them), the text and
+hash of each source when the factory last took it in (`factory_sources.seen_text`,
+`seen_hash`, `seen_at`), and `workspaces.factory_monthly_tokens`. The routes live in
+`ymer/api/factory_changes.py`; the logic in `ymer/factory/changes.py` and `budget.py`.
+
+- **Change requests**: `POST /changes {title, detail?}` and `PATCH /changes/<id>
+  {title?, detail?, status?}` (editor), once the plan is approved (stages `planned`,
+  `built`, `released`). At most 20 open at a time.
+- **Spec changes**: writing the brief stores each visible source's text. The factory's
+  `spec_changes` lists sources whose text has changed since (compared by hash, with the
+  caller's access). `POST /changes/from-spec` sends a unified diff of each changed source,
+  with the brief, to the model (`factory.spec_changes`), which answers with change
+  requests; the sources' stored text then moves to the current text. Sources added
+  before this migration have no stored text and are not tracked until the brief is
+  rewritten.
+- **Planning**: `POST /changes/plan` (editor, with edit access to the Tasks database, no
+  build running) sends the brief, the architecture, the task list, the file paths and the
+  open requests to the model (`factory.change_plan`). Its tasks are cleaned (titles made
+  unique, dependencies limited to known tasks, a fallback task for any request it
+  skipped), appended To do at the end of the Tasks database with `Change #n.` in their
+  detail, and the factory goes back to `planned`. The build already skips Done tasks, so
+  it works only on the new ones, from the current files. A passed build moves planned
+  requests to `built`, and the next release links them (`requests` on the release, and a
+  list in its `RELEASE.md`).
+- **Stacks**: `node-cli` (Node 22, standard library only, `node --test`) and `python-api`
+  (FastAPI with SQLite, `TestClient`), each with a sandbox image in `infra/factory/`, a
+  `.gitignore`, a `Dockerfile` and run instructions for delivery, and demo-agent files.
+- **Budget**: `GET`/`PUT /api/workspaces/<ws>/factory-budget {monthly_tokens}` (owners
+  change it; `null` means the server default `YMER_FACTORY_WORKSPACE_MONTHLY_TOKENS`,
+  20 million; `0` means no limit). Usage is the sum of `factory_runs.tokens` for runs in
+  the workspace since the first of the month (UTC). Starting a build is refused when
+  nothing is left, and a build gets at most what was left when it started
+  (`context.max_tokens`), so it stops with a clear message when the month runs out.
+
+Assumptions for F5, open to change:
+
+- Changes always become new tasks; planning does not reopen Done tasks. The agent can
+  still edit any file while working on a change task.
+- The brief and the architecture document are not rewritten for a change. The change
+  requests and their tasks are the record; reopen the brief for a larger redesign.
+- The budget counts build runs only. Brief, architecture and planning calls are single
+  requests and are not counted. Two builds started at the same moment can each use what
+  was left, so a month can go slightly over.
 

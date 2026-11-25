@@ -22,6 +22,7 @@ import {
 } from "./api";
 import { Build } from "./Build";
 import { Deliver, Review } from "./Deliver";
+import { Iterate } from "./Changes";
 import { errorText, primary, quiet, secondary, Section } from "./ui";
 
 const STEPS = [
@@ -364,6 +365,7 @@ export function FactoryPage({ page }: { page: Page }) {
       <Build page={page} factory={f} />
       <Review page={page} factory={f} />
       <Deliver page={page} factory={f} />
+      <Iterate page={page} factory={f} />
     </div>
   );
 }

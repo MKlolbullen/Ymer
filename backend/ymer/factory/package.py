@@ -26,6 +26,8 @@ GITIGNORE = {
         "__pycache__/\n*.pyc\n.venv/\n.pytest_cache/\n*.sqlite3\n"
         "frontend/node_modules/\nfrontend/dist/\n"
     ),
+    "node-cli": "node_modules/\n.DS_Store\n*.tgz\n",
+    "python-api": "__pycache__/\n*.pyc\n.venv/\n.pytest_cache/\n*.sqlite3\n",
 }
 
 DOCKERFILES = {
@@ -53,6 +55,22 @@ DOCKERFILES = {
         "EXPOSE 8000\n"
         'CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:create_app()"]\n'
     ),
+    "node-cli": (
+        "# Written by Ymer Factory. Build with: docker build -t app .\n"
+        "FROM node:22-slim\n"
+        "WORKDIR /app\n"
+        "COPY . .\n"
+        'ENTRYPOINT ["node", "bin/cli.mjs"]\n'
+    ),
+    "python-api": (
+        "# Written by Ymer Factory. Build with: docker build -t app .\n"
+        "FROM python:3.12-slim\n"
+        "WORKDIR /app\n"
+        "RUN pip install --no-cache-dir fastapi==0.115.6 sqlalchemy==2.0.36 uvicorn==0.32.1\n"
+        "COPY . .\n"
+        "EXPOSE 8000\n"
+        'CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]\n'
+    ),
 }
 
 RUN = {
@@ -73,10 +91,29 @@ RUN = {
         "Front end: `cd frontend && npm install && npm run dev`.\n\n"
         "As one container: `docker build -t app . && docker run --rm -p 8000:8000 app`.\n"
     ),
+    "node-cli": (
+        "```sh\nnode bin/cli.mjs --help\nnode --test tests/\nnpm link   # puts the command on "
+        "your PATH\n```\n\nOr as a container: `docker build -t app . && docker run --rm app "
+        "--help`.\n"
+    ),
+    "python-api": (
+        "```sh\npython -m venv .venv && . .venv/bin/activate\n"
+        "pip install fastapi sqlalchemy uvicorn httpx pytest\npython -m pytest\n"
+        "uvicorn app.main:app --reload\n```\n\nThe API docs are at "
+        "http://localhost:8000/docs. As a container: `docker build -t app . && "
+        "docker run --rm -p 8000:8000 app`.\n"
+    ),
 }
 
 
-def release_readme(app: str, number: int, stack_key: str, notes: str | None, when: datetime) -> str:
+def release_readme(
+    app: str,
+    number: int,
+    stack_key: str,
+    notes: str | None,
+    when: datetime,
+    requests: list[str] | None = None,
+) -> str:
     stack = STACKS.get(stack_key, STACKS["flask-react"])
     parts = [
         f"# {app or 'App'}, release {number}\n",
@@ -85,6 +122,9 @@ def release_readme(app: str, number: int, stack_key: str, notes: str | None, whe
     ]
     if notes:
         parts.append(f"## Release notes\n\n{notes.strip()}\n")
+    if requests:
+        lines = "\n".join(f"- {r}" for r in requests)
+        parts.append(f"## Changes requested and built in this release\n\n{lines}\n")
     parts.append(f"## Run it\n\n{RUN.get(stack.key, '')}")
     return "\n".join(parts)
 
@@ -97,10 +137,11 @@ def package_files(
     stack: str,
     notes: str | None,
     when: datetime,
+    requests: list[str] | None = None,
 ) -> dict[str, str]:
     """The release's files plus the standard ones it does not already have."""
     extra = {
-        "RELEASE.md": release_readme(app, number, stack, notes, when),
+        "RELEASE.md": release_readme(app, number, stack, notes, when, requests),
         ".gitignore": GITIGNORE.get(stack, ""),
     }
     if stack in DOCKERFILES:

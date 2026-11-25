@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,9 @@ class Workspace(TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+    # Tokens Factory builds may use per calendar month (UTC). None: the server default
+    # (YMER_FACTORY_WORKSPACE_MONTHLY_TOKENS); 0: no limit.
+    factory_monthly_tokens: Mapped[int | None] = mapped_column(Integer)
 
     members: Mapped[list["WorkspaceMember"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan", passive_deletes=True

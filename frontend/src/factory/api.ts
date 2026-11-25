@@ -1,4 +1,4 @@
-/** The Factory's API: the brief (F1), the architecture (F2), the build (F3) and delivery (F4). */
+/** The Factory's API: brief (F1), architecture (F2), build (F3), delivery (F4) and iterating (F5). */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -63,6 +63,38 @@ export type FactoryRelease = {
   created_at: string;
   preview: boolean;
   pushes: FactoryPush[];
+  /** Change requests built and shipped in this release. */
+  requests: { number: number; title: string }[];
+};
+
+export type ChangeStatus = "open" | "planned" | "built" | "released" | "dismissed";
+
+export type ChangeRequest = {
+  id: string;
+  number: number;
+  title: string;
+  detail: string;
+  origin: "review" | "spec";
+  status: ChangeStatus;
+  /** Titles of the tasks planning added for it. */
+  tasks: string[];
+  release: number | null;
+  created_by: Person | null;
+  created_at: string;
+};
+
+/** A source page edited since the factory last took it in. */
+export type SpecChange = { page_id: string; title: string; seen_at: string | null };
+
+export type FactoryBudget = {
+  /** Tokens per month; 0 means no limit. */
+  limit: number;
+  used: number;
+  remaining: number | null;
+  period_start: string;
+  custom: boolean;
+  default_limit: number;
+  can_edit: boolean;
 };
 
 export type Delivery = {
@@ -122,6 +154,9 @@ export type Factory = {
     sandbox: string | null;
   };
   delivery: Delivery;
+  changes: ChangeRequest[];
+  spec_changes: SpecChange[];
+  budget: FactoryBudget;
 };
 
 /** Brief approved, so the architecture step is open (or already done). */
@@ -143,6 +178,24 @@ export const changeCount = (c: Changes | null | undefined) =>
 export function readyForReview(f: Factory): boolean {
   const run = f.build.latest_run;
   return !!run && run.status === "passed" && changeCount(f.delivery.unreleased) > 0;
+}
+
+/** The app exists or is planned, so changes can be requested and planned. */
+export const canIterate = canBuild;
+
+export const openChanges = (f: Factory) => f.changes.filter((c) => c.status === "open");
+
+/** Tasks still to build: planned change requests waiting for a passed build. */
+export const plannedChanges = (f: Factory) => f.changes.filter((c) => c.status === "planned");
+
+/** Share of the month's budget used, 0..1 (0 when there is no limit). */
+export const budgetShare = (b: FactoryBudget) => (b.limit > 0 ? Math.min(1, b.used / b.limit) : 0);
+
+/** "1.2M", "850k", "900": short token counts for the budget line. */
+export function tokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
 }
 
 export const runActive = (run: FactoryRun | null | undefined) =>
@@ -241,6 +294,38 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
         void qc.invalidateQueries({ queryKey: factoryKey(workspaceId, pageId) });
         void qc.invalidateQueries({ queryKey: ["factory-releases", workspaceId, pageId] });
       },
+    }),
+    addChange: useMutation({
+      mutationFn: (body: { title: string; detail: string }) =>
+        api<{ factory: Factory }>(`${url}/changes`, { method: "POST", json: body }),
+      ...opts,
+    }),
+    updateChange: useMutation({
+      mutationFn: ({ id, ...body }: { id: string; title?: string; detail?: string; status?: "open" | "dismissed" }) =>
+        api<{ factory: Factory }>(`${url}/changes/${id}`, { method: "PATCH", json: body }),
+      ...opts,
+    }),
+    changesFromSpec: useMutation({
+      mutationFn: () =>
+        api<{ factory: Factory; created: number; demo: boolean }>(`${url}/changes/from-spec`, { method: "POST" }),
+      ...opts,
+    }),
+    planChanges: useMutation({
+      mutationFn: () =>
+        api<{ factory: Factory; planned: number; demo: boolean }>(`${url}/changes/plan`, { method: "POST" }),
+      onSuccess: (r: { factory: Factory }) => {
+        settle(r.factory);
+        // New rows in the Tasks database.
+        void qc.invalidateQueries({ queryKey: ["rows", workspaceId] });
+      },
+    }),
+    setBudget: useMutation({
+      mutationFn: (monthlyTokens: number | null) =>
+        api<{ budget: FactoryBudget }>(`/workspaces/${workspaceId}/factory-budget`, {
+          method: "PUT",
+          json: { monthly_tokens: monthlyTokens },
+        }),
+      onSuccess: () => void qc.invalidateQueries({ queryKey: factoryKey(workspaceId, pageId) }),
     }),
     stopRun: useMutation({
       mutationFn: (runId: string) =>

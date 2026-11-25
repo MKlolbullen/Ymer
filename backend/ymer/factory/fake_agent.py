@@ -95,6 +95,68 @@ def task_files(stack: str, title: str, detail: str, setup: bool, app: str) -> di
             f"src/app/{name}.py": _py_module(title, detail, name),
             f"tests/test_{name}.py": _py_test(f"app.{name}", name, title),
         }
+    if stack == "node-cli":
+        if setup:
+            return {
+                "package.json": (
+                    f'{{\n  "name": "{slug(app).replace("_", "-")}",\n  "version": "0.1.0",\n'
+                    '  "type": "module",\n'
+                    f'  "bin": {{ "{slug(app).replace("_", "-")}": "bin/cli.mjs" }},\n'
+                    '  "scripts": { "test": "node --test tests/" }\n}\n'
+                ),
+                "bin/cli.mjs": (
+                    "#!/usr/bin/env node\nimport { parseArgs } from 'node:util';\n\n"
+                    "export function main(argv = process.argv.slice(2)) {\n"
+                    "  parseArgs({ args: argv, allowPositionals: true });\n"
+                    f"  console.log({app!r});\n  return 0;\n}}\n\n"
+                    "if (import.meta.url === `file://${process.argv[1]}`) {\n"
+                    "  process.exitCode = main();\n}\n"
+                ),
+                "tests/cli.test.mjs": (
+                    "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                    "import { main } from '../bin/cli.mjs';\n\n"
+                    "test('the command runs', () => {\n  assert.equal(main([]), 0);\n});\n"
+                ),
+            }
+        fn = re.sub(r"_(\w)", lambda m: m.group(1).upper(), name)
+        return {
+            f"src/{name}.mjs": (
+                f"// {title}.\nexport function {fn}() {{\n"
+                f"  return {{ feature: {title!r}, ready: true }};\n}}\n"
+            ),
+            f"tests/{name}.test.mjs": (
+                "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                f"import {{ {fn} }} from '../src/{name}.mjs';\n\n"
+                f"test('{name} is ready', () => {{\n  assert.equal({fn}().ready, true);\n}});\n"
+            ),
+        }
+    if stack == "python-api":
+        if setup:
+            return {
+                "pyproject.toml": (
+                    f'[project]\nname = "{slug(app)}"\nversion = "0.1.0"\n'
+                    'requires-python = ">=3.12"\ndependencies = ["fastapi", "sqlalchemy"]\n'
+                ),
+                "app/__init__.py": f'"""{app}."""\n',
+                "app/main.py": (
+                    '"""The API."""\n\nfrom fastapi import FastAPI\n\n'
+                    f"app = FastAPI(title={app!r})\n\n\n"
+                    '@app.get("/health")\ndef health() -> dict:\n    return {"status": "ok"}\n'
+                ),
+                "tests/conftest.py": (
+                    "import sys\nfrom pathlib import Path\n\n"
+                    "sys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n"
+                ),
+                "tests/test_health.py": (
+                    "from fastapi.testclient import TestClient\n\nfrom app.main import app\n\n\n"
+                    "def test_health():\n"
+                    '    assert TestClient(app).get("/health").json() == {"status": "ok"}\n'
+                ),
+            }
+        return {
+            f"app/{name}.py": _py_module(title, detail, name),
+            f"tests/test_{name}.py": _py_test(f"app.{name}", name, title),
+        }
     # flask-react
     if setup:
         return {

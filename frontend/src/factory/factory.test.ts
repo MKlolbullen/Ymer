@@ -4,13 +4,18 @@ import type { Page } from "@/lib/types";
 
 import {
   briefApproved,
+  budgetShare,
   canBuild,
   candidateSources,
   mergeEvents,
   newAnswers,
+  openChanges,
+  plannedChanges,
   readyForReview,
   runActive,
   stepStates,
+  tokens,
+  type ChangeRequest,
   type Factory,
   type RunEvent,
 } from "./api";
@@ -55,7 +60,31 @@ const factory = (extra: Partial<Factory> = {}): Factory => ({
     git_branch: null,
     git_hosts: ["github.com"],
   },
+  changes: [],
+  spec_changes: [],
+  budget: {
+    limit: 20_000_000,
+    used: 0,
+    remaining: 20_000_000,
+    period_start: "2026-11-01T00:00:00+00:00",
+    custom: false,
+    default_limit: 20_000_000,
+    can_edit: false,
+  },
   ...extra,
+});
+
+const change = (number: number, status: ChangeRequest["status"]): ChangeRequest => ({
+  id: `c${number}`,
+  number,
+  title: `Change ${number}`,
+  detail: "",
+  origin: "review",
+  status,
+  tasks: [],
+  release: null,
+  created_by: null,
+  created_at: "2026-11-25T10:00:00Z",
 });
 
 describe("candidateSources", () => {
@@ -142,5 +171,25 @@ describe("review", () => {
     expect(readyForReview(f(passed, none))).toBe(false);
     expect(readyForReview(f({ status: "failed" } as Factory["build"]["latest_run"], changed))).toBe(false);
     expect(readyForReview(f(null, changed))).toBe(false);
+  });
+});
+
+describe("iterating", () => {
+  it("separates open from planned change requests", () => {
+    const f = factory({ stage: "released", changes: [change(1, "released"), change(2, "open"), change(3, "planned")] });
+    expect(openChanges(f).map((c) => c.number)).toEqual([2]);
+    expect(plannedChanges(f).map((c) => c.number)).toEqual([3]);
+  });
+
+  it("shows token counts short and the budget share capped", () => {
+    expect(tokens(950)).toBe("950");
+    expect(tokens(12_400)).toBe("12k");
+    expect(tokens(1_500_000)).toBe("1.5M");
+    expect(tokens(2_000_000)).toBe("2M");
+    expect(tokens(20_000_000)).toBe("20M");
+    const b = factory().budget;
+    expect(budgetShare({ ...b, used: 5_000_000 })).toBe(0.25);
+    expect(budgetShare({ ...b, used: 50_000_000 })).toBe(1);
+    expect(budgetShare({ ...b, limit: 0, used: 5 })).toBe(0);
   });
 });

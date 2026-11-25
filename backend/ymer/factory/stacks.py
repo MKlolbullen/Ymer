@@ -78,6 +78,40 @@ STACKS: dict[str, Stack] = {
                 "front end is built when the app is delivered."
             ),
         ),
+        Stack(
+            key="node-cli",
+            name="Node.js command-line tool",
+            summary="A Node 22 command with subcommands, using only Node's standard library.",
+            good_for="Developer tools, file and text processing, and scripts for JS teams.",
+            languages="JavaScript (ES modules, Node 22), node:util parseArgs, JSON files",
+            test_command="node --test",
+            delivers="An npm package with a bin command",
+            image="ymer-factory/node-cli:1",
+            sandbox_test="node --test tests/",
+            layout=(
+                "package.json (type module, a bin entry pointing at bin/cli.mjs); the command "
+                "in bin/cli.mjs, parsing arguments with node:util parseArgs and calling logic "
+                "in src/*.mjs that does no input or output; tests in tests/*.test.mjs using "
+                "node:test and node:assert. No npm dependencies."
+            ),
+        ),
+        Stack(
+            key="python-api",
+            name="JSON API (FastAPI)",
+            summary="A FastAPI JSON service with SQLite, for other apps or scripts to call.",
+            good_for="Back ends for other apps, webhooks, integrations and data services.",
+            languages="Python 3.12 (FastAPI, SQLAlchemy), SQLite",
+            test_command="pytest",
+            delivers="A container image that serves the API",
+            image="ymer-factory/python-api:1",
+            sandbox_test="python -m pytest -q -p no:cacheprovider",
+            layout=(
+                "pyproject.toml; the app in app/ (app/main.py creates the FastAPI app as "
+                "`app`, routes in app/routes/, models in app/models.py); tests in "
+                "tests/test_*.py using fastapi.testclient.TestClient and SQLite in memory, "
+                "with a tests/conftest.py that puts the project root on sys.path."
+            ),
+        ),
     )
 }
 

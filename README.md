@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: Phases 0 to 4 done, Factory 4 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%204%2F5-6366f1">
+  <img alt="Status: Phases 0 to 4 done, Factory 5 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%205%2F5-6366f1">
   <img alt="Flask 3" src="https://img.shields.io/badge/backend-Flask%203-3f3f46">
   <img alt="React 18" src="https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind%204-3f3f46">
   <img alt="Yjs" src="https://img.shields.io/badge/realtime-Yjs%20%2B%20Hocuspocus-3f3f46">
@@ -162,8 +162,8 @@ support Anthropic and the server demo. Structured generation requires a compatib
 ### Factory
 
 The Factory turns what your team writes in Ymer into a working app, one reviewed stage at a time:
-brief, architecture, build, review and delivery. All five work today; iterating on a delivered app is next on
-the [roadmap](#roadmap).
+brief, architecture, build, review and delivery, and then changes to the delivered app, which go through the
+same build and review into the next release.
 
 | Feature | What you get |
 |---|---|
@@ -171,10 +171,13 @@ the [roadmap](#roadmap).
 | **The brief** | The AI writes a brief as an ordinary document under the factory: summary, users, features by priority, constraints, out of scope, decisions and links to the sources. Edit it like any page. Rewriting keeps the earlier draft. |
 | **Questions** | What the sources do not say (who uses it, where it runs, what it stores, sign-in) comes back as questions. Answer them or mark them not needed, and the next brief includes your answers as decisions. |
 | **Approval** | An editor approves the brief once no questions are open. The approved text is saved as a named version, and the brief is frozen until someone reopens it. |
-| **Architecture** | From the approved brief, the AI picks one of three stacks (static web tool, Python command-line tool, Flask + React web app), or uses the one you choose, and designs the app: an Architecture document (stack, components, data model, interfaces, risks), a System map mind map, and a Tasks database with status, component, priority, size and dependencies, shown as a table and a board. An editor approves the plan; redesigning keeps earlier drafts. |
+| **Architecture** | From the approved brief, the AI picks one of five stacks (static web tool, Python command-line tool, Node.js command-line tool, FastAPI JSON API, Flask + React web app), or uses the one you choose, and designs the app: an Architecture document (stack, components, data model, interfaces, risks), a System map mind map, and a Tasks database with status, component, priority, size and dependencies, shown as a table and a board. An editor approves the plan; redesigning keeps earlier drafts. |
 | **Build** | An AI agent works through the approved tasks in order. For each one it reads the files so far, writes code and tests, runs the tests in a sandbox, and marks the task Done in the Tasks database when they pass. Follow it in a live log, stop it at any time, and browse the files it wrote. A build stops at the first task it cannot finish, and the next build picks up from there. |
 | **Review and release** | When a build passes, the page lists the files it added, changed and removed since the last release. An editor adds release notes and approves it as release 1, 2, 3... A release is a frozen copy, so later builds never change what was approved. |
 | **Deliver** | Download a release as a zip, with a `RELEASE.md` on how to run it, a `.gitignore` and, for apps that run in a container, a `Dockerfile`. Preview a web app right on the page. Push a release to a GitHub, GitLab, Bitbucket or Codeberg repository: Ymer adds one commit on top of the branch, never force-pushes, and uses your token for that push only. |
+| **Change requests** | Once the plan is approved, anyone who can edit asks for changes on the factory page, with a title and details. When a source page is edited after the brief, the factory notices, shows which pages changed, and turns the edits into change requests for you. |
+| **Rebuild only what changed** | Planning turns open change requests into new tasks at the end of the Tasks database. Tasks already Done stay Done, so the next build works only on the new ones, starting from the files the last build left. The review then shows what changed, and the release lists the requests it includes, also in its `RELEASE.md`. |
+| **Budgets** | Every workspace has a monthly token budget for builds (20 million tokens unless the server sets another default). The build step shows how much is used. Workspace owners can raise, lower or remove the limit; when it runs out, builds stop and say why. |
 | **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway Docker container with no network, a read-only system, no privileges, and limits on memory, CPU, processes and time. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
 
 <table>
@@ -225,6 +228,25 @@ the [roadmap](#roadmap).
   <tr>
     <td align="center"><sub>Review what changed, then approve it as a release.</sub></td>
     <td align="center"><sub>Download it, preview it, or push it to your repository.</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-change-spec.png" alt="The change step: a banner says the spec page was edited, with a button to turn the edits into change requests, above an open request"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-change-planned.png" alt="Two change requests, one asked by a person and one found in the spec edits, both planned into tasks"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The spec was edited after release 1, and someone asked for a change.</sub></td>
+    <td align="center"><sub>Both requests, planned as new tasks.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-change-build-ready.png" alt="The build step offering to build two changes, with the workspace's monthly budget below the button"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-change-release.png" alt="Release 2, which includes the two change requests, above release 1 in the earlier releases"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Only the new tasks are built, within the workspace's budget.</sub></td>
+    <td align="center"><sub>Release 2 lists the changes it includes.</sub></td>
   </tr>
 </table>
 
@@ -335,7 +357,7 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ✅ Done |
 | **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
 | **F4. Factory: deliver** | Review and numbered releases, zip download with packaging files (Dockerfile where it fits), isolated preview of web apps, push to a git repository | ✅ Done |
-| **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | ⏭️ Next |
+| **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
 | **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |
 
 ### Data model
@@ -345,8 +367,8 @@ factory), `page_permissions`, `page_links`, `document_content` and `document_ver
 page type), `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views`
 (table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
-`factory_questions`, `factory_runs`, `factory_run_events`, `factory_files`, `factory_releases` and
-`factory_pushes`. Mind maps and drawings need no
+`factory_questions`, `factory_runs`, `factory_run_events`, `factory_files`, `factory_releases`,
+`factory_pushes` and `factory_changes`. Mind maps and drawings need no
 tables of their own: they are Yjs documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will

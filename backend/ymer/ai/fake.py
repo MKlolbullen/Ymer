@@ -127,6 +127,14 @@ class FakeChat:
             from ymer.factory.fake import fake_architecture
 
             return fake_architecture(data)
+        if task == "factory.spec_changes":
+            from ymer.factory.fake import fake_spec_changes
+
+            return fake_spec_changes(data)
+        if task == "factory.change_plan":
+            from ymer.factory.fake import fake_change_plan
+
+            return fake_change_plan(data)
         return ""
 
     def _assist(self, action: str, data: dict) -> str:

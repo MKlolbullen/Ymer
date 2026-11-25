@@ -14,6 +14,8 @@ the bookkeeping:
 - ``factory_releases``: builds an editor reviewed and approved, as numbered snapshots of
   the files; what gets downloaded, previewed and pushed.
 - ``factory_pushes``: each push of a release to a git repository.
+- ``factory_changes``: change requests on a built app, from a review or from a changed
+  spec; planning one adds tasks, and a passed build and a release close it.
 """
 
 import enum
@@ -114,6 +116,11 @@ class FactorySource(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Stage F5: the source's text when the factory last took it in (the brief was written,
+    # or its changes became change requests), to tell when the spec has changed since.
+    seen_text: Mapped[str | None] = mapped_column(Text)
+    seen_hash: Mapped[str | None] = mapped_column(String(64))
+    seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FactoryQuestion(Base):
@@ -289,3 +296,55 @@ class FactoryPush(Base):
         server_default=func.now(),
         default=lambda: datetime.now(UTC),
     )
+
+
+class ChangeStatus(enum.StrEnum):
+    OPEN = "open"  # requested; not planned yet
+    PLANNED = "planned"  # tasks were added to the Tasks database for it
+    BUILT = "built"  # a build finished its tasks with passing tests
+    RELEASED = "released"  # part of a release
+    DISMISSED = "dismissed"
+
+
+class ChangeOrigin(enum.StrEnum):
+    REVIEW = "review"  # a person asked for it
+    SPEC = "spec"  # found in edits to the source pages
+
+
+class FactoryChange(Base):
+    """A change request on a built app. Planning turns it into tasks; the next passed build
+    builds only those tasks, and the next release includes it."""
+
+    __tablename__ = "factory_changes"
+    __table_args__ = (
+        UniqueConstraint("factory_id", "number", name="uq_factory_changes_factory_number"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    factory_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("factory_projects.page_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    origin: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ChangeOrigin.REVIEW.value
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=ChangeStatus.OPEN.value)
+    # Titles of the tasks planning added for it.
+    tasks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    release_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_releases.id", ondelete="SET NULL")
+    )
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+    planned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

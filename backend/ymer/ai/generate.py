@@ -182,6 +182,52 @@ def _raw_value(prop: DatabaseProperty, value: str) -> Any:
     return value
 
 
+def add_rows(
+    session: Session,
+    page: Page,
+    props: list[DatabaseProperty],
+    rows: list,
+    *,
+    user_id: uuid.UUID,
+    start: float = 1.0,
+) -> list[DatabaseRow]:
+    """Add rows given as ``{"values": [{"property": name, "value": text}]}`` to a database,
+    after any rows at positions below ``start``. Select options are added as needed."""
+    by_name = {p.name.lower(): p for p in props}
+    added = []
+    for item in rows:
+        if not isinstance(item, dict) or not isinstance(item.get("values"), list):
+            continue
+        values: dict[str, Any] = {}
+        for pair in item["values"]:
+            if not isinstance(pair, dict):
+                continue
+            prop = by_name.get(str(pair.get("property", "")).strip().lower())
+            if prop is None or str(prop.id) in values:
+                continue
+            try:
+                raw = _raw_value(prop, str(pair.get("value") or ""))
+                cleaned = clean_value(prop, raw, member_ids=set())
+            except InvalidValue:
+                continue
+            if cleaned is not None:
+                values[str(prop.id)] = cleaned
+        if not values:
+            continue
+        row = DatabaseRow(
+            workspace_id=page.workspace_id,
+            database_id=page.id,
+            values=values,
+            position=start + len(added),
+            search_text=search_text_for(props, values),
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        session.add(row)
+        added.append(row)
+    return added
+
+
 def create_database(
     session: Session, page: Page, spec: dict, *, user_id: uuid.UUID
 ) -> tuple[int, int]:
@@ -237,40 +283,8 @@ def create_database(
         session.add(prop)
     session.flush()
 
-    by_name = {p.name.lower(): p for p in props}
     rows = spec.get("rows") if isinstance(spec.get("rows"), list) else []
-    count = 0
-    for position, item in enumerate(rows[:MAX_ROWS], start=1):
-        if not isinstance(item, dict) or not isinstance(item.get("values"), list):
-            continue
-        values: dict[str, Any] = {}
-        for pair in item["values"]:
-            if not isinstance(pair, dict):
-                continue
-            prop = by_name.get(str(pair.get("property", "")).strip().lower())
-            if prop is None or str(prop.id) in values:
-                continue
-            try:
-                raw = _raw_value(prop, str(pair.get("value") or ""))
-                cleaned = clean_value(prop, raw, member_ids=set())
-            except InvalidValue:
-                continue
-            if cleaned is not None:
-                values[str(prop.id)] = cleaned
-        if not values:
-            continue
-        session.add(
-            DatabaseRow(
-                workspace_id=page.workspace_id,
-                database_id=page.id,
-                values=values,
-                position=float(position),
-                search_text=search_text_for(props, values),
-                created_by_id=user_id,
-                updated_by_id=user_id,
-            )
-        )
-        count += 1
+    count = len(add_rows(session, page, props, rows[:MAX_ROWS], user_id=user_id))
 
     session.add(
         DatabaseView(

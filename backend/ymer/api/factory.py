@@ -17,6 +17,9 @@ Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 - ``GET    /files``                the files the builds wrote
 - ``GET    /files/content?path=``  one file's text
 
+Delivery (F4) lives in ``factory_deliver.py`` and iterating (F5: change requests, spec
+changes, change plans and the workspace budget) in ``factory_changes.py``.
+
 Reading the factory needs viewer access; everything else needs editor. Sources are read
 with the caller's own access, so a source they cannot open is left out of the brief they
 write, and shows as hidden in the list.
@@ -69,7 +72,9 @@ from ymer.factory.brief import (
     clean_brief,
     fit_sources,
 )
+from ymer.factory.budget import budget_json, remaining
 from ymer.factory.build import queue_run
+from ymer.factory.changes import MAX_SEEN_CHARS, change_json, changes_of, text_hash
 from ymer.factory.document import document_state
 from ymer.factory.releases import delivery_json
 from ymer.factory.runner import sandbox_for, start_inline
@@ -228,6 +233,14 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
         "plan_approved_by": person(project.plan_approved_by_id),
         "build": build_json(project),
         "delivery": delivery_json(db_session, project, git_hosts(settings_for(current_app))),
+        "changes": [change_json(db_session, c) for c in changes_of(db_session, project.page_id)],
+        "spec_changes": [
+            {"page_id": str(p.id), "title": p.title, "seen_at": _iso(s.seen_at)}
+            for s, p, _text in changed_sources(scope, project)
+        ],
+        "budget": budget_json(
+            db_session, scope.workspace, settings_for(current_app), can_edit=scope.is_owner
+        ),
     }
 
 
@@ -303,6 +316,44 @@ def _source_texts(scope: WorkspaceScope, project: FactoryProject) -> list[tuple[
         text = page_text(seen[0]).strip()
         if text:
             out.append((seen[0], text))
+    return out
+
+
+# Stages where the app exists (or is planned) and the spec is tracked for changes.
+ITERABLE = {FactoryStage.PLANNED.value, FactoryStage.BUILT.value, FactoryStage.RELEASED.value}
+
+
+def _current_text(page: Page) -> str:
+    return page_text(page).strip()[:MAX_SEEN_CHARS]
+
+
+def remember_sources(scope: WorkspaceScope, project: FactoryProject) -> None:
+    """Keep each source's text as the factory takes it in, to spot later edits."""
+    now = datetime.now(UTC)
+    for source in _sources(project):
+        seen = _visible(scope, source.page_id)
+        if seen is None:
+            continue
+        text = _current_text(seen[0])
+        source.seen_text, source.seen_hash, source.seen_at = text, text_hash(text), now
+
+
+def changed_sources(
+    scope: WorkspaceScope, project: FactoryProject
+) -> list[tuple[FactorySource, Page, str]]:
+    """Sources the caller can open whose text changed since the factory last took it in."""
+    if project.stage not in ITERABLE:
+        return []
+    out = []
+    for source in _sources(project):
+        if source.seen_hash is None:
+            continue
+        seen = _visible(scope, source.page_id)
+        if seen is None:
+            continue
+        text = _current_text(seen[0])
+        if text_hash(text) != source.seen_hash:
+            out.append((source, seen[0], text))
     return out
 
 
@@ -409,6 +460,7 @@ def write_brief(workspace_id: uuid.UUID, page_id: uuid.UUID):
                 reason=q["why"],
             )
         )
+    remember_sources(scope, project)
     project.brief_page_id = brief_page.id
     project.brief_generated_at = datetime.now(UTC)
     project.stage = FactoryStage.BRIEF.value
@@ -731,6 +783,12 @@ def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
         raise UnprocessableEntity(
             "Factory builds currently require Anthropic or the demo provider."
         )
+    left = remaining(db_session, scope.workspace, settings_for(current_app))
+    if left is not None and left <= 0:
+        raise Conflict(
+            "This workspace has used its Factory budget for this month. "
+            "A workspace owner can raise the limit."
+        )
     # The build works from what the person starting it can read.
     texts = {}
     for key, pid in (
@@ -751,6 +809,8 @@ def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
         user_id=current_user().id,
     )
     run.context = {**run.context, "sandbox": sandbox.name, "model": chat.model}
+    if left is not None:
+        run.context = {**run.context, "max_tokens": left}
     if current_user().ai_provider:
         run.context = {**run.context, "personal_provider": current_user().ai_provider}
     db_session.commit()

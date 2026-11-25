@@ -9,6 +9,8 @@ with `make factory-images`, then set `YMER_FACTORY_SANDBOX=docker`.
 | static-web | `ymer-factory/static-web:1` | `node --test tests/` |
 | python-cli | `ymer-factory/python-cli:1` | `python -m pytest -q` |
 | flask-react | `ymer-factory/flask-react:1` | `cd backend && python -m pytest -q` |
+| node-cli | `ymer-factory/node-cli:1` | `node --test tests/` |
+| python-api | `ymer-factory/python-api:1` | `python -m pytest -q` |
 
 Because there is no network inside the sandbox, a build can only use the packages baked
 into its image. Add a package here (and bump the tag in `backend/ymer/factory/stacks.py`)

@@ -40,6 +40,7 @@ from ymer.factory.releases import (
     latest_release,
     push_json,
     release_json,
+    release_requests,
 )
 from ymer.models import (
     FactoryProject,
@@ -93,6 +94,7 @@ def _delivered_files(page: Page, release: FactoryRelease) -> dict[str, str]:
         stack=release.stack,
         notes=release.notes,
         when=release.created_at,
+        requests=[f"#{c.number} {c.title}" for c in release_requests(db_session, release)],
     )
 
 

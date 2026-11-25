@@ -376,7 +376,13 @@ def test_architecture_map_tasks_and_plan_approval(app, client, team):
     first = resp.get_json()["factory"]
     assert first["stage"] == "architecture"
     assert first["stack"] == "static-web"  # one person logging expenses
-    assert {s["key"] for s in first["stacks"]} == {"static-web", "python-cli", "flask-react"}
+    assert {s["key"] for s in first["stacks"]} == {
+        "static-web",
+        "python-cli",
+        "flask-react",
+        "node-cli",
+        "python-api",
+    }
     assert first["architecture"]["type"] == "document"
     assert first["system_map"]["type"] == "mindmap"
     assert first["tasks"]["type"] == "database" and first["tasks"]["count"] >= 4
