@@ -17,10 +17,11 @@ import {
 } from "chart.js";
 import { useEffect, useRef, useState } from "react";
 
+import { usePalette } from "@/lib/appearance";
 import type { ChartConfig, ChartData } from "@/lib/types";
 
 import { isPie } from "./config";
-import { CHART_INK, optionColor, seriesColor, useTheme, type Theme } from "./palette";
+import { CHART_INK, optionColor, seriesColor, type Theme } from "./palette";
 
 Chart.register(
   ArcElement,
@@ -41,8 +42,7 @@ Chart.register(
 const FONT = { family: "Inter, ui-sans-serif, system-ui, sans-serif", size: 12 };
 
 /** The Chart.js configuration for grouped data (exported for tests). */
-export function chartJsConfig(data: ChartData, config: ChartConfig, theme: Theme): ChartConfiguration {
-  const ink = CHART_INK[theme];
+export function chartJsConfig(data: ChartData, config: ChartConfig, theme: Theme, ink = CHART_INK[theme]): ChartConfiguration {
   const pie = isPie(config.kind);
   const multi = data.series.length > 1;
   // One series coloured by its x groups (select options, or slots for pies); several
@@ -156,12 +156,19 @@ function canDraw(): boolean {
 export function ChartCanvas({ data, config, height = 320, label }: { data: ChartData; config: ChartConfig; height?: number; label: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
-  const theme = useTheme();
+  const palette = usePalette();
   const [supported] = useState(canDraw);
 
   useEffect(() => {
     if (!supported || !canvasRef.current) return;
-    const next = chartJsConfig(data, config, theme);
+    const theme = palette === "light" ? "light" : "dark";
+    let ink = CHART_INK[theme];
+    if (palette !== "light" && palette !== "dark") {
+      const styles = getComputedStyle(document.documentElement);
+      const color = (step: number) => styles.getPropertyValue(`--color-zinc-${step}`).trim();
+      ink = { text: color(100), muted: color(400), grid: color(700), surface: color(950) };
+    }
+    const next = chartJsConfig(data, config, theme, ink);
     const chart = chartRef.current;
     if (chart && (chart.config as { type?: string }).type === next.type) {
       chart.data = next.data;
@@ -171,7 +178,7 @@ export function ChartCanvas({ data, config, height = 320, label }: { data: Chart
     }
     chart?.destroy();
     chartRef.current = new Chart(canvasRef.current, next);
-  }, [data, config, theme, supported]);
+  }, [data, config, palette, supported]);
 
   useEffect(
     () => () => {

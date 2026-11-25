@@ -75,7 +75,7 @@ export function GenerateMenu({ page }: { page: Page }) {
                 className="w-full rounded-md border border-zinc-300 bg-white p-2 text-sm focus:border-brand-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
               />
               <div className="flex gap-2">
-                <button type="submit" disabled={!text.trim()} className="rounded-md bg-brand-600 px-3 py-1 font-medium text-white disabled:opacity-50">
+                <button type="submit" disabled={!text.trim()} className="rounded-md bg-brand-600 px-3 py-1 font-medium text-on-brand disabled:opacity-50">
                   Generate
                 </button>
                 <button type="button" onClick={() => setPaste(null)} className="px-2 text-zinc-500">

@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 /**
  * Chart colours. Series take the categorical slots in a fixed order (never cycled past
  * the end: a ninth series reuses slot colours only because the server caps groups, and
@@ -51,21 +49,4 @@ export function seriesColor(theme: Theme, index: number): string {
 
 export function optionColor(theme: Theme, name: string | null | undefined, fallbackIndex: number): string {
   return (name && OPTION_HEX[theme][name]) || seriesColor(theme, fallbackIndex);
-}
-
-/** Follows the OS colour scheme, like the rest of the app (Tailwind's `dark:`). */
-function darkQuery(): MediaQueryList | null {
-  return typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-}
-
-export function useTheme(): Theme {
-  const [dark, setDark] = useState(() => darkQuery()?.matches ?? false);
-  useEffect(() => {
-    const query = darkQuery();
-    if (!query) return;
-    const update = () => setDark(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return dark ? "dark" : "light";
 }

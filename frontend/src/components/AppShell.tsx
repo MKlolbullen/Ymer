@@ -6,6 +6,7 @@ import { logout, useSession } from "@/lib/auth";
 import { usePages } from "@/lib/queries";
 import { atLeast, type Workspace } from "@/lib/types";
 
+import { AppearancePicker } from "./AppearancePicker";
 import { ApiStatus } from "./ApiStatus";
 import { NewPageButton, PageTree } from "./PageTree";
 import { SearchDialog } from "./SearchDialog";
@@ -39,7 +40,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-zinc-200/60 dark:hover:bg-zinc-800 ${
-      isActive ? "font-medium text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400"
+      isActive ? "bg-brand-50 font-semibold text-brand-700 dark:bg-zinc-800 dark:text-brand-500" : "text-zinc-600 dark:text-zinc-400"
     }`;
 
   const sidebar = (
@@ -109,6 +110,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
             Sign out
           </button>
         </div>
+        <AppearancePicker />
         <ApiStatus />
       </div>
     </>
@@ -116,14 +118,14 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
 
   return (
     <div className="flex h-full">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 md:flex dark:border-zinc-800 dark:bg-zinc-900">
+      <aside className="workspace-sidebar hidden w-64 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 md:flex dark:border-zinc-800 dark:bg-zinc-900">
         {sidebar}
       </aside>
       {menuOpen && (
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMenuOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <aside
-            className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-zinc-50 dark:bg-zinc-900"
+            className="workspace-sidebar absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-zinc-50 dark:bg-zinc-900"
             onClick={(e) => e.stopPropagation()}
           >
             {sidebar}

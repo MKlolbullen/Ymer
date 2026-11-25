@@ -1,3 +1,4 @@
+import { AppearancePicker } from "@/components/AppearancePicker";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 
@@ -80,7 +81,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-md bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+            className="w-full rounded-md bg-brand-600 py-2 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
           >
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
@@ -96,6 +97,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             </>
           )}
         </p>
+        <div className="mt-5 flex justify-center"><AppearancePicker /></div>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, type ReactNode } from "react";
 import * as Y from "yjs";
 
-import { useTheme } from "@/charts/palette";
+import { useColorMode } from "@/lib/appearance";
 import { colorFor, notify, useCollabSession } from "@/editor/collab";
 import { Presence } from "@/editor/Presence";
 import { VersionsPanel } from "@/editor/VersionsPanel";
@@ -28,7 +28,7 @@ type Props = { page: Page; panel: CanvasPanel; onPanel: (panel: CanvasPanel) => 
 export function DrawingPage({ page, panel, onPresence }: Props) {
   const qc = useQueryClient();
   const me = useSession()!.user;
-  const theme = useTheme();
+  const theme = useColorMode();
   const onNotice = useCallback(() => qc.invalidateQueries({ queryKey: keys.versions(page.workspace_id, page.id) }), [qc, page.workspace_id, page.id]);
   const collab = useCollabSession(page.id, onNotice);
   const session = collab.session;

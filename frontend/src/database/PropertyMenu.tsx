@@ -159,7 +159,7 @@ export function AddPropertyForm({ onDone }: { onDone: () => void }) {
         <button type="button" onClick={onDone} className="px-2 text-sm text-zinc-500">
           Cancel
         </button>
-        <button type="submit" disabled={create.isPending} className="rounded-md bg-brand-600 px-3 py-1 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+        <button type="submit" disabled={create.isPending} className="rounded-md bg-brand-600 px-3 py-1 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60">
           Add property
         </button>
       </div>

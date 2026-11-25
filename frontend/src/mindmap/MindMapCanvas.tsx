@@ -21,7 +21,8 @@ import {
 } from "@xyflow/react";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { useTheme, type Theme } from "@/charts/palette";
+import type { Theme } from "@/charts/palette";
+import { useColorMode } from "@/lib/appearance";
 
 import { branchColor, descendants, ROOT_ID, type MindNode } from "./model";
 
@@ -200,7 +201,7 @@ export function MindMapCanvas(props: CanvasProps) {
 function Canvas(props: CanvasProps) {
   const flow = useReactFlow<IdeaNode>();
   const { nodes, readOnly, selectedId = null, editingId = null, draft = null, remote, pageTitle, onOpenPage } = props;
-  const theme = useTheme();
+  const theme = useColorMode();
   const handlers = useRef(props);
   handlers.current = props;
 

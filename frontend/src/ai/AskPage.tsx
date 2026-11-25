@@ -43,7 +43,7 @@ function Cited({ text, sources, workspaceId }: { text: string; sources: Source[]
             key={i}
             to={sourcePath(workspaceId, source)}
             title={source.title}
-            className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded bg-brand-50 px-1 align-super text-[0.65rem] font-semibold text-brand-700 no-underline hover:bg-brand-500 hover:text-white dark:bg-zinc-800 dark:text-brand-500"
+            className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded bg-brand-50 px-1 align-super text-[0.65rem] font-semibold text-brand-700 no-underline hover:bg-brand-500 hover:text-on-brand dark:bg-zinc-800 dark:text-brand-500"
           >
             {part}
           </Link>
@@ -224,7 +224,7 @@ export function AskPage() {
           {messages.map((m) =>
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-brand-600 px-4 py-2 text-sm text-white">{m.content}</p>
+                <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-brand-600 px-4 py-2 text-sm text-on-brand">{m.content}</p>
               </div>
             ) : (
               <div key={m.id} className="max-w-3xl text-sm">
@@ -235,7 +235,7 @@ export function AskPage() {
           {pending && (
             <>
               <div className="flex justify-end">
-                <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-brand-600 px-4 py-2 text-sm text-white">{pending}</p>
+                <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-brand-600 px-4 py-2 text-sm text-on-brand">{pending}</p>
               </div>
               <p className="text-sm text-zinc-500">Reading your pages…</p>
             </>
@@ -268,7 +268,7 @@ export function AskPage() {
             <button
               type="submit"
               disabled={!question.trim() || ask.isPending}
-              className="self-end rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              className="self-end rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-50"
             >
               Ask
             </button>

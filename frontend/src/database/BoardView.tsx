@@ -63,7 +63,7 @@ export function BoardView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
               drop(option?.id ?? null, columnRows, null);
               setOver(null);
             }}
-            className={`flex w-64 shrink-0 flex-col gap-2 rounded-lg p-2 ${over === key ? "bg-brand-50 dark:bg-zinc-800" : "bg-zinc-50 dark:bg-zinc-900"}`}
+            className={`flex w-64 shrink-0 flex-col gap-2 rounded-xl border border-zinc-200 p-2.5 dark:border-zinc-800 ${over === key ? "bg-brand-50 dark:bg-zinc-800" : "bg-zinc-50 dark:bg-zinc-900"}`}
           >
             <header className="flex items-center gap-2 px-1 text-sm">
               {option ? <OptionChip option={option} /> : <span className="text-zinc-500">No {group.name}</span>}
@@ -89,7 +89,7 @@ export function BoardView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                   setOver(null);
                 }}
                 onClick={() => openRow(row.id)}
-                className={`cursor-pointer space-y-1 rounded-md border border-zinc-200 bg-white p-2 text-sm shadow-xs hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950 ${
+                className={`cursor-pointer space-y-1 rounded-lg border border-zinc-200 bg-white p-3 text-sm shadow-sm transition-colors hover:border-brand-500 dark:border-zinc-700 dark:bg-board-card dark:hover:border-brand-500 ${
                   dragging?.row.id === row.id ? "opacity-50" : ""
                 }`}
               >

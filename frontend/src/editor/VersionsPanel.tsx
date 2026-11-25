@@ -112,7 +112,7 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-on-brand hover:bg-brand-700 disabled:opacity-50"
             >
               Save version
             </button>
@@ -165,7 +165,7 @@ export function VersionsPanel({ workspaceId, pageId, canEdit, liveState, onResto
                 {canEdit && (
                   <button
                     onClick={restore}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-on-brand hover:bg-brand-700"
                   >
                     Restore this version
                   </button>

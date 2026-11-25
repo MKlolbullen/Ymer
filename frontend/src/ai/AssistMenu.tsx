@@ -155,7 +155,7 @@ export function AssistMenu({
                     <button
                       type="submit"
                       disabled={!instruction.trim()}
-                      className="rounded-md bg-brand-600 px-2.5 text-sm font-medium text-white disabled:opacity-50"
+                      className="rounded-md bg-brand-600 px-2.5 text-sm font-medium text-on-brand disabled:opacity-50"
                     >
                       Go
                     </button>
@@ -185,7 +185,7 @@ export function AssistMenu({
                   {result.demo && <DemoNote />}
                   <div className="flex flex-wrap gap-1.5">
                     {canEdit && range && (
-                      <button onClick={replace} className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white hover:bg-brand-700">
+                      <button onClick={replace} className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-on-brand hover:bg-brand-700">
                         Replace selection
                       </button>
                     )}
@@ -195,7 +195,7 @@ export function AssistMenu({
                         className={
                           range
                             ? "rounded-md border border-zinc-300 px-2.5 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                            : "rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white hover:bg-brand-700"
+                            : "rounded-md bg-brand-600 px-2.5 py-1 font-medium text-on-brand hover:bg-brand-700"
                         }
                       >
                         Insert below
