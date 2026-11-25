@@ -184,7 +184,7 @@ function TreeItem({ node, depth, drag }: { node: Node; depth: number; drag: Drag
           to={`/w/${drag.workspaceId}/p/${page.id}`}
           draggable={false}
           className={({ isActive }) =>
-            `flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm ${isActive ? "font-medium text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400"}`
+            `flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm ${isActive ? "font-semibold text-brand-700 dark:text-brand-500" : "text-zinc-600 dark:text-zinc-400"}`
           }
         >
           <span aria-hidden>{PAGE_ICON[page.type]}</span>

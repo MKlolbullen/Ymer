@@ -1,3 +1,4 @@
+import { AppearancePicker } from "@/components/AppearancePicker";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, Outlet, useNavigate, useOutletContext, useParams } from "react-router";
 
@@ -54,7 +55,7 @@ export function NewWorkspace() {
           <button
             type="submit"
             disabled={create.isPending || !name.trim()}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
           >
             Create workspace
           </button>
@@ -64,6 +65,7 @@ export function NewWorkspace() {
             </button>
           )}
         </div>
+        <AppearancePicker />
       </form>
     </div>
   );
@@ -108,7 +110,7 @@ export function WorkspaceHome() {
               }}
               className={
                 type === "document"
-                  ? "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                  ? "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700"
                   : "rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               }
             >

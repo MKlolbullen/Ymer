@@ -33,6 +33,8 @@ what is planned.
 
 ## What works today
 
+**Appearance.** Choose System, Light, Dark, Darcula, Midnight Blue/Teal, or GitHub Dark from the Theme picker at the bottom of the workspace sidebar. On a phone, open the navigation menu to find it. System follows your device, and this browser remembers your choice across visits.
+
 ### Collaborative documents
 
 | Feature | What you get |
