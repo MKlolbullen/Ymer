@@ -13,7 +13,15 @@ from sqlalchemy.orm import Session
 
 from ymer.factory.package import changes_between
 from ymer.factory.stacks import STACKS
-from ymer.models import FactoryFile, FactoryProject, FactoryPush, FactoryRelease, User
+from ymer.models import (
+    ChangeStatus,
+    FactoryChange,
+    FactoryFile,
+    FactoryProject,
+    FactoryPush,
+    FactoryRelease,
+    User,
+)
 
 # Stacks whose release can be opened in the browser as it is.
 PREVIEWABLE = {"static-web"}
@@ -64,7 +72,26 @@ def create_release(
     )
     session.add(release)
     session.flush()
+    # The change requests built since the last release ship in this one.
+    for change in session.scalars(
+        select(FactoryChange).where(
+            FactoryChange.factory_id == project.page_id,
+            FactoryChange.status == ChangeStatus.BUILT.value,
+        )
+    ):
+        change.status, change.release_id = ChangeStatus.RELEASED.value, release.id
+    session.flush()
     return release
+
+
+def release_requests(session: Session, release: FactoryRelease) -> list[FactoryChange]:
+    return list(
+        session.scalars(
+            select(FactoryChange)
+            .where(FactoryChange.release_id == release.id)
+            .order_by(FactoryChange.number)
+        )
+    )
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -108,6 +135,9 @@ def release_json(session: Session, release: FactoryRelease) -> dict:
         "approved_by": _person(session, release.approved_by_id),
         "created_at": _iso(release.created_at),
         "preview": can_preview(release),
+        "requests": [
+            {"number": c.number, "title": c.title} for c in release_requests(session, release)
+        ],
         "pushes": [push_json(session, p) for p in pushes],
     }
 

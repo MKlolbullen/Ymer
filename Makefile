@@ -42,7 +42,7 @@ factory-worker: ## Run Factory builds (not needed with YMER_FACTORY_RUN_INLINE=t
 	cd $(BACKEND) && .venv/bin/flask --app wsgi factory-worker
 
 factory-images: ## Build the Docker images Factory builds run in
-	for stack in static-web python-cli flask-react; do \
+	for stack in static-web python-cli flask-react node-cli python-api; do \
 		docker build -t ymer-factory/$$stack:1 -f infra/factory/$$stack.Dockerfile infra/factory; \
 	done
 

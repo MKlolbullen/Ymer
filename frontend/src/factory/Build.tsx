@@ -7,8 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Page } from "@/lib/types";
 
+import { BudgetLine } from "./Changes";
 import {
   canBuild,
+  plannedChanges,
   runActive,
   useFactoryFile,
   useFactoryFiles,
@@ -193,6 +195,7 @@ export function Build({ page, factory: f }: { page: Page; factory: Factory }) {
   const open = canBuild(f);
   const sandbox = f.build.sandbox;
   const remaining = f.tasks ? f.tasks.count - (run?.tasks_done ?? 0) : 0;
+  const changes = plannedChanges(f);
 
   return (
     <Section
@@ -228,24 +231,33 @@ export function Build({ page, factory: f }: { page: Page; factory: Factory }) {
                 <button
                   onClick={() => startRun.mutate()}
                   disabled={startRun.isPending}
-                  className={run ? secondary : primary}
+                  className={run && !changes.length ? secondary : primary}
                 >
                   {startRun.isPending
                     ? "Starting…"
                     : !run
                       ? "Start the build"
-                      : run.status === "passed"
-                        ? "Build again"
-                        : "Continue the build"}
+                      : changes.length
+                        ? `Build ${changes.length === 1 ? "the change" : `${changes.length} changes`}`
+                        : run.status === "passed"
+                          ? "Build again"
+                          : "Continue the build"}
                 </button>
               )}
-              {!active && run && run.status !== "passed" && remaining > 0 && (
+              {!active && changes.length > 0 && (
+                <span className="text-xs text-zinc-500">
+                  Only the new tasks for {changes.map((c) => `#${c.number}`).join(", ")} are built; Done tasks and their
+                  files are kept.
+                </span>
+              )}
+              {!active && !changes.length && run && run.status !== "passed" && remaining > 0 && (
                 <span className="text-xs text-zinc-500">
                   Tasks already marked Done are kept; the build picks up from the next one.
                 </span>
               )}
             </div>
           )}
+          <BudgetLine page={page} factory={f} />
           {(startRun.isError || stopRun.isError) && (
             <p role="alert" className="mb-3 text-sm text-rose-600">
               {errorText(startRun.error ?? stopRun.error, "That did not work.")}

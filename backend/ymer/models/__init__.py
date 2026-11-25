@@ -12,6 +12,9 @@ from ymer.models.database import (
 from ymer.models.document import Comment, DocumentContent, DocumentVersion
 from ymer.models.factory import (
     ACTIVE_RUN_STATUSES,
+    ChangeOrigin,
+    ChangeStatus,
+    FactoryChange,
     FactoryFile,
     FactoryProject,
     FactoryPush,
@@ -43,6 +46,9 @@ __all__ = [
     "DatabaseView",
     "DocumentContent",
     "DocumentVersion",
+    "ChangeOrigin",
+    "ChangeStatus",
+    "FactoryChange",
     "FactoryFile",
     "FactoryProject",
     "FactoryPush",

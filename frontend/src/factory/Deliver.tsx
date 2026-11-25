@@ -75,6 +75,7 @@ export function Review({ page, factory: f }: { page: Page; factory: Factory }) {
   const ready = readyForReview(f) && !runActive(run);
   const pending = f.delivery.unreleased;
   const next = (latest?.number ?? 0) + 1;
+  const builtRequests = f.changes.filter((c) => c.status === "built");
 
   return (
     <Section
@@ -94,6 +95,17 @@ export function Review({ page, factory: f }: { page: Page; factory: Factory }) {
               <span className="font-medium">{summary(pending)}</span>.
             </p>
             <ChangeList changes={pending} />
+            {builtRequests.length > 0 && (
+              <p className="text-sm">
+                Change requests built:{" "}
+                {builtRequests.map((c, i) => (
+                  <span key={c.id}>
+                    {i > 0 && ", "}#{c.number} {c.title}
+                  </span>
+                ))}
+                .
+              </p>
+            )}
             {f.can_edit && (
               <>
                 <label className="block text-sm">
@@ -319,6 +331,11 @@ export function Deliver({ page, factory: f }: { page: Page; factory: Factory }) 
             </div>
             {latest.notes && (
               <p className="mt-2 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">{latest.notes}</p>
+            )}
+            {latest.requests.length > 0 && (
+              <p className="mt-2 text-zinc-600 dark:text-zinc-300">
+                Includes {latest.requests.map((r) => `#${r.number} ${r.title}`).join(", ")}.
+              </p>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={() => download(latest)} className={primary}>

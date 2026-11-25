@@ -11,7 +11,11 @@ then executes it (``execute_run``):
    sandbox) until it calls ``finish_task``,
 4. mark the task Done and carry its summary into the next task's notes.
 
-The run stops at the first task that is blocked or out of steps, when a budget runs out,
+Tasks already Done are skipped, so after change requests are planned (stage F5) a build
+works only on the new tasks, starting from the files the last build left.
+
+The run stops at the first task that is blocked or out of steps, when a budget runs out
+(its own, or what was left of the workspace's monthly budget when it started),
 or when someone presses Stop (checked between steps). Every step is committed and logged
 as a ``FactoryRunEvent``, so the page can follow along while the run works.
 """
@@ -33,8 +37,10 @@ from ymer.factory.sandbox import Sandbox, SandboxError, clip
 from ymer.factory.sandbox.docker import safe_path
 from ymer.factory.stacks import STACKS
 from ymer.models import (
+    ChangeStatus,
     DatabaseProperty,
     DatabaseRow,
+    FactoryChange,
     FactoryFile,
     FactoryProject,
     FactoryRun,
@@ -195,6 +201,8 @@ class Budgets:
     task_steps: int
     max_tokens: int
     command_timeout: int
+    # The token cap is what was left of the workspace's monthly budget, not the run's own.
+    workspace_capped: bool = False
 
 
 class Workbench:
@@ -385,6 +393,11 @@ def _work_on_task(
         if run.steps >= budgets.max_steps:
             raise RunFailed(f"The build used its {budgets.max_steps} steps.")
         if run.tokens >= budgets.max_tokens:
+            if budgets.workspace_capped:
+                raise RunFailed(
+                    "The workspace's monthly Factory budget ran out "
+                    f"({budgets.max_tokens:,} tokens were left when this build started)."
+                )
             raise RunFailed(f"The build used its budget of {budgets.max_tokens:,} tokens.")
         turn = agent.step()
         run.steps += 1
@@ -439,11 +452,15 @@ def execute_run(
     if run.status == RunStatus.QUEUED.value:
         run.status, run.started_at = RunStatus.RUNNING.value, now()
         session.commit()
+    cap = run.context.get("max_tokens")
     budgets = Budgets(
         max_steps=settings.factory_max_steps,
         task_steps=settings.factory_task_steps,
-        max_tokens=settings.factory_max_tokens,
+        max_tokens=min(settings.factory_max_tokens, cap)
+        if cap is not None
+        else (settings.factory_max_tokens),
         command_timeout=settings.factory_command_timeout,
+        workspace_capped=cap is not None and cap < settings.factory_max_tokens,
     )
     project = session.get(FactoryProject, run.factory_id)
     tasks: list[dict] = [dict(t) for t in run.context.get("tasks", [])]
@@ -534,8 +551,17 @@ def execute_run(
     run.status = final.value
     run.summary, run.error = summary, error
     run.finished_at = now()
-    if final is RunStatus.PASSED and project is not None and project.stage == FactoryStage.PLANNED:
-        project.stage = FactoryStage.BUILT.value
+    if final is RunStatus.PASSED and project is not None:
+        if project.stage == FactoryStage.PLANNED:
+            project.stage = FactoryStage.BUILT.value
+        # Every task is Done, so the change requests planned into them are built.
+        for change in session.scalars(
+            select(FactoryChange).where(
+                FactoryChange.factory_id == project.page_id,
+                FactoryChange.status == ChangeStatus.PLANNED.value,
+            )
+        ):
+            change.status = ChangeStatus.BUILT.value
     session.commit()
     log_event(
         session,

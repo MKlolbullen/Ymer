@@ -107,6 +107,9 @@ class Settings(BaseSettings):
     factory_max_steps: int = 300
     factory_task_steps: int = 30
     factory_max_tokens: int = 3_000_000
+    # Tokens all Factory builds in one workspace may use per calendar month (UTC), unless
+    # the workspace's owner sets its own limit. 0 means no limit.
+    factory_workspace_monthly_tokens: int = 20_000_000
     # Delivery (F4). Releases are pushed over HTTPS to these hosts only, with a token the
     # person types in for that push (never stored).
     factory_git_hosts: str = "github.com,gitlab.com,bitbucket.org,codeberg.org"

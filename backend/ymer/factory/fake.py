@@ -131,6 +131,16 @@ STACK_COMPONENTS = {
         ("API", "api", "Flask JSON endpoints that check input and apply the rules."),
         ("Database", "database", "SQLite through SQLAlchemy, with a migration per change."),
     ],
+    "node-cli": [
+        ("Command line", "cli", "Parses arguments with node:util and prints results."),
+        ("Core logic", "library", "The rules of the app as plain ES modules."),
+        ("Storage", "storage", "JSON files in the user's data folder."),
+    ],
+    "python-api": [
+        ("API", "api", "FastAPI routes that check input and apply the rules."),
+        ("Core logic", "library", "The rules of the app, free of HTTP."),
+        ("Database", "database", "SQLite through SQLAlchemy."),
+    ],
 }
 UI_WORDS = r"\b(show|shows|display|list|view|see|page|screen|history|chart|dashboard)\b"
 
@@ -151,8 +161,14 @@ def _brief_sections(text: str) -> dict[str, list[tuple[str, str]]]:
 
 def _pick_stack(text: str) -> tuple[str, str]:
     lowered = text.lower()
+    if re.search(r"\b(node(\.js)?|npm|javascript)\b", lowered) and re.search(
+        r"\b(cli|command[- ]line|terminal)\b", lowered
+    ):
+        return "node-cli", "The brief describes a terminal tool for a JavaScript team."
     if re.search(r"\b(cli|command[- ]line|terminal|script)\b", lowered):
         return "python-cli", "The brief describes a tool people run from a terminal."
+    if re.search(r"\b(json api|rest api|webhooks?|endpoints?|integrations?)\b", lowered):
+        return "python-api", "Other apps and scripts call it, so it is a JSON API."
     shared = r"\b(vote|votes|team|people|share|shared|history|accounts?|users|office)\b"
     if re.search(shared, lowered):
         return (
@@ -233,14 +249,15 @@ def fake_architecture(payload: dict) -> str:
     )
 
     interfaces = []
-    if stack == "flask-react":
+    if stack in ("flask-react", "python-api"):
+        prefix = "/api" if stack == "flask-react" else ""
         for e in entities:
             plural = e["entity"].lower() + "s"
             interfaces += [
-                {"name": f"GET /api/{plural}", "purpose": f"List {plural}."},
-                {"name": f"POST /api/{plural}", "purpose": f"Add a {e['entity'].lower()}."},
+                {"name": f"GET {prefix}/{plural}", "purpose": f"List {plural}."},
+                {"name": f"POST {prefix}/{plural}", "purpose": f"Add a {e['entity'].lower()}."},
             ]
-    elif stack == "python-cli":
+    elif stack in ("python-cli", "node-cli"):
         for name, _detail, _p in features[:8]:
             verb = name.split()[0].lower() if name.split() else "run"
             interfaces.append({"name": f"app {verb}", "purpose": name})
@@ -276,4 +293,62 @@ STACKS_NAMES = {
     "static-web": "static web",
     "python-cli": "Python package",
     "flask-react": "Flask + React",
+    "node-cli": "Node.js package",
+    "python-api": "FastAPI",
 }
+
+
+# --- stage F5: change requests and change plans --------------------------------------
+
+
+def _diff_lines(diff: str, sign: str) -> list[str]:
+    out = []
+    for line in diff.splitlines():
+        if line.startswith(sign) and not line.startswith("@@"):
+            text = re.sub(r"^[-*•\d.)\s]+|\[[ x]\]\s*", "", line[1:].strip()).strip()
+            if len(text) > 2:
+                out.append(text)
+    return out
+
+
+def fake_spec_changes(payload: dict) -> str:
+    """One change request per added line (and one per removed line) in the edits."""
+    changes = []
+    for item in payload.get("diffs", []):
+        source = item.get("title") or "the notes"
+        added = _diff_lines(item.get("diff", ""), "+")
+        removed = _diff_lines(item.get("diff", ""), "-")
+        added_set = {a.casefold() for a in added}
+        for line in added[:5]:
+            name = line.partition(": ")[0]
+            changes.append(
+                {"title": name[:1].upper() + name[1:80], "detail": f"Added to {source}: {line}"}
+            )
+        for line in removed[:3]:
+            if line.casefold() not in added_set:
+                changes.append(
+                    {"title": f"Remove: {line[:70]}", "detail": f"Removed from {source}: {line}"}
+                )
+    return json.dumps({"changes": changes})
+
+
+def fake_change_plan(payload: dict) -> str:
+    """One task per change request, in the component that fits it best."""
+    components = payload.get("components") or []
+    ui = next((c for c in components if re.search(r"\b(ui|page|web)\b", c.lower())), None)
+    main = components[1] if len(components) > 1 else (components[0] if components else "")
+    tasks = []
+    for change in payload.get("changes", []):
+        title = change.get("title") or f"Change {change.get('number')}"
+        tasks.append(
+            {
+                "title": title,
+                "component": ui if ui and re.search(UI_WORDS, title.lower()) else main,
+                "priority": "must",
+                "size": "S",
+                "detail": change.get("detail") or title,
+                "depends_on": [],
+                "change": change.get("number"),
+            }
+        )
+    return json.dumps({"tasks": tasks})

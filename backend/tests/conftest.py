@@ -107,4 +107,4 @@ def db(app, migrated_database):
         db_session.remove()
         outer.rollback()
         connection.close()
-        SessionLocal.configure(bind=engine, join_transaction_mode="conservative_savepoint")
+        SessionLocal.configure(bind=engine, join_transaction_mode="conditional_savepoint")
