@@ -8,6 +8,7 @@ from ymer.ai import AiError, ChatRequest
 from ymer.ai.personal import ENDPOINTS, Provider, profile_chat
 from ymer.app import settings_for
 from ymer.db import SessionLocal, db_session, get_engine
+from ymer.models.audit import AuditEvent
 from ymer.models.user import User, UserAiProfile
 
 PATH = "/api/settings/ai"
@@ -15,10 +16,11 @@ PATH = "/api/settings/ai"
 
 @pytest.fixture
 def accounts(app):
-    # These endpoints only need the two account tables, so they can run without pgvector.
+    # These endpoints only need the account tables, so they can run without pgvector.
     engine = create_engine("sqlite://")
     User.__table__.create(engine)
     UserAiProfile.__table__.create(engine)
+    AuditEvent.__table__.create(engine)
     SessionLocal.configure(bind=engine)
     try:
         yield make_user(app, "alice"), make_user(app, "bob")

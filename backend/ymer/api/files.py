@@ -9,21 +9,27 @@ Documents refer to files by id (an image node stores ``fileId``), never by URL, 
 viewer gets a fresh presigned URL after a permission check.
 """
 
+import logging
 import re
 import unicodedata
 import uuid
 from urllib.parse import quote
 
+from botocore.exceptions import BotoCoreError, ClientError
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import select
-from werkzeug.exceptions import BadRequest, NotFound, RequestEntityTooLarge
+from werkzeug.exceptions import BadGateway, BadRequest, NotFound, RequestEntityTooLarge
 
+from ymer import audit, ratelimit
 from ymer.api.workspaces import scope_for
 from ymer.app import settings_for
 from ymer.auth import current_user, login_required
 from ymer.db import db_session
 from ymer.extensions import get_public_s3, get_s3
+from ymer.files import delete_stored_objects
 from ymer.models import File, Page, Role
+
+log = logging.getLogger(__name__)
 
 files_bp = Blueprint(
     "files", __name__, url_prefix="/workspaces/<uuid:workspace_id>/pages/<uuid:page_id>/files"
@@ -128,13 +134,31 @@ def upload_file(workspace_id: uuid.UUID, page_id: uuid.UUID):
         size_bytes=size,
         uploaded_by_id=current_user().id,
     )
-    get_s3().upload_fileobj(
-        stream,
-        settings_for(current_app).s3_bucket,
-        file.storage_key,
-        ExtraArgs={"ContentType": file.content_type},
+    ratelimit.hit(
+        "upload",
+        str(current_user().id),
+        settings_for(current_app).rate_limit_uploads,
+        60,
+        "Too many uploads. Wait a minute and try again.",
     )
+    try:
+        get_s3().upload_fileobj(
+            stream,
+            settings_for(current_app).s3_bucket,
+            file.storage_key,
+            ExtraArgs={"ContentType": file.content_type},
+        )
+    except (BotoCoreError, ClientError) as exc:
+        log.exception("Upload to object storage failed")
+        raise BadGateway("File storage is not reachable right now. Try again shortly.") from exc
     db_session.add(file)
+    audit.record(
+        "file.upload",
+        actor=current_user(),
+        workspace_id=page.workspace_id,
+        target=("file", file.id),
+        details={"page_id": str(page.id), "filename": file.filename, "size": size},
+    )
     db_session.commit()
     return jsonify(file=file_json(file, url=presigned_url(file))), 201
 
@@ -152,7 +176,17 @@ def get_file(workspace_id: uuid.UUID, page_id: uuid.UUID, file_id: uuid.UUID):
 def delete_file(workspace_id: uuid.UUID, page_id: uuid.UUID, file_id: uuid.UUID):
     page = scope_for(workspace_id).get_page(page_id, Role.EDITOR)
     file = _get_file(page, file_id)
-    get_s3().delete_object(Bucket=settings_for(current_app).s3_bucket, Key=file.storage_key)
+    audit.record(
+        "file.delete",
+        actor=current_user(),
+        workspace_id=page.workspace_id,
+        target=("file", file.id),
+        details={"page_id": str(page.id), "filename": file.filename},
+    )
+    key = file.storage_key
     db_session.delete(file)
     db_session.commit()
+    # The row goes first: a leftover object is only wasted space, but a row whose object
+    # is gone would be a broken file.
+    delete_stored_objects([key])
     return "", 204

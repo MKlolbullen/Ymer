@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     s3_secret_key: str = "ymer-dev-secret"
     s3_bucket: str = "ymer"
     s3_region: str = "us-east-1"
+    # Seconds an upload or download to S3 may wait for the storage server.
+    s3_timeout: float = 30.0
 
     # Comma-separated in the environment: YMER_CORS_ORIGINS=http://a,http://b
     cors_origins: Annotated[list[str], NoDecode] = Field(
@@ -46,6 +48,31 @@ class Settings(BaseSettings):
     # JWT lifetimes in seconds. Access tokens are short-lived; refresh tokens mint new ones.
     jwt_access_ttl: int = 15 * 60
     jwt_refresh_ttl: int = 30 * 24 * 60 * 60
+
+    # Browser sessions live in httpOnly cookies (ymer.auth.cookies). Secure cookies are only
+    # sent over HTTPS; unset means "Secure in production". Leave the domain unset unless the
+    # API and the app are on different subdomains of one site (then e.g. ".example.com").
+    cookie_secure: bool | None = None
+    cookie_domain: str | None = None
+    # Number of reverse proxies in front of Flask whose X-Forwarded-For / -Proto headers
+    # are trusted. Rate limits and the audit log use the client address they report.
+    trusted_proxies: int = 0
+
+    # --- Rate limits (ymer.ratelimit), counted in Redis -------------------------------
+    rate_limit_enabled: bool = True
+    # Any /api request, per signed-in user (or per address when signed out), per minute.
+    rate_limit_api: int = 600
+    # Sign-in attempts per address per minute, and failed sign-ins per email per 15 minutes.
+    rate_limit_login: int = 20
+    rate_limit_login_failures: int = 10
+    # New accounts per address per hour.
+    rate_limit_register: int = 10
+    # Uploads per user per minute, and Factory git pushes per user per hour.
+    rate_limit_uploads: int = 60
+    rate_limit_git_push: int = 20
+
+    # Audit events older than this are removed by `flask --app wsgi prune-audit`.
+    audit_retention_days: int = 365
 
     # Browser-facing S3 endpoint for presigned download URLs, when it differs from
     # s3_endpoint_url (e.g. the backend reaches MinIO as http://minio:9000 inside Docker).
@@ -115,6 +142,8 @@ class Settings(BaseSettings):
     factory_git_hosts: str = "github.com,gitlab.com,bitbucket.org,codeberg.org"
     # Also allow file:// remotes (tests and local experiments only).
     factory_git_allow_local: bool = False
+    # CA bundle git should trust, for a self-hosted Git server with a private certificate.
+    factory_git_ca_bundle: str | None = None
     factory_git_timeout: int = 120
     # How long a preview link works.
     factory_preview_minutes: int = 60

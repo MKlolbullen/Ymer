@@ -77,7 +77,7 @@ RUN = {
     "static-web": (
         "Open `index.html` in a browser, or serve the folder with any static file server:\n\n"
         "```sh\npython -m http.server 8000\n```\n\nRun the tests (Node 22):\n\n"
-        "```sh\nnode --test tests/\n```\n"
+        "```sh\nnode --test 'tests/**/*.test.mjs'\n```\n"
     ),
     "python-cli": (
         "```sh\npython -m venv .venv && . .venv/bin/activate\npip install . pytest\n"
@@ -92,7 +92,8 @@ RUN = {
         "As one container: `docker build -t app . && docker run --rm -p 8000:8000 app`.\n"
     ),
     "node-cli": (
-        "```sh\nnode bin/cli.mjs --help\nnode --test tests/\nnpm link   # puts the command on "
+        "```sh\nnode bin/cli.mjs --help\nnode --test 'tests/**/*.test.mjs'\n"
+        "npm link   # puts the command on "
         "your PATH\n```\n\nOr as a container: `docker build -t app . && docker run --rm app "
         "--help`.\n"
     ),

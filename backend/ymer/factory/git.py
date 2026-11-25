@@ -79,6 +79,7 @@ def push_files(
     author: tuple[str, str],
     timeout: int,
     git_bin: str = "git",
+    ca_bundle: str | None = None,
 ) -> PushResult:
     with tempfile.TemporaryDirectory(prefix="ymer-git-") as tmp:
         home = Path(tmp) / "home"
@@ -101,6 +102,12 @@ def push_files(
             "GIT_COMMITTER_NAME": author[0],
             "GIT_COMMITTER_EMAIL": author[1],
         }
+        # An outbound proxy, if the server needs one to reach the Git host.
+        for name in ("HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"):
+            if name in os.environ:
+                env[name] = os.environ[name]
+        if ca_bundle:  # a self-hosted Git server with a private certificate authority
+            env["GIT_SSL_CAINFO"] = ca_bundle
 
         def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
             try:

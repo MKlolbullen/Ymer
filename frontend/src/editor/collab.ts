@@ -2,7 +2,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 
-import { accessToken } from "@/lib/api";
+import { collabToken } from "@/lib/api";
 
 /** The collab service is proxied at /collab in development (vite.config.ts). */
 export function collabUrl(): string {
@@ -17,8 +17,8 @@ export type CollabSession = { doc: Y.Doc; provider: HocuspocusProvider };
 export type Notice = "comments-changed" | "versions-changed";
 
 /**
- * One Yjs document and Hocuspocus connection per open page. The token is fetched on
- * every (re)connect, so an expired access token is refreshed first.
+ * One Yjs document and Hocuspocus connection per open page. A short-lived collab token
+ * is fetched on every (re)connect (the login cookies are not readable from here).
  */
 export function useCollabSession(pageId: string, onNotice: (notice: Notice) => void) {
   const [session, setSession] = useState<CollabSession | null>(null);
@@ -34,7 +34,7 @@ export function useCollabSession(pageId: string, onNotice: (notice: Notice) => v
       url: collabUrl(),
       name: pageId,
       document: doc,
-      token: async () => (await accessToken()) ?? "",
+      token: collabToken,
       onStatus: ({ status }) => setStatus((s) => (s === "denied" ? s : (status as CollabStatus))),
       onSynced: ({ state }) => setSynced(state),
       onAuthenticated: ({ scope }) => setReadOnly(scope === "readonly"),

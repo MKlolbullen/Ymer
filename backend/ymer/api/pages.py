@@ -23,6 +23,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, Forbidden, NotFound
 
+from ymer import audit
 from ymer.ai.indexing import mark_dirty
 from ymer.api.validation import parse_body
 from ymer.api.workspaces import scope_for
@@ -170,6 +171,13 @@ def delete_page(workspace_id: uuid.UUID, page_id: uuid.UUID):
     page = scope.get_page(page_id, Role.EDITOR)
     subtree = scope.subtree_ids(page.id)
     keys = db_session.scalars(select(File.storage_key).where(File.page_id.in_(subtree))).all()
+    audit.record(
+        "page.delete",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("page", page.id),
+        details={"title": page.title, "pages": len(subtree), "files": len(keys)},
+    )
     db_session.delete(page)
     db_session.commit()
     delete_stored_objects(keys)
@@ -270,6 +278,14 @@ def _grant(scope: WorkspaceScope, page: Page, target: User | None, role: Role) -
     if grant is None:
         grant = PagePermission(page_id=page.id, user_id=target.id, granted_by_id=current_user().id)
         db_session.add(grant)
+    if grant.role is not role:
+        audit.record(
+            "page.share",
+            actor=current_user(),
+            workspace_id=page.workspace_id,
+            target=("page", page.id),
+            details={"user_id": str(target.id), "email": target.email, "role": role.value},
+        )
     grant.role = role
     db_session.commit()
     return {
@@ -314,6 +330,13 @@ def remove_grant(workspace_id: uuid.UUID, page_id: uuid.UUID, user_id: uuid.UUID
     )
     if grant is None:
         raise NotFound("Permission not found.")
+    audit.record(
+        "page.unshare",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("page", page.id),
+        details={"user_id": str(user_id), "role": grant.role.value},
+    )
     db_session.delete(grant)
     db_session.commit()
     return "", 204

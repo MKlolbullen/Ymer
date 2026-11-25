@@ -37,7 +37,7 @@ STACKS: dict[str, Stack] = {
             test_command="node --test",
             delivers="A folder of static files to host anywhere",
             image="ymer-factory/static-web:1",
-            sandbox_test="node --test tests/",
+            sandbox_test="node --test 'tests/**/*.test.mjs'",
             layout=(
                 "index.html and styles.css at the root; logic as ES modules in src/ that do "
                 "not touch the DOM where possible; tests in tests/*.test.mjs using node:test "
@@ -87,7 +87,7 @@ STACKS: dict[str, Stack] = {
             test_command="node --test",
             delivers="An npm package with a bin command",
             image="ymer-factory/node-cli:1",
-            sandbox_test="node --test tests/",
+            sandbox_test="node --test 'tests/**/*.test.mjs'",
             layout=(
                 "package.json (type module, a bin entry pointing at bin/cli.mjs); the command "
                 "in bin/cli.mjs, parsing arguments with node:util parseArgs and calling logic "

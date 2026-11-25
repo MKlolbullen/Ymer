@@ -7,7 +7,8 @@ should not route ``/internal`` from the internet at all; the secret is a second 
 Every page type edited live over Yjs (documents, mind maps, drawings; see
 ``LIVE_PAGE_TYPES``) goes through these routes; the collab service does not care which.
 
-- ``POST /internal/collab/authorize``      {token, document} -> who connects and can they write
+- ``POST /internal/collab/authorize``      {token, document} -> who connects and can they write.
+  ``token`` is a collab token (``POST /api/auth/collab-token``) or an access token.
 - ``GET  /internal/collab/documents/<id>`` current Yjs state (204 when there is none yet)
 - ``PUT  /internal/collab/documents/<id>`` store Yjs state; ``X-Ymer-User-Id`` = last editor.
   Also refreshes the page's search text and outgoing links (``ymer.content``).
@@ -64,7 +65,10 @@ def _document_page(page_id: uuid.UUID) -> Page:
 @internal_bp.post("/authorize")
 def authorize():
     body = parse_body(AuthorizeBody)
-    user = load_user_from_token(body.token, "access")
+    try:
+        user = load_user_from_token(body.token, "collab")
+    except Unauthorized:
+        user = load_user_from_token(body.token, "access")  # API clients
     page_id = parse_document_name(body.document)
     page = db_session.get(Page, page_id)
     if page is None:

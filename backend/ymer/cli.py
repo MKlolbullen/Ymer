@@ -81,3 +81,12 @@ def register_cli(app: Flask) -> None:
         count = enqueue_workspace(db_session, uuid.UUID(workspace_id) if workspace_id else None)
         db_session.commit()
         click.echo(f"Queued {count} page(s). Run `flask --app wsgi ai-worker` to index them.")
+
+    @app.cli.command("prune-audit")
+    @click.option("--days", type=int, default=None, help="Keep this many days (default: setting).")
+    def prune_audit(days: int | None) -> None:
+        """Delete audit events older than YMER_AUDIT_RETENTION_DAYS."""
+        from ymer.audit import prune
+
+        keep = days if days is not None else settings_for(current_app).audit_retention_days
+        click.echo(f"Deleted {prune(keep)} audit event(s) older than {keep} days.")

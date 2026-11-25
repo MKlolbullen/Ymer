@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from werkzeug.exceptions import Conflict, NotFound
 
+from ymer import audit
 from ymer.ai import AiError, ChatRequest
 from ymer.ai.indexing import mark_dirty
 from ymer.ai.personal import user_ai
@@ -300,6 +301,16 @@ def set_budget(workspace_id: uuid.UUID):
     scope = scope_for(workspace_id)
     scope.require_workspace_role(Role.OWNER)
     body = parse_body(BudgetBody)
+    if scope.workspace.factory_monthly_tokens != body.monthly_tokens:
+        audit.record(
+            "factory.budget",
+            actor=current_user(),
+            workspace_id=workspace_id,
+            details={
+                "from": scope.workspace.factory_monthly_tokens,
+                "to": body.monthly_tokens,
+            },
+        )
     scope.workspace.factory_monthly_tokens = body.monthly_tokens
     db_session.flush()
     data = budget_json(db_session, scope.workspace, settings_for(current_app), can_edit=True)

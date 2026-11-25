@@ -8,6 +8,8 @@
 - ``GET    /api/workspaces/<id>/members``            any member
 - ``POST   /api/workspaces/<id>/members``            owner; adds an existing user by email
 - ``PATCH  /api/workspaces/<id>/members/<user_id>``  owner; change role
+- ``GET    /api/workspaces/<id>/audit``              owner; the audit log, newest first
+  (``?before=<iso time>&limit=<1..200>&action=<prefix>``)
 - ``DELETE /api/workspaces/<id>/members/<user_id>``  owner, or the member leaving; also
   removes that user's page grants in the workspace
 
@@ -15,16 +17,26 @@ A workspace always keeps at least one owner.
 """
 
 import uuid
+from datetime import datetime
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete, func, select
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
+from ymer import audit
 from ymer.api.validation import parse_body
 from ymer.auth import current_user, login_required
 from ymer.db import db_session
-from ymer.models import Page, PagePermission, Role, User, Workspace, WorkspaceMember
+from ymer.models import (
+    AuditEvent,
+    Page,
+    PagePermission,
+    Role,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from ymer.permissions import WorkspaceScope, workspaces_for_user
 
 workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/workspaces")
@@ -104,6 +116,8 @@ def create_workspace():
     workspace = Workspace(name=body.name.strip(), created_by_id=user.id)
     workspace.members.append(WorkspaceMember(user_id=user.id, role=Role.OWNER))
     db_session.add(workspace)
+    db_session.flush()
+    audit.record("workspace.create", actor=user, workspace_id=workspace.id)
     db_session.commit()
     return jsonify(workspace=workspace_json(workspace, Role.OWNER)), 201
 
@@ -121,7 +135,15 @@ def update_workspace(workspace_id: uuid.UUID):
     scope = scope_for(workspace_id)
     scope.require_workspace_role(Role.OWNER)
     body = parse_body(WorkspaceBody)
+    old = scope.workspace.name
     scope.workspace.name = body.name.strip()
+    if old != scope.workspace.name:
+        audit.record(
+            "workspace.rename",
+            actor=current_user(),
+            workspace_id=workspace_id,
+            details={"from": old, "to": scope.workspace.name},
+        )
     db_session.commit()
     return jsonify(workspace=workspace_json(scope.workspace, scope.role))
 
@@ -131,6 +153,12 @@ def update_workspace(workspace_id: uuid.UUID):
 def delete_workspace(workspace_id: uuid.UUID):
     scope = scope_for(workspace_id)
     scope.require_workspace_role(Role.OWNER)
+    audit.record(
+        "workspace.delete",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        details={"name": scope.workspace.name},
+    )
     db_session.delete(scope.workspace)
     db_session.commit()
     return "", 204
@@ -168,6 +196,13 @@ def add_member(workspace_id: uuid.UUID):
         raise Conflict("This user is already a member.")
     member = WorkspaceMember(workspace_id=workspace_id, user_id=user.id, role=body.role)
     db_session.add(member)
+    audit.record(
+        "member.add",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("user", user.id),
+        details={"email": user.email, "role": body.role.value},
+    )
     db_session.commit()
     return jsonify(member=member_json(member, user)), 201
 
@@ -183,6 +218,14 @@ def update_member(workspace_id: uuid.UUID, user_id: uuid.UUID):
     demoting_owner = member.role is Role.OWNER and body.role is not Role.OWNER
     if demoting_owner and _owner_count(workspace_id) == 1:
         raise BadRequest("A workspace needs at least one owner.")
+    if member.role is not body.role:
+        audit.record(
+            "member.role",
+            actor=current_user(),
+            workspace_id=workspace_id,
+            target=("user", user_id),
+            details={"from": member.role.value, "to": body.role.value},
+        )
     member.role = body.role
     db_session.commit()
     return jsonify(member=member_json(member, db_session.get(User, user_id)))
@@ -200,6 +243,13 @@ def remove_member(workspace_id: uuid.UUID, user_id: uuid.UUID):
     member = _get_member(workspace_id, user_id)
     if member.role is Role.OWNER and _owner_count(workspace_id) == 1:
         raise BadRequest("A workspace needs at least one owner.")
+    audit.record(
+        "member.leave" if user_id == current_user().id else "member.remove",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("user", user_id),
+        details={"role": member.role.value},
+    )
     db_session.delete(member)
     # Leaving a workspace also drops the user's page grants there; otherwise they would
     # keep access as a guest.
@@ -213,3 +263,28 @@ def remove_member(workspace_id: uuid.UUID, user_id: uuid.UUID):
     )
     db_session.commit()
     return "", 204
+
+
+@workspaces_bp.get("/<uuid:workspace_id>/audit")
+@login_required
+def audit_log(workspace_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    scope.require_workspace_role(Role.OWNER)
+    limit = max(1, min(request.args.get("limit", default=50, type=int), 200))
+    query = (
+        select(AuditEvent, User)
+        .outerjoin(User, User.id == AuditEvent.actor_id)
+        .where(AuditEvent.workspace_id == workspace_id)
+    )
+    if before := request.args.get("before"):
+        try:
+            query = query.where(AuditEvent.created_at < datetime.fromisoformat(before))
+        except ValueError as exc:
+            raise BadRequest("before must be an ISO 8601 time.") from exc
+    if action := request.args.get("action"):
+        query = query.where(AuditEvent.action.startswith(action[:64], autoescape=True))
+    rows = db_session.execute(
+        query.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc()).limit(limit + 1)
+    ).all()
+    events = [audit.event_json(e, u) for e, u in rows[:limit]]
+    return jsonify(events=events, more=len(rows) > limit)

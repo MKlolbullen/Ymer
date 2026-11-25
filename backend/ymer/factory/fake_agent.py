@@ -102,7 +102,7 @@ def task_files(stack: str, title: str, detail: str, setup: bool, app: str) -> di
                     f'{{\n  "name": "{slug(app).replace("_", "-")}",\n  "version": "0.1.0",\n'
                     '  "type": "module",\n'
                     f'  "bin": {{ "{slug(app).replace("_", "-")}": "bin/cli.mjs" }},\n'
-                    '  "scripts": { "test": "node --test tests/" }\n}\n'
+                    '  "scripts": { "test": "node --test \'tests/**/*.test.mjs\'" }\n}\n'
                 ),
                 "bin/cli.mjs": (
                     "#!/usr/bin/env node\nimport { parseArgs } from 'node:util';\n\n"

@@ -17,7 +17,7 @@ def init_redis(app: Flask, settings: Settings) -> None:
     )
 
 
-def _s3_client(settings: Settings, endpoint_url: str | None):
+def _s3_client(settings: Settings, endpoint_url: str | None, timeout: float):
     return boto3.client(
         "s3",
         endpoint_url=endpoint_url,
@@ -27,19 +27,25 @@ def _s3_client(settings: Settings, endpoint_url: str | None):
         config=BotoConfig(
             signature_version="s3v4",
             s3={"addressing_style": "path"},
-            connect_timeout=settings.health_check_timeout,
-            read_timeout=settings.health_check_timeout,
-            retries={"max_attempts": 1},
+            connect_timeout=min(timeout, 10),
+            read_timeout=timeout,
+            retries={"max_attempts": 1 if timeout <= settings.health_check_timeout else 3},
         ),
     )
 
 
 def init_s3(app: Flask, settings: Settings) -> None:
-    app.extensions["s3"] = _s3_client(settings, settings.s3_endpoint_url)
+    app.extensions["s3"] = _s3_client(settings, settings.s3_endpoint_url, settings.s3_timeout)
+    # The readiness check must answer quickly, so it gets a client with short timeouts.
+    app.extensions["s3_health"] = _s3_client(
+        settings, settings.s3_endpoint_url, settings.health_check_timeout
+    )
     # Presigned URLs embed the host they were signed for, so sign browser-facing ones
     # with the public endpoint when it differs.
     public = settings.s3_public_endpoint_url
-    app.extensions["s3_public"] = _s3_client(settings, public) if public else app.extensions["s3"]
+    app.extensions["s3_public"] = (
+        _s3_client(settings, public, settings.s3_timeout) if public else app.extensions["s3"]
+    )
 
 
 def get_redis() -> redis.Redis:
@@ -48,6 +54,10 @@ def get_redis() -> redis.Redis:
 
 def get_s3():
     return current_app.extensions["s3"]
+
+
+def get_health_s3():
+    return current_app.extensions["s3_health"]
 
 
 def get_public_s3():
