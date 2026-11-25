@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from "react-router";
 import * as Y from "yjs";
 
-import { useTheme } from "@/charts/palette";
+import { useColorMode } from "@/lib/appearance";
 import { PAGE_ICON } from "@/components/PageTree";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { colorFor, notify, useCollabSession, type CollabSession } from "@/editor/collab";
@@ -147,7 +147,7 @@ function PagePicker({ pages, current, onPick, onClose, anchor }: { pages: Page[]
 
 function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { page: Page; session: CollabSession; synced: boolean; readOnly: boolean; panel: CanvasPanel; onPanel: (p: CanvasPanel) => void }) {
   const me = useSession()!.user;
-  const theme = useTheme();
+  const theme = useColorMode();
   const navigate = useNavigate();
   const doc = session.doc;
   const nodes = useNodes(doc);

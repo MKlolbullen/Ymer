@@ -54,7 +54,7 @@ export function ShareDialog({ page }: { page: Page }) {
             </option>
           ))}
         </select>
-        <button type="submit" disabled={share.isPending} className="rounded-md bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+        <button type="submit" disabled={share.isPending} className="rounded-md bg-brand-600 px-3 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60">
           Share
         </button>
       </form>

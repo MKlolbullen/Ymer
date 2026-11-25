@@ -1,12 +1,88 @@
 @import "tailwindcss";
 
-/* Design tokens. Extend here as the design system grows (Phase 0, step 5). */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 @theme {
+  --color-on-brand: #fff;
+  --color-board-card: #18181b;
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --color-brand-50: oklch(0.962 0.018 272.314);
   --color-brand-500: oklch(0.585 0.233 277.117);
   --color-brand-600: oklch(0.511 0.262 276.966);
   --color-brand-700: oklch(0.457 0.24 277.023);
+}
+
+/* The existing Tailwind utilities, including portalled dialogs, inherit these ramps. */
+:root { color-scheme: light; }
+:root[data-mode="dark"] { color-scheme: dark; }
+
+:root[data-palette="darcula"] {
+  --color-zinc-950: #2b2b2b;
+  --color-zinc-900: #313335;
+  --color-zinc-800: #424548;
+  --color-zinc-700: #515355;
+  --color-zinc-500: #a8a199;
+  --color-zinc-400: #b5aea3;
+  --color-zinc-300: #d1c9bf;
+  --color-zinc-200: #e1dacf;
+  --color-zinc-100: #f0e9de;
+  --color-board-card: #3c3f41;
+  --color-brand-50: #493e2e;
+  --color-brand-500: #ffd592;
+  --color-brand-600: #ffc66d;
+  --color-brand-700: #efb65c;
+  --color-on-brand: #282116;
+  --ymer-sidebar: #242424;
+}
+
+:root[data-palette="midnight"] {
+  --color-zinc-950: #0c1a2a;
+  --color-zinc-900: #112237;
+  --color-zinc-800: #20394c;
+  --color-zinc-700: #2d4759;
+  --color-zinc-500: #94acbc;
+  --color-zinc-400: #a4bccc;
+  --color-zinc-300: #c0d3df;
+  --color-zinc-200: #d6e6eb;
+  --color-zinc-100: #e6f2f3;
+  --color-board-card: #162c40;
+  --color-brand-50: #183d40;
+  --color-brand-500: #8ae9d8;
+  --color-brand-600: #64dec6;
+  --color-brand-700: #56cfb9;
+  --color-on-brand: #09231f;
+  --ymer-sidebar: #091522;
+}
+
+:root[data-palette="github"] {
+  --color-zinc-950: #0d1117;
+  --color-zinc-900: #161b22;
+  --color-zinc-800: #272e38;
+  --color-zinc-700: #353d47;
+  --color-zinc-500: #919dab;
+  --color-zinc-400: #a1adb9;
+  --color-zinc-300: #bfc9d3;
+  --color-zinc-200: #d6dee6;
+  --color-zinc-100: #e6edf3;
+  --color-board-card: #1c222b;
+  --color-brand-50: #152b45;
+  --color-brand-500: #a5d1ff;
+  --color-brand-600: #79b8ff;
+  --color-brand-700: #66aaff;
+  --color-on-brand: #101b27;
+  --ymer-sidebar: #010409;
+}
+
+:root[data-mode="dark"] .workspace-sidebar {
+  background-color: var(--ymer-sidebar, var(--color-zinc-900));
+}
+
+/* React Flow's built-in colour modes handle controls. Match its canvas to the workspace. */
+:root:is([data-palette="darcula"], [data-palette="midnight"], [data-palette="github"]) .react-flow {
+  --xy-background-color: var(--color-zinc-950);
+  --xy-background-pattern-color: var(--color-zinc-700);
+  --xy-minimap-background-color: var(--color-zinc-900);
+  --xy-controls-button-background-color: var(--color-board-card);
+  --xy-controls-button-background-color-hover: var(--color-zinc-800);
 }
 
 @layer base {

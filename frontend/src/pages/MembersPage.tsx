@@ -76,7 +76,7 @@ export function MembersPage() {
               </option>
             ))}
           </select>
-          <button type="submit" disabled={add.isPending} className="rounded-md bg-brand-600 px-4 py-1 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+          <button type="submit" disabled={add.isPending} className="rounded-md bg-brand-600 px-4 py-1 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60">
             Add member
           </button>
           {add.error && <p className="w-full text-xs text-rose-600">{message(add.error)}</p>}
