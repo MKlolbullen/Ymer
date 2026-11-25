@@ -21,6 +21,7 @@ const ICON: Record<string, string> = {
   database: "🗃️",
   mindmap: "🧠",
   drawing: "✏️",
+  factory: "🏭",
   folder: "📁",
   row: "▤",
 };

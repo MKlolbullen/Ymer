@@ -349,3 +349,47 @@ Assumptions made for this phase, open to change:
   missing.
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
+
+## Factory, stage F1: the brief
+
+The Factory turns a workspace's notes into a working app in reviewed stages (brief,
+architecture, build, review, deliver). The plan for all stages lives in the project's
+Factory plan document; F1 is built.
+
+Migration `0007` adds the `factory` page type and three tables: `factory_projects`
+(stage, current brief, approval), `factory_sources` (the pages it reads, in order) and
+`factory_questions` (gaps the AI found, with answers). Every stage writes ordinary pages
+under the factory page, so people review and edit with the tools they already have: the
+brief is a document.
+
+- **Code**: `ymer/factory/` (`brief.py`: prompt, JSON schema, cleaning, the brief's
+  layout; `document.py`: writes TipTap documents as Yjs states; `fake.py`: the demo
+  model's rule-based brief), routes in `ymer/api/factory.py`, UI in
+  `frontend/src/factory/`.
+- **Routes**, under `/api/workspaces/<ws>/factories/<factory page id>`:
+  - `GET`: stage, sources, questions, the brief page and approval. Viewer access.
+  - `PUT /sources` `{page_ids}`: editor; each new source needs viewer access. Folders,
+    factories and the factory's own brief cannot be sources. Sources the caller cannot
+    open are kept (they could not see them to send them back).
+  - `POST /brief`: editor, rate limited like the other AI routes. Reads the sources with
+    the caller's access (about 60,000 characters, shared fairly between sources), sends
+    answered questions as decisions and dismissed ones as "do not ask", and writes a new
+    `Brief` page. An earlier brief is renamed "(earlier draft)" rather than overwritten,
+    because it may be open in someone's editor. Open questions are replaced by the new
+    ones; answered and dismissed ones stay.
+  - `PATCH /questions/<id>` `{answer?, status?: open|dismissed}`: a blank answer reopens.
+  - `POST /approve`: editor; needs a brief and no open questions. Saves a named version
+    "Approved brief" of the brief and freezes sources, questions and rewrites.
+  - `POST /reopen`: takes the approval back.
+- **Model**: the same provider as the rest of the AI layer (`YMER_AI_PROVIDER`), with
+  structured output (`BRIEF_SCHEMA`). Model output is cleaned and capped before
+  anything is written, and the source text is wrapped in tags the model is told to
+  treat as data.
+
+Assumptions for F1, open to change:
+
+- Writing the brief runs in the request, like Phase 4's generation. Long-running stages
+  (the build) will run on a worker queue.
+- The brief reads the last saved state of each source (collab saves about 2 seconds
+  after the last edit).
+- Only editors approve; there is no separate "approver" role yet.

@@ -10,6 +10,13 @@ from ymer.models.database import (
     ViewType,
 )
 from ymer.models.document import Comment, DocumentContent, DocumentVersion
+from ymer.models.factory import (
+    FactoryProject,
+    FactoryQuestion,
+    FactorySource,
+    FactoryStage,
+    QuestionStatus,
+)
 from ymer.models.file import File
 from ymer.models.page import LIVE_PAGE_TYPES, Page, PageLink, PagePermission, PageType
 from ymer.models.role import Role
@@ -28,6 +35,10 @@ __all__ = [
     "DatabaseView",
     "DocumentContent",
     "DocumentVersion",
+    "FactoryProject",
+    "FactoryQuestion",
+    "FactorySource",
+    "FactoryStage",
     "File",
     "Page",
     "PageLink",
@@ -35,6 +46,7 @@ __all__ = [
     "PageType",
     "LIVE_PAGE_TYPES",
     "PropertyType",
+    "QuestionStatus",
     "Role",
     "User",
     "Workspace",

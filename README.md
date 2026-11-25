@@ -142,6 +142,30 @@ what is planned.
 > The screenshots use the offline demo model, which is why its output is simple and marked "Demo model". Set
 > `YMER_AI_PROVIDER=anthropic` (or `openai`) and a key to use a real model.
 
+### Factory (in progress)
+
+The Factory turns what your team writes in Ymer into a working app, one reviewed stage at a time:
+brief, architecture, build, review and delivery. Stage F1, the brief, works today; the
+[plan](#roadmap) covers the rest.
+
+| Feature | What you get |
+|---|---|
+| **Factory pages** | A new page type (🏭). Pick the pages to build from: specs, notes, requirement tables, mind maps, sketches. Sources are read with your own access, so a page you cannot open is left out. |
+| **The brief** | The AI writes a brief as an ordinary document under the factory: summary, users, features by priority, constraints, out of scope, decisions and links to the sources. Edit it like any page. Rewriting keeps the earlier draft. |
+| **Questions** | What the sources do not say (who uses it, where it runs, what it stores, sign-in) comes back as questions. Answer them or mark them not needed, and the next brief includes your answers as decisions. |
+| **Approval** | An editor approves the brief once no questions are open. The approved text is saved as a named version, and the brief is frozen until someone reopens it. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-brief.png" alt="A factory page with two source pages, the brief, and an answered question from the AI"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-brief-doc.png" alt="The generated brief document with features, out of scope, decisions and linked sources"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A factory: sources, the brief and the AI's questions.</sub></td>
+    <td align="center"><sub>The brief it wrote, as an editable document.</sub></td>
+  </tr>
+</table>
+
 ### Foundation
 
 | Area | What you get |
@@ -219,7 +243,7 @@ model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index.
 backend/     Flask API (Python package `ymer`), models, Alembic migrations, pytest suite
 collab/      Hocuspocus realtime service (TypeScript, run directly by Node 22)
 frontend/    React app: app shell and page tree, editor (src/editor), databases (src/database),
-             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai)
+             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai), Factory (src/factory)
 infra/       Init scripts for the Compose services
 docs/assets/ Logo, architecture diagram and screenshots used in this README
 ```
@@ -233,7 +257,12 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **2. Notebooks and databases** | Page hierarchy and backlinks, database engine (properties, rows, table and board views), relations and rollups, full-text search, sharing | ✅ Done |
 | **3. Mind maps and visuals** | Collaborative React Flow mind maps, Excalidraw drawings, chart views and chart blocks from database data | ✅ Done |
 | **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ✅ Done |
-| **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | ⏭️ Next |
+| **F1. Factory: brief** | Factory pages, source pages, AI brief with open questions, answers and approval | ✅ Done |
+| **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ⏭️ Next |
+| **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | Planned |
+| **F4. Factory: deliver** | Zip download, preview of web apps, push to a git repository, container images | Planned |
+| **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | Planned |
+| **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |
 
 ### Data model
 
@@ -241,7 +270,8 @@ Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, d
 `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live page type),
 `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views` (table, board,
 chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
-re-embedded), `ai_conversations` and `ai_messages`. Mind maps and drawings need no tables of their own: they are Yjs
+re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources` and
+`factory_questions`. Mind maps and drawings need no tables of their own: they are Yjs
 documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will

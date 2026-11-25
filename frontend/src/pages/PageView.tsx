@@ -8,6 +8,7 @@ import { Popover } from "@/components/Popover";
 import { ShareDialog } from "@/components/ShareDialog";
 import { DatabasePage } from "@/database/DatabasePage";
 import { DrawingPage } from "@/drawing/DrawingPage";
+import { FactoryPage } from "@/factory/FactoryPage";
 import { DocumentEditor, type Panel } from "@/editor/DocumentEditor";
 import { ApiError } from "@/lib/api";
 import { MindMapPage } from "@/mindmap/MindMapPage";
@@ -210,6 +211,15 @@ export function PageView() {
           onPanel={setPanel}
           onPresence={setPresence}
         />
+      </div>
+    );
+  }
+
+  if (data.type === "factory") {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <TitleInput page={data} />
+        <FactoryPage key={data.id} page={data} />
       </div>
     );
   }

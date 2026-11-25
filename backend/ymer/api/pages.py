@@ -30,7 +30,16 @@ from ymer.auth import current_user, login_required
 from ymer.databases import create_default_schema
 from ymer.db import db_session
 from ymer.files import delete_stored_objects
-from ymer.models import File, Page, PageLink, PagePermission, PageType, Role, User
+from ymer.models import (
+    FactoryProject,
+    File,
+    Page,
+    PageLink,
+    PagePermission,
+    PageType,
+    Role,
+    User,
+)
 from ymer.permissions import WorkspaceScope
 
 pages_bp = Blueprint("pages", __name__, url_prefix="/workspaces/<uuid:workspace_id>/pages")
@@ -117,6 +126,8 @@ def create_page(workspace_id: uuid.UUID):
         db_session.flush()
         create_default_schema(db_session, page)
     db_session.flush()
+    if page.type is PageType.FACTORY:
+        db_session.add(FactoryProject(page_id=page.id))
     mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(page=page_json(page, scope.page_role(page))), 201
