@@ -1,6 +1,7 @@
 """ORM models. Import every model module here so Alembic autogenerate sees it."""
 
 from ymer.models.ai import AiChunk, AiConversation, AiIndexJob, AiMessage
+from ymer.models.audit import AuditEvent
 from ymer.models.database import (
     DatabaseProperty,
     DatabaseRelation,
@@ -39,6 +40,7 @@ __all__ = [
     "AiConversation",
     "AiIndexJob",
     "AiMessage",
+    "AuditEvent",
     "Comment",
     "DatabaseProperty",
     "DatabaseRelation",

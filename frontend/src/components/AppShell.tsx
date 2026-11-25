@@ -85,6 +85,11 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
             <span aria-hidden>👥</span> Members
           </NavLink>
         )}
+        {workspace.role === "owner" && (
+          <NavLink to={`/w/${workspace.id}/activity`} className={navClass} onClick={() => setMenuOpen(false)}>
+            <span aria-hidden>🛡</span> Activity log
+          </NavLink>
+        )}
       </div>
       <div className="flex items-center justify-between px-3 pt-3 pb-1">
         <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">Pages</span>

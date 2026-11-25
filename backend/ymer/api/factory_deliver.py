@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from werkzeug.exceptions import Conflict, NotFound, UnprocessableEntity
 
+from ymer import audit, ratelimit
 from ymer.api.factory import _active_run, _factory, factory_json, git_hosts
 from ymer.api.validation import parse_body
 from ymer.api.workspaces import scope_for
@@ -144,6 +145,13 @@ def release(workspace_id: uuid.UUID, page_id: uuid.UUID):
     if project.stage in (FactoryStage.BUILT.value, FactoryStage.PLANNED.value):
         project.stage = FactoryStage.RELEASED.value
     db_session.flush()
+    audit.record(
+        "factory.release",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("page", page.id),
+        details={"release": created.number, "run_id": str(run.id)},
+    )
     data = factory_json(scope, page, project)
     out = release_json(db_session, created)
     db_session.commit()
@@ -261,6 +269,13 @@ def push(workspace_id: uuid.UUID, page_id: uuid.UUID, number: int):
     except ValueError as exc:
         raise UnprocessableEntity(str(exc)) from exc
     user = current_user()
+    ratelimit.hit(
+        "git-push",
+        str(user.id),
+        settings.rate_limit_git_push,
+        3600,
+        "Too many pushes in the last hour. Try again later.",
+    )
     record = FactoryPush(
         release_id=rel.id, remote=remote, branch=branch, status="failed", pushed_by_id=user.id
     )
@@ -275,6 +290,7 @@ def push(workspace_id: uuid.UUID, page_id: uuid.UUID, number: int):
             f"Released by {user.display_name} in Ymer Factory.",
             author=("Ymer Factory", "factory@ymer.invalid"),
             timeout=settings.factory_git_timeout,
+            ca_bundle=settings.factory_git_ca_bundle,
         )
         record.status = "pushed" if result.changed else "unchanged"
         record.commit_sha = result.commit_sha
@@ -282,6 +298,19 @@ def push(workspace_id: uuid.UUID, page_id: uuid.UUID, number: int):
         record.error = str(exc)
     db_session.add(record)
     project.git_remote, project.git_branch = remote, branch
+    audit.record(
+        "factory.push",
+        actor=user,
+        workspace_id=workspace_id,
+        target=("page", page.id),
+        details={
+            "release": rel.number,
+            "remote": remote,
+            "branch": branch,
+            "status": record.status,
+            "commit": record.commit_sha,
+        },
+    )
     db_session.flush()
     out = push_json(db_session, record)
     db_session.commit()

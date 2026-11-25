@@ -13,7 +13,8 @@ pytestmark = pytest.mark.db
 
 def register(client, email="ada@example.com", password=PASSWORD, name="Ada"):
     return client.post(
-        "/api/auth/register", json={"email": email, "password": password, "display_name": name}
+        "/api/auth/register",
+        json={"email": email, "password": password, "display_name": name, "session": "token"},
     )
 
 
@@ -56,9 +57,13 @@ def test_register_validates_input(client, db, payload):
 
 def test_login_with_correct_password(client, db):
     register(client)
-    resp = client.post("/api/auth/login", json={"email": "ADA@example.com", "password": PASSWORD})
+    resp = client.post(
+        "/api/auth/login",
+        json={"email": "ADA@example.com", "password": PASSWORD, "session": "token"},
+    )
     assert resp.status_code == 200
     assert resp.get_json()["access_token"]
+    assert "Set-Cookie" not in resp.headers
 
 
 @pytest.mark.parametrize(

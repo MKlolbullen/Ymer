@@ -2,9 +2,10 @@
 
 from typing import Any
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ymer.config import Settings, get_settings
 from ymer.db import init_db
@@ -34,6 +35,9 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         MAX_CONTENT_LENGTH=settings.max_upload_bytes + 1024 * 1024,
     )
     app.extensions["ymer_settings"] = settings
+    if settings.trusted_proxies > 0:
+        n = settings.trusted_proxies
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n)  # type: ignore[method-assign]
 
     database_url = settings.test_database_url if settings.env == "test" else settings.database_url
     init_db(app, database_url, echo=settings.database_echo)
@@ -44,7 +48,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     init_ai(app, settings)
 
-    CORS(app, resources={r"/api/*": {"origins": settings.cors_origins}}, supports_credentials=True)
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": settings.cors_origins}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+    )
 
     from ymer.api import api_bp
 
@@ -63,7 +72,20 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         body = {"error": err.name, "message": err.description}
         if errors := getattr(err, "errors", None):
             body["errors"] = errors
-        return jsonify(body), err.code
+        response = jsonify(body)
+        response.status_code = err.code or 500
+        for name, value in err.get_headers():  # e.g. Retry-After on 429
+            if name.lower() != "content-type":
+                response.headers[name] = value
+        return response
+
+    @app.after_request
+    def _security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if request.path.startswith("/api/") and response.mimetype == "application/json":
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
 
     return app
 

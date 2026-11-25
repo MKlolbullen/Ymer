@@ -3,7 +3,6 @@ import { expect, test } from "vitest";
 import { buildTree } from "@/components/PageTree";
 
 import { base64ToBytes, bytesToBase64 } from "./base64";
-import { secondsLeft } from "./session";
 import { atLeast, type Page } from "./types";
 
 const page = (id: string, parent: string | null, position = 0): Page => ({
@@ -27,13 +26,6 @@ test("buildTree nests pages, sorts by position, and lifts orphans to the top", (
 test("base64 round-trips large binary data", () => {
   const bytes = new Uint8Array(200_000).map((_, i) => i % 256);
   expect(base64ToBytes(bytesToBase64(bytes))).toEqual(bytes);
-});
-
-test("secondsLeft reads the JWT expiry and treats garbage as expired", () => {
-  const exp = Math.floor(Date.now() / 1000) + 600;
-  const token = `x.${btoa(JSON.stringify({ exp }))}.y`;
-  expect(secondsLeft(token)).toBeGreaterThan(590);
-  expect(secondsLeft("nope")).toBeLessThan(0);
 });
 
 test("role ranking", () => {

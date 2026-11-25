@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select
 from werkzeug.exceptions import NotFound, ServiceUnavailable, UnprocessableEntity
 
+from ymer import audit
 from ymer.ai import AiError, get_ai
 from ymer.ai.personal import Provider, encrypt_key
 from ymer.api.validation import parse_body
@@ -84,6 +85,15 @@ def save_settings():
             raise UnprocessableEntity("Enter an API key for this provider.")
         profile.model = body.model
     user.ai_provider = body.provider
+    audit.record(
+        "account.ai_settings",
+        actor=user,
+        details={
+            "provider": body.provider,
+            "model": body.model,
+            "key_changed": body.api_key is not None,
+        },
+    )
     db_session.commit()
     return settings_json(user)
 
@@ -97,6 +107,7 @@ def remove_profile(provider: str):
         raise NotFound("No saved key for this provider.")
     if user.ai_provider == provider:
         user.ai_provider = None
+    audit.record("account.ai_key_removed", actor=user, details={"provider": provider})
     db_session.delete(profile)
     db_session.commit()
     return settings_json(user)

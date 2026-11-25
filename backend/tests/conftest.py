@@ -58,6 +58,8 @@ def app():
             "ai_embedding_model": "hash-256",
             "ai_index_inline": False,
             "ai_rate_limit": 0,
+            # Rate limits have their own tests (test_hardening.py), which switch them on.
+            "rate_limit_enabled": False,
             # Builds never touch Docker in tests; tests run queued builds themselves.
             "factory_sandbox": "fake",
             "factory_run_inline": False,

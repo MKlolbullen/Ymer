@@ -1,23 +1,43 @@
 import { useSyncExternalStore } from "react";
 
-import { api } from "./api";
-import { getSession, setSession, subscribe, type Session } from "./session";
+import { api, loadSession } from "./api";
+import {
+  getSession,
+  getStatus,
+  onOtherTabChange,
+  setCsrfToken,
+  setSession,
+  subscribe,
+  type Session,
+  type SessionStatus,
+} from "./session";
 import type { User } from "./types";
 
-type AuthResponse = { user: User; access_token: string; refresh_token: string };
+type AuthResponse = { user: User; csrf_token: string };
 
 function store(response: AuthResponse): Session {
-  const session = {
-    user: response.user,
-    accessToken: response.access_token,
-    refreshToken: response.refresh_token,
-  };
+  setCsrfToken(response.csrf_token);
+  const session = { user: response.user };
   setSession(session);
   return session;
 }
 
 export function useSession(): Session | null {
   return useSyncExternalStore(subscribe, getSession);
+}
+
+export function useSessionStatus(): SessionStatus {
+  return useSyncExternalStore(subscribe, getStatus);
+}
+
+let started = false;
+
+/** Find out who is signed in (once per page load), and follow other tabs from then on. */
+export function startSession(): void {
+  if (started) return;
+  started = true;
+  void loadSession();
+  onOtherTabChange(() => void loadSession());
 }
 
 export async function login(email: string, password: string): Promise<Session> {

@@ -41,6 +41,7 @@ from werkzeug.exceptions import (
     UnprocessableEntity,
 )
 
+from ymer import audit
 from ymer.ai import AiError, ChatRequest
 from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty
@@ -813,6 +814,13 @@ def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
         run.context = {**run.context, "max_tokens": left}
     if current_user().ai_provider:
         run.context = {**run.context, "personal_provider": current_user().ai_provider}
+    audit.record(
+        "factory.build",
+        actor=current_user(),
+        workspace_id=workspace_id,
+        target=("page", page.id),
+        details={"run_id": str(run.id), "sandbox": sandbox.name, "model": chat.model},
+    )
     db_session.commit()
     if settings_for(current_app).factory_run_inline:
         start_inline(current_app._get_current_object(), run.id)

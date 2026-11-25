@@ -500,7 +500,7 @@ def test_rate_limit(app, client, team, monkeypatch):
             pass
 
     monkeypatch.setitem(app.extensions, "redis", FakeRedis())
-    set_settings(app, ai_rate_limit=2)
+    set_settings(app, ai_rate_limit=2, rate_limit_enabled=True)
     page = make_page(team.ws, "Doc")
     url = f"{team.base}/pages/{page.id}/ai/assist"
     codes = [

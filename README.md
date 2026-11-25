@@ -269,9 +269,15 @@ to every page type (documents, canvases, charts and the Factory), and this brows
 
 | Area | What you get |
 |---|---|
-| **Accounts and workspaces** | Email/password sign-up, JWT access and refresh tokens, workspaces with members and roles (owner, editor, commenter, viewer). |
+| **Accounts and workspaces** | Email/password sign-up, workspaces with members and roles (owner, editor, commenter, viewer). The browser's session lives in httpOnly cookies that page scripts cannot read, with CSRF protection; scripts and other API clients can still use bearer tokens. |
+| **Security** | Rate limits on sign-in (per address and per account), sign-up, uploads, git pushes and the whole API. An audit log of sign-ins, member and sharing changes, deletions, uploads and Factory builds, releases and pushes, which owners read under **Activity log** in the sidebar. |
 | **Permissions** | Per-page grants that inherit down the tree and can widen access for guests or narrow it for members. Every query is workspace-scoped; no access answers 404, never 403. |
 | **Dev stack** | Docker Compose with Postgres 16 (pgvector and pg_trgm), Redis 7 and MinIO; a `make` target for each service, the AI worker, the Factory worker and the sandbox images; tests for backend, collab service and frontend. |
+
+<p align="center">
+  <img src="docs/assets/screenshots/activity-log.png" alt="The Activity log page listing an upload and the workspace being created, with filters for members, pages, files, Factory and workspace events" width="900">
+  <br><sub>Owners see who changed what under Activity log.</sub>
+</p>
 
 ## Architecture
 
@@ -288,7 +294,7 @@ to every page type (documents, canvases, charts and the Factory), and this brows
   Flask's internal API, so it never touches Postgres itself. Flask decodes each save (pycrdt) to refresh search text
   and backlinks.
 - **Storage**: Postgres for everything structured (Yjs state, versions, comments, databases, full-text search),
-  MinIO (any S3 API) for file bytes. Redis holds the AI rate limit counters.
+  MinIO (any S3 API) for file bytes. Redis holds the rate limit counters.
 - **AI layer** (`backend/ymer/ai/`): part of the Flask app, not a separate service. Flask proxies every model call,
   uses saved keys server-side, and applies workspace permissions to each read. Pages and database rows are
   split into chunks and embedded into pgvector; edits put the page on a queue that `make ai-worker` (`flask
@@ -358,7 +364,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
 | **F4. Factory: deliver** | Review and numbered releases, zip download with packaging files (Dockerfile where it fits), isolated preview of web apps, push to a git repository | ✅ Done |
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
-| **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |
+| **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
+| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, templates and import, a hosted build sandbox | Planned |
 
 ### Data model
 
@@ -368,11 +375,10 @@ page type), `comments`, `files`, `database_properties`, `database_rows`, `databa
 (table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
 `factory_questions`, `factory_runs`, `factory_run_events`, `factory_files`, `factory_releases`,
-`factory_pushes` and `factory_changes`. Mind maps and drawings need no
+`factory_pushes` and `factory_changes`, and `audit_events` for the audit log. Mind maps and drawings need no
 tables of their own: they are Yjs documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
-Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will
-change when the phase is designed.
+Phase 5 will add, roughly, tables for public links. This is a sketch and will change when the phase is designed.
 
 ## Design principles
 

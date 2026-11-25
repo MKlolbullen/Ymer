@@ -19,7 +19,6 @@ user's role on the page first, and search and Q&A only consider chunks of pages
 
 import json
 import logging
-import time
 import uuid
 from functools import wraps
 from typing import Literal
@@ -27,8 +26,9 @@ from typing import Literal
 from flask import Blueprint, current_app, jsonify, request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from werkzeug.exceptions import BadGateway, NotFound, TooManyRequests, UnprocessableEntity
+from werkzeug.exceptions import BadGateway, NotFound, UnprocessableEntity
 
+from ymer import ratelimit
 from ymer.ai import AiError, AiRefused, ChatRequest, get_ai, prompts
 from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty, page_chunks
@@ -42,7 +42,6 @@ from ymer.auth import current_user, login_required
 from ymer.content import index_document, outline
 from ymer.db import db_session
 from ymer.documents import save_state
-from ymer.extensions import get_redis
 from ymer.models import (
     LIVE_PAGE_TYPES,
     AiConversation,
@@ -82,20 +81,13 @@ def _rate_limit() -> None:
 
     If Redis is unreachable the request is allowed: AI should not go down with it.
     """
-    limit = settings_for(current_app).ai_rate_limit
-    if limit <= 0:
-        return
-    key = f"ymer:ai-rate:{current_user().id}:{int(time.time() // 60)}"
-    try:
-        redis = get_redis()
-        count = redis.incr(key)
-        if count == 1:
-            redis.expire(key, 90)
-    except Exception:  # noqa: BLE001 - fail open
-        log.warning("AI rate limit check skipped: Redis unavailable.")
-        return
-    if count > limit:
-        raise TooManyRequests("Too many AI requests. Wait a minute and try again.")
+    ratelimit.hit(
+        "ai",
+        str(current_user().id),
+        settings_for(current_app).ai_rate_limit,
+        60,
+        "Too many AI requests. Wait a minute and try again.",
+    )
 
 
 def ai_endpoint(view):

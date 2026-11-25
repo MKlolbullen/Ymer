@@ -14,7 +14,7 @@ from sqlalchemy import text
 import ymer
 from ymer.app import settings_for
 from ymer.db import get_engine
-from ymer.extensions import get_redis, get_s3
+from ymer.extensions import get_health_s3, get_redis
 
 health_bp = Blueprint("health", __name__, url_prefix="/health")
 
@@ -34,7 +34,7 @@ def _check_redis() -> None:
 
 
 def _check_storage() -> None:
-    get_s3().head_bucket(Bucket=settings_for(current_app).s3_bucket)
+    get_health_s3().head_bucket(Bucket=settings_for(current_app).s3_bucket)
 
 
 CHECKS: dict[str, Callable[[], None]] = {

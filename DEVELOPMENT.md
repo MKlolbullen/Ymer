@@ -97,11 +97,42 @@ npm run dev | build | typecheck | test
   mindmap / folder; a parent must be in the same workspace) and `page_permissions`
   (per-user grants on a page and everything beneath it).
 - **Auth** (`ymer/auth/`, routes in `ymer/api/auth.py`): email/password sign-up and
-  login with scrypt hashes, then JWT bearer tokens signed with `YMER_SECRET_KEY`. Access
-  tokens last `YMER_JWT_ACCESS_TTL` seconds (15 min), refresh tokens
-  `YMER_JWT_REFRESH_TTL` (30 days). `POST /api/auth/logout` revokes all of a user's
-  tokens by bumping `users.token_version`. In production the app refuses to start
-  unless the secret key is at least 32 characters.
+  login with scrypt hashes, then JWTs signed with `YMER_SECRET_KEY`. Access tokens last
+  `YMER_JWT_ACCESS_TTL` seconds (15 min), refresh tokens `YMER_JWT_REFRESH_TTL` (30 days).
+  `POST /api/auth/logout` revokes all of a user's tokens by bumping
+  `users.token_version`. In production the app refuses to start unless the secret key is
+  at least 32 characters. How the tokens are handed over depends on the client:
+  - **The browser app** (`session: "cookie"`, the default): the tokens go into httpOnly
+    cookies (`ymer_access` on `/api`, SameSite=Lax; `ymer_refresh` on `/api/auth`,
+    SameSite=Strict), Secure in production (`YMER_COOKIE_SECURE` overrides). Nothing
+    secret is in localStorage. The sign-in response carries a `csrf_token`, also stored
+    inside both tokens; every cookie request other than GET/HEAD/OPTIONS must echo it in
+    `X-CSRF-Token` or gets 403 (`ymer/auth/cookies.py`). `GET /api/auth/me` returns it
+    again after a reload. The app keeps it in localStorage (it is useless without the
+    cookies) and refreshes on a 401 (`frontend/src/lib/api.ts`). The API and the app must
+    be on the same site (same registrable domain) for the cookies to be sent.
+  - **Scripts and API clients** (`session: "token"`): `access_token` and `refresh_token` in
+    the body, sent as `Authorization: Bearer`; no cookies, no CSRF header needed.
+  - **Live documents**: the browser cannot read its cookies, so before each WebSocket
+    (re)connect it asks `POST /api/auth/collab-token` for a two-minute `collab` token and
+    hands that to Hocuspocus. `/internal/collab/authorize` accepts collab or access tokens.
+- **Rate limits** (`ymer/ratelimit.py`): fixed windows counted in Redis; over the limit
+  answers 429 with `Retry-After`. If Redis is down requests are allowed. Defaults
+  (`YMER_RATE_LIMIT_*`): 600 API requests per user (or address) per minute, 20 sign-in
+  attempts per address per minute, 10 failed sign-ins per email per 15 minutes, 10
+  sign-ups per address per hour, 60 uploads per user per minute, 20 git pushes per user
+  per hour, and the AI limit (`YMER_AI_RATE_LIMIT`). Behind a reverse proxy set
+  `YMER_TRUSTED_PROXIES` to the number of proxies so the real client address is used.
+- **Audit log** (`ymer/audit.py`, table `audit_events`, migration `0013`): sign-ups,
+  sign-ins (and failed or blocked ones), sign-outs, workspace create/rename/delete,
+  member add/role/remove/leave, page delete, share and unshare, file upload and delete,
+  AI key changes, Factory builds, releases, pushes and budget changes. Each row has the
+  actor, workspace, target, client address, user agent and details (never secrets).
+  Events are written in the same transaction as the change. Owners read a workspace's
+  log at `GET /api/workspaces/<id>/audit` (`?before=&limit=&action=<prefix>`; the
+  **Activity log** page in the app); everyone sees their own sign-ins at
+  `GET /api/auth/activity`. `flask --app wsgi prune-audit` deletes events older than
+  `YMER_AUDIT_RETENTION_DAYS` (365); run it from cron.
 - **Scoping** (`ymer/permissions.py`): every workspace route builds a `WorkspaceScope`
   for the signed-in user and reads pages only through it, so queries are always filtered
   by `workspace_id`. Users with no access get 404, never 403, so ids cannot be probed.
@@ -115,6 +146,19 @@ npm run dev | build | typecheck | test
 Tests: `tests/test_permissions.py` covers the rules above, `tests/test_auth.py` the
 tokens, `tests/test_schema.py` the constraints and that the migration matches the
 models. The `db` fixture wraps each test in a transaction that is rolled back.
+
+## Tests against real services
+
+Most tests use stand-ins for object storage, the build sandbox and git. `tests/test_live_services.py`
+(marker `live`, run alone with `pytest -m live`) uses the real ones and skips whatever is missing:
+
+- **MinIO** from `docker compose up -d`: a 6 MB upload through the API, the download through the presigned
+  URL, deletion, and a storage outage answering 502.
+- **Docker** with the images from `make factory-images`: a full Factory build on every stack with the tests
+  running in the locked-down containers, then a release pushed over HTTPS.
+- **A git server over HTTPS**: started by the test itself (`git http-backend` behind TLS with a throwaway
+  certificate and token auth), so the push path is the real git protocol, credentials and certificate checks.
+  A self-hosted Git server with a private CA works the same way with `YMER_FACTORY_GIT_CA_BUNDLE`.
 
 ## Collaborative documents (Phase 1)
 

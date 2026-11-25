@@ -313,7 +313,7 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
     planChanges: useMutation({
       mutationFn: () =>
         api<{ factory: Factory; planned: number; demo: boolean }>(`${url}/changes/plan`, { method: "POST" }),
-      onSuccess: (r: { factory: Factory }) => {
+      onSuccess: (r: { factory: Factory; planned: number }) => {
         settle(r.factory);
         // New rows in the Tasks database.
         void qc.invalidateQueries({ queryKey: ["rows", workspaceId] });
