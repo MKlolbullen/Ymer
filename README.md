@@ -267,23 +267,13 @@ Deeper notes on each part (routes, settings, the permission rules, how collab st
 
 ## Quick start
 
-You need Docker with Compose v2, Python 3.12+, [uv](https://docs.astral.sh/uv/) (or plain `pip`) and Node 22.18+.
+From the repository root, run the local development installer with Python 3.12+, Node.js 22.18+, npm, curl, and a running Docker engine with Compose v2.
 
 ```sh
-make setup       # .env from .env.example, backend venv, npm install for collab and frontend
-make infra-up    # Postgres, Redis, MinIO (and creates the `ymer` bucket)
-make migrate     # apply database migrations
+./install.sh
 ```
 
-Then run each service in its own terminal:
-
-```sh
-make backend     # Flask API on http://localhost:5000
-make collab      # collab service on ws://localhost:1234
-make frontend    # the app on http://localhost:5173
-make ai-worker   # optional: keeps AI search embeddings up to date in the background
-make factory-worker  # optional: runs Factory builds (.env.example runs them in the API process instead)
-```
+The installer prepares the Python environment, installs both Node projects, starts the infrastructure, applies migrations, and waits for the application to respond. It preserves an existing `.env`. Press Ctrl+C to stop the application processes. Run `docker compose stop` when you also want to stop the infrastructure. For dependency installation alone, use `./install.sh --install-only`. The [development guide](DEVELOPMENT.md) covers running services individually.
 
 Open http://localhost:5173, create an account, then a workspace. The **+** next to *Pages* creates a document,
 database, mind map, drawing, folder or factory. To see live editing, sign up a second user in a private window, add them to
@@ -296,8 +286,8 @@ OpenAI-compatible server (including local ones) set `YMER_AI_PROVIDER=openai`, `
 `YMER_AI_MODEL`. Claude has no embeddings API, so semantic search uses `YMER_AI_EMBEDDING_PROVIDER` (`fake` for a
 built-in hashing embedder, or `openai` for any OpenAI-compatible embeddings endpoint). After changing the embedding
 model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index. Factory builds use the demo
-sandbox by default; to run the code they write, install Docker, run `make factory-images` and set
-`YMER_FACTORY_SANDBOX=docker`. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
+sandbox by default; to run the code they write, set
+`YMER_FACTORY_SANDBOX=docker` and rerun the installer. It calls `make factory-images` when this mode is enabled. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
 
 `curl localhost:5000/api/health/ready` should report `database`, `redis` and `storage` as `ok`.
 `make test` runs all test suites and `make lint` the linters and type checks. `make help` lists every target.
