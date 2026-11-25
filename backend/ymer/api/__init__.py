@@ -7,6 +7,7 @@ from ymer.api.auth import auth_bp
 from ymer.api.databases import databases_bp
 from ymer.api.documents import documents_bp
 from ymer.api.factory import factory_bp
+from ymer.api.factory_deliver import deliver_bp, preview_bp
 from ymer.api.files import files_bp
 from ymer.api.health import health_bp
 from ymer.api.pages import pages_bp
@@ -25,5 +26,7 @@ api_bp.register_blueprint(search_bp)
 api_bp.register_blueprint(ai_status_bp)
 api_bp.register_blueprint(ai_bp)
 api_bp.register_blueprint(factory_bp)
+api_bp.register_blueprint(deliver_bp)
+api_bp.register_blueprint(preview_bp)
 
 __all__ = ["api_bp"]

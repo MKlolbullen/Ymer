@@ -70,6 +70,7 @@ from ymer.factory.brief import (
 )
 from ymer.factory.build import queue_run
 from ymer.factory.document import document_state
+from ymer.factory.releases import delivery_json
 from ymer.factory.runner import sandbox_for, start_inline
 from ymer.factory.stacks import STACKS, stacks_json
 from ymer.models import (
@@ -225,6 +226,7 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
         "plan_approved_at": _iso(project.plan_approved_at),
         "plan_approved_by": person(project.plan_approved_by_id),
         "build": build_json(project),
+        "delivery": delivery_json(db_session, project, git_hosts(settings_for(current_app))),
     }
 
 
@@ -499,7 +501,11 @@ def reopen(workspace_id: uuid.UUID, page_id: uuid.UUID):
     page, project = _factory(scope, page_id, Role.EDITOR)
     if _active_run(project) is not None:
         raise Conflict("A build is running. Stop it first.")
-    if project.stage in (FactoryStage.PLANNED.value, FactoryStage.BUILT.value):
+    if project.stage in (
+        FactoryStage.PLANNED.value,
+        FactoryStage.BUILT.value,
+        FactoryStage.RELEASED.value,
+    ):
         project.stage = FactoryStage.ARCHITECTURE.value
         project.plan_approved_at = None
         project.plan_approved_by_id = None
@@ -641,7 +647,13 @@ def approve_plan(workspace_id: uuid.UUID, page_id: uuid.UUID):
 
 # --- build (stage F3) -----------------------------------------------------------------
 
-BUILDABLE = {FactoryStage.PLANNED.value, FactoryStage.BUILT.value}
+BUILDABLE = {FactoryStage.PLANNED.value, FactoryStage.BUILT.value, FactoryStage.RELEASED.value}
+
+
+def git_hosts(settings) -> list[str]:
+    return [h.strip() for h in settings.factory_git_hosts.split(",") if h.strip()]
+
+
 MAX_EVENTS = 500
 
 

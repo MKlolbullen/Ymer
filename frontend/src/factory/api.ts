@@ -1,4 +1,4 @@
-/** The Factory's API: the brief (F1), the architecture (F2) and the build (F3). */
+/** The Factory's API: the brief (F1), the architecture (F2), the build (F3) and delivery (F4). */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { keys as baseKeys } from "@/lib/queries";
 import type { Page, PageType, Person } from "@/lib/types";
 
-export type FactoryStage = "sources" | "brief" | "approved" | "architecture" | "planned" | "built";
+export type FactoryStage = "sources" | "brief" | "approved" | "architecture" | "planned" | "built" | "released";
 
 export type RunStatus = "queued" | "running" | "stopping" | "passed" | "failed" | "stopped";
 
@@ -36,6 +36,43 @@ export type RunEvent = {
 };
 
 export type FactoryFile = { path: string; size: number; updated_at: string };
+
+export type Changes = { added: string[]; changed: string[]; removed: string[] };
+
+export type FactoryPush = {
+  id: string;
+  remote: string;
+  branch: string;
+  status: "pushed" | "unchanged" | "failed";
+  commit_sha: string | null;
+  error: string | null;
+  pushed_by: Person | null;
+  created_at: string;
+};
+
+export type FactoryRelease = {
+  id: string;
+  number: number;
+  run_id: string | null;
+  stack: string;
+  notes: string | null;
+  file_count: number;
+  size: number;
+  changes: Changes;
+  approved_by: Person | null;
+  created_at: string;
+  preview: boolean;
+  pushes: FactoryPush[];
+};
+
+export type Delivery = {
+  latest_release: FactoryRelease | null;
+  release_count: number;
+  unreleased: Changes | null;
+  git_remote: string | null;
+  git_branch: string | null;
+  git_hosts: string[];
+};
 
 export type Stack = {
   key: string;
@@ -84,14 +121,29 @@ export type Factory = {
     file_count: number;
     sandbox: string | null;
   };
+  delivery: Delivery;
 };
 
 /** Brief approved, so the architecture step is open (or already done). */
 export const briefApproved = (f: Factory) =>
-  f.stage === "approved" || f.stage === "architecture" || f.stage === "planned" || f.stage === "built";
+  f.stage === "approved" ||
+  f.stage === "architecture" ||
+  f.stage === "planned" ||
+  f.stage === "built" ||
+  f.stage === "released";
 
 /** The plan is approved, so builds can start. */
-export const canBuild = (f: Factory) => f.stage === "planned" || f.stage === "built";
+export const canBuild = (f: Factory) => f.stage === "planned" || f.stage === "built" || f.stage === "released";
+
+/** Files changed since the last release (or since nothing was released). */
+export const changeCount = (c: Changes | null | undefined) =>
+  c ? c.added.length + c.changed.length + c.removed.length : 0;
+
+/** A passed build with changes not yet released: ready for review. */
+export function readyForReview(f: Factory): boolean {
+  const run = f.build.latest_run;
+  return !!run && run.status === "passed" && changeCount(f.delivery.unreleased) > 0;
+}
 
 export const runActive = (run: FactoryRun | null | undefined) =>
   !!run && (run.status === "queued" || run.status === "running" || run.status === "stopping");
@@ -170,6 +222,25 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
         void qc.invalidateQueries({
           queryKey: factoryKey(workspaceId, pageId),
         }),
+    }),
+    release: useMutation({
+      mutationFn: (notes: string) =>
+        api<{ release: FactoryRelease; factory: Factory }>(`${url}/releases`, { method: "POST", json: { notes } }),
+      onSuccess: (r: { factory: Factory }) => {
+        settle(r.factory);
+        void qc.invalidateQueries({ queryKey: ["factory-releases", workspaceId, pageId] });
+      },
+    }),
+    push: useMutation({
+      mutationFn: ({ number, ...body }: { number: number; remote: string; branch: string; token: string }) =>
+        api<{ push: FactoryPush; release: FactoryRelease }>(`${url}/releases/${number}/push`, {
+          method: "POST",
+          json: body,
+        }),
+      onSettled: () => {
+        void qc.invalidateQueries({ queryKey: factoryKey(workspaceId, pageId) });
+        void qc.invalidateQueries({ queryKey: ["factory-releases", workspaceId, pageId] });
+      },
     }),
     stopRun: useMutation({
       mutationFn: (runId: string) =>
@@ -296,6 +367,25 @@ export type StepState = "done" | "current" | "next" | "later";
 
 /** Brief, Architecture, Build, Review, Deliver: which are done, current or coming next. */
 export function stepStates(f: Factory): StepState[] {
-  const done = f.stage === "built" ? 3 : f.stage === "planned" ? 2 : briefApproved(f) ? 1 : 0;
-  return [0, 1, 2, 3, 4].map((i) => (i < done ? "done" : i === done ? (done >= 3 ? "next" : "current") : "later"));
+  const done =
+    f.stage === "released" ? 4 : f.stage === "built" ? 3 : f.stage === "planned" ? 2 : briefApproved(f) ? 1 : 0;
+  return [0, 1, 2, 3, 4].map((i) => (i < done ? "done" : i === done ? "current" : "later"));
 }
+
+export function useReleases(workspaceId: string, pageId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["factory-releases", workspaceId, pageId],
+    queryFn: () =>
+      api<{ releases: FactoryRelease[] }>(`${base(workspaceId, pageId)}/releases`).then((r) => r.releases),
+    enabled,
+  });
+}
+
+export function previewLink(workspaceId: string, pageId: string, number: number) {
+  return api<{ url: string; expires_in: number }>(`${base(workspaceId, pageId)}/releases/${number}/preview`, {
+    method: "POST",
+  });
+}
+
+export const releaseDownloadPath = (workspaceId: string, pageId: string, number: number) =>
+  `${base(workspaceId, pageId)}/releases/${number}/download`;

@@ -8,6 +8,7 @@ import {
   candidateSources,
   mergeEvents,
   newAnswers,
+  readyForReview,
   runActive,
   stepStates,
   type Factory,
@@ -46,6 +47,14 @@ const factory = (extra: Partial<Factory> = {}): Factory => ({
   plan_approved_at: null,
   plan_approved_by: null,
   build: { latest_run: null, file_count: 0, sandbox: "fake" },
+  delivery: {
+    latest_release: null,
+    release_count: 0,
+    unreleased: null,
+    git_remote: null,
+    git_branch: null,
+    git_hosts: ["github.com"],
+  },
   ...extra,
 });
 
@@ -90,7 +99,8 @@ describe("stepStates", () => {
     expect(stepStates(factory({ stage: "brief" })).slice(0, 2)).toEqual(["current", "later"]);
     expect(stepStates(factory({ stage: "architecture" })).slice(0, 3)).toEqual(["done", "current", "later"]);
     expect(stepStates(factory({ stage: "planned" })).slice(0, 3)).toEqual(["done", "done", "current"]);
-    expect(stepStates(factory({ stage: "built" })).slice(0, 4)).toEqual(["done", "done", "done", "next"]);
+    expect(stepStates(factory({ stage: "built" })).slice(0, 4)).toEqual(["done", "done", "done", "current"]);
+    expect(stepStates(factory({ stage: "released" }))).toEqual(["done", "done", "done", "done", "current"]);
     expect(canBuild(factory({ stage: "architecture" }))).toBe(false);
     expect(canBuild(factory({ stage: "built" }))).toBe(true);
     expect(briefApproved(factory({ stage: "brief" }))).toBe(false);
@@ -113,5 +123,24 @@ describe("build log", () => {
     expect(["queued", "running", "stopping"].every((s) => runActive(run(s)))).toBe(true);
     expect(["passed", "failed", "stopped"].some((s) => runActive(run(s)))).toBe(false);
     expect(runActive(null)).toBe(false);
+  });
+});
+
+describe("review", () => {
+  const passed = { status: "passed" } as Factory["build"]["latest_run"];
+  const delivery = (unreleased: Factory["delivery"]["unreleased"]) => ({
+    ...factory().delivery,
+    unreleased,
+  });
+
+  it("is ready when a passed build changed files since the last release", () => {
+    const changed = { added: ["a.py"], changed: [], removed: [] };
+    const none = { added: [], changed: [], removed: [] };
+    const f = (run: Factory["build"]["latest_run"], unreleased: Factory["delivery"]["unreleased"]) =>
+      factory({ stage: "built", build: { latest_run: run, file_count: 1, sandbox: "fake" }, delivery: delivery(unreleased) });
+    expect(readyForReview(f(passed, changed))).toBe(true);
+    expect(readyForReview(f(passed, none))).toBe(false);
+    expect(readyForReview(f({ status: "failed" } as Factory["build"]["latest_run"], changed))).toBe(false);
+    expect(readyForReview(f(null, changed))).toBe(false);
   });
 });

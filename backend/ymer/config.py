@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     factory_max_steps: int = 300
     factory_task_steps: int = 30
     factory_max_tokens: int = 3_000_000
+    # Delivery (F4). Releases are pushed over HTTPS to these hosts only, with a token the
+    # person types in for that push (never stored).
+    factory_git_hosts: str = "github.com,gitlab.com,bitbucket.org,codeberg.org"
+    # Also allow file:// remotes (tests and local experiments only).
+    factory_git_allow_local: bool = False
+    factory_git_timeout: int = 120
+    # How long a preview link works.
+    factory_preview_minutes: int = 60
 
     @field_validator("cors_origins", mode="before")
     @classmethod

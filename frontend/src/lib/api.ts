@@ -91,3 +91,24 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type HealthResponse = { status: string; service: string; version: string };
+
+/** Download a file from the API (with the login header) and save it under `filename`. */
+export async function downloadFromApi(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${(await accessToken()) ?? ""}` },
+  });
+  if (!response.ok) throw await toError(response);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** A server-relative URL the API returned (like /api/...), made absolute when the API is on another host. */
+export function apiOrigin(path: string): string {
+  return /^https?:/.test(API_BASE) ? new URL(API_BASE).origin + path : path;
+}

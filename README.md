@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: Phases 0 to 4 done, Factory 3 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%203%2F5-6366f1">
+  <img alt="Status: Phases 0 to 4 done, Factory 4 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%204%2F5-6366f1">
   <img alt="Flask 3" src="https://img.shields.io/badge/backend-Flask%203-3f3f46">
   <img alt="React 18" src="https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind%204-3f3f46">
   <img alt="Yjs" src="https://img.shields.io/badge/realtime-Yjs%20%2B%20Hocuspocus-3f3f46">
@@ -144,11 +144,11 @@ what is planned.
 > The screenshots use the offline demo model, which is why its output is simple and marked "Demo model". Set
 > `YMER_AI_PROVIDER=anthropic` (or `openai`) and a key to use a real model.
 
-### Factory (in progress)
+### Factory
 
 The Factory turns what your team writes in Ymer into a working app, one reviewed stage at a time:
-brief, architecture, build, review and delivery. The first three stages (the brief, the architecture and the
-build) work today; the [roadmap](#roadmap) covers the rest.
+brief, architecture, build, review and delivery. All five work today; iterating on a delivered app is next on
+the [roadmap](#roadmap).
 
 | Feature | What you get |
 |---|---|
@@ -158,6 +158,8 @@ build) work today; the [roadmap](#roadmap) covers the rest.
 | **Approval** | An editor approves the brief once no questions are open. The approved text is saved as a named version, and the brief is frozen until someone reopens it. |
 | **Architecture** | From the approved brief, the AI picks one of three stacks (static web tool, Python command-line tool, Flask + React web app), or uses the one you choose, and designs the app: an Architecture document (stack, components, data model, interfaces, risks), a System map mind map, and a Tasks database with status, component, priority, size and dependencies, shown as a table and a board. An editor approves the plan; redesigning keeps earlier drafts. |
 | **Build** | An AI agent works through the approved tasks in order. For each one it reads the files so far, writes code and tests, runs the tests in a sandbox, and marks the task Done in the Tasks database when they pass. Follow it in a live log, stop it at any time, and browse the files it wrote. A build stops at the first task it cannot finish, and the next build picks up from there. |
+| **Review and release** | When a build passes, the page lists the files it added, changed and removed since the last release. An editor adds release notes and approves it as release 1, 2, 3... A release is a frozen copy, so later builds never change what was approved. |
+| **Deliver** | Download a release as a zip, with a `RELEASE.md` on how to run it, a `.gitignore` and, for apps that run in a container, a `Dockerfile`. Preview a web app right on the page. Push a release to a GitHub, GitLab, Bitbucket or Codeberg repository: Ymer adds one commit on top of the branch, never force-pushes, and uses your token for that push only. |
 | **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway Docker container with no network, a read-only system, no privileges, and limits on memory, CPU, processes and time. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
 
 <table>
@@ -199,6 +201,17 @@ build) work today; the [roadmap](#roadmap) covers the rest.
   <img src="docs/assets/screenshots/factory-tasks-done.png" alt="The task board after the build, with every task in Done" width="900">
   <br><sub>After the build, every task has moved to Done.</sub>
 </p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-review.png" alt="The review step: files added since the last release, release notes, and the Approve as release 1 button"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-deliver.png" alt="The deliver step: release 1 with a zip download, a live preview of the web app, and the form to push it to a git repository"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Review what changed, then approve it as a release.</sub></td>
+    <td align="center"><sub>Download it, preview it, or push it to your repository.</sub></td>
+  </tr>
+</table>
 
 > These screenshots use the demo model and the demo sandbox, so the code is placeholder and the tests were checked
 > rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` the agent writes real code
@@ -316,8 +329,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F1. Factory: brief** | Factory pages, source pages, AI brief with open questions, answers and approval | ✅ Done |
 | **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ✅ Done |
 | **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
-| **F4. Factory: deliver** | Zip download, preview of web apps, push to a git repository, container images | ⏭️ Next |
-| **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | Planned |
+| **F4. Factory: deliver** | Review and numbered releases, zip download with packaging files (Dockerfile where it fits), isolated preview of web apps, push to a git repository | ✅ Done |
+| **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | ⏭️ Next |
 | **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |
 
 ### Data model
@@ -327,7 +340,8 @@ factory), `page_permissions`, `page_links`, `document_content` and `document_ver
 page type), `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views`
 (table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
-`factory_questions`, `factory_runs`, `factory_run_events` and `factory_files`. Mind maps and drawings need no
+`factory_questions`, `factory_runs`, `factory_run_events`, `factory_files`, `factory_releases` and
+`factory_pushes`. Mind maps and drawings need no
 tables of their own: they are Yjs documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will
@@ -340,7 +354,8 @@ change when the phase is designed.
 - **Workspace-scoped everything.** Every read goes through a scope object filtered by workspace, and tests cover the rules.
 - **Untrusted code stays out.** Code the Factory's agent writes runs only in a sandbox, never in the Ymer process,
   and model output is cleaned and capped before it is stored.
-- **People approve each step.** The AI drafts; editors approve the brief and the plan before anything is built.
+- **People approve each step.** The AI drafts; editors approve the brief and the plan before anything is built, and
+  each release before it leaves Ymer. Pushes to git use a token for that push only and never rewrite history.
 - **Postgres first.** pg_trgm and full-text search before adding a search engine; JSONB before a document store.
 - **Swappable AI.** All model calls go behind one service, so providers or local models can be swapped.
 - **Self-hosting friendly.** Every dependency has an open-source, container-friendly option.
