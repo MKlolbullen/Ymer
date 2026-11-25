@@ -58,6 +58,9 @@ def app():
             "ai_embedding_model": "hash-256",
             "ai_index_inline": False,
             "ai_rate_limit": 0,
+            # Builds never touch Docker in tests; tests run queued builds themselves.
+            "factory_sandbox": "fake",
+            "factory_run_inline": False,
         }
     )
     yield app

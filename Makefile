@@ -6,7 +6,7 @@ COLLAB := collab
 VENV := $(BACKEND)/.venv
 PY := $(VENV)/bin
 
-.PHONY: help setup infra-up infra-down migrate backend collab frontend ai-worker test lint
+.PHONY: help setup infra-up infra-down migrate backend collab frontend ai-worker factory-worker factory-images test lint
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -37,6 +37,14 @@ frontend: ## Run the Vite dev server on :5173
 
 ai-worker: ## Embed changed pages for semantic search and Q&A (not needed with YMER_AI_INDEX_INLINE=true)
 	cd $(BACKEND) && .venv/bin/flask --app wsgi ai-worker
+
+factory-worker: ## Run Factory builds (not needed with YMER_FACTORY_RUN_INLINE=true)
+	cd $(BACKEND) && .venv/bin/flask --app wsgi factory-worker
+
+factory-images: ## Build the Docker images Factory builds run in
+	for stack in static-web python-cli flask-react; do \
+		docker build -t ymer-factory/$$stack:1 -f infra/factory/$$stack.Dockerfile infra/factory; \
+	done
 
 test: ## Run backend, collab and frontend tests
 	cd $(BACKEND) && .venv/bin/pytest

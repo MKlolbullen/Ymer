@@ -46,6 +46,29 @@ def register_cli(app: Flask) -> None:
             if not done:
                 time.sleep(interval)
 
+    @app.cli.command("factory-worker")
+    @click.option("--once", is_flag=True, help="Run the queued builds, then exit.")
+    @click.option("--interval", default=2.0, show_default=True, help="Seconds between polls.")
+    def factory_worker(once: bool, interval: float) -> None:
+        """Run queued Factory builds, one at a time (start several workers for more)."""
+        import time
+
+        from flask import current_app
+
+        from ymer.factory.runner import sandbox_for, work_once
+
+        flask_app = current_app._get_current_object()
+        sandbox = sandbox_for(flask_app)
+        if sandbox is None:
+            raise click.ClickException("Builds are off (YMER_FACTORY_SANDBOX=off).")
+        click.echo(f"Factory worker started (sandbox: {sandbox.name}).")
+        while True:
+            worked = work_once(flask_app)
+            if once and not worked:
+                return
+            if not worked:
+                time.sleep(interval)
+
     @app.cli.command("ai-reindex")
     @click.option("--workspace", "workspace_id", default=None, help="Only this workspace id.")
     def ai_reindex(workspace_id: str | None) -> None:

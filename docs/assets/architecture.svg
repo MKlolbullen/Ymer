@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="Ymer architecture: browser, Flask API, Hocuspocus collab service, Postgres, Redis, MinIO and the AI layer">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 760" width="960" height="760" role="img" aria-label="Ymer architecture: browser, Flask API, Hocuspocus collab service, Postgres, Redis, MinIO, the AI layer, and the Factory worker with its sandbox">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#52525b"/>
@@ -26,7 +26,7 @@
     </style>
   </defs>
 
-  <rect width="960" height="600" rx="16" fill="#ffffff"/>
+  <rect width="960" height="760" rx="16" fill="#ffffff"/>
 
   <!-- Browser -->
   <rect class="brand" x="250" y="24" width="460" height="92" rx="12"/>
@@ -39,7 +39,7 @@
   <text class="title" x="80" y="228">Flask 3 API  (:5000)</text>
   <text class="body" x="80" y="252">JWT auth, workspaces, members, page tree</text>
   <text class="body" x="80" y="272">WorkspaceScope permissions (404, never 403)</text>
-  <text class="body" x="80" y="292">Comments, versions, files, databases, charts</text>
+  <text class="body" x="80" y="292">Comments, versions, files, databases, AI, Factory</text>
   <text class="body" x="80" y="312">SQLAlchemy 2 + Alembic migrations</text>
   <text class="small" x="80" y="336">Only writer of the schema. Only place permissions are decided.</text>
 
@@ -69,8 +69,8 @@
   <text class="title" x="80" y="458">PostgreSQL 16</text>
   <text class="body" x="80" y="480">pgvector + pg_trgm enabled</text>
   <text class="body" x="80" y="500">users, pages, permissions,</text>
-  <text class="body" x="80" y="520">Yjs state, versions, comments,</text>
-  <text class="body" x="80" y="540">files, databases, AI chunks</text>
+  <text class="body" x="80" y="520">Yjs state, versions, databases,</text>
+  <text class="body" x="80" y="540">AI chunks, Factory builds</text>
 
   <rect class="store" x="350" y="430" width="200" height="120" rx="12"/>
   <text class="title" x="370" y="458">Redis 7</text>
@@ -102,5 +102,23 @@
   <!-- Browser -> MinIO presigned (around the right side) -->
   <path class="line-brand" d="M712 70 L930 70 L930 380 L720 380 L700 428" marker-end="url(#arrow-brand)" stroke-dasharray="2 4"/>
   <text class="label" x="790" y="62">presigned GET</text>
+
+  <!-- Factory worker and sandbox -->
+  <rect class="box" x="60" y="620" width="380" height="110" rx="12"/>
+  <text class="title" x="80" y="648">Factory worker</text>
+  <text class="body" x="80" y="672">flask factory-worker: claims queued builds,</text>
+  <text class="body" x="80" y="692">runs the agent task by task, logs each step</text>
+  <text class="small" x="80" y="714">Writes the app's files and task statuses to Postgres.</text>
+
+  <rect class="brand" x="560" y="620" width="340" height="110" rx="12"/>
+  <text class="title" x="580" y="648">Sandbox (Docker)</text>
+  <text class="body" x="580" y="672">One throwaway container per command</text>
+  <text class="body" x="580" y="692">No network, read-only, no privileges</text>
+  <text class="small" x="580" y="714">Generated code never runs inside Ymer.</text>
+
+  <path class="line" d="M170 618 L170 552" marker-end="url(#arrow)"/>
+  <path class="line" d="M400 618 C560 600 800 590 850 552" marker-end="url(#arrow)"/>
+  <path class="line" d="M442 675 L558 675" marker-end="url(#arrow)"/>
+  <text class="small" x="462" y="666">run tests</text>
 
 </svg>

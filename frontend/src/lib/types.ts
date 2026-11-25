@@ -1,5 +1,5 @@
 export type Role = "owner" | "editor" | "commenter" | "viewer";
-export type PageType = "document" | "database" | "mindmap" | "drawing" | "folder";
+export type PageType = "document" | "database" | "mindmap" | "drawing" | "folder" | "factory";
 
 /** Page types whose content is a Yjs document edited live (these have version history). */
 export const LIVE_PAGE_TYPES: PageType[] = ["document", "mindmap", "drawing"];

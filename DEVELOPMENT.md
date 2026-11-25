@@ -349,3 +349,149 @@ Assumptions made for this phase, open to change:
   missing.
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
+
+## Factory, stages F1 to F3: the brief, the architecture and the build
+
+The Factory turns a workspace's notes into a working app in reviewed stages (brief,
+architecture, build, review, deliver). The plan for all stages lives in the project's
+Factory plan document; F1 is built.
+
+Migration `0007` adds the `factory` page type and three tables: `factory_projects`
+(stage, current brief, approval), `factory_sources` (the pages it reads, in order) and
+`factory_questions` (gaps the AI found, with answers). Every stage writes ordinary pages
+under the factory page, so people review and edit with the tools they already have: the
+brief is a document.
+
+- **Code**: `ymer/factory/` (`brief.py`: prompt, JSON schema, cleaning, the brief's
+  layout; `document.py`: writes TipTap documents as Yjs states; `fake.py`: the demo
+  model's rule-based brief), routes in `ymer/api/factory.py`, UI in
+  `frontend/src/factory/`.
+- **Routes**, under `/api/workspaces/<ws>/factories/<factory page id>`:
+  - `GET`: stage, sources, questions, the brief page and approval. Viewer access.
+  - `PUT /sources` `{page_ids}`: editor; each new source needs viewer access. Folders,
+    factories and the factory's own brief cannot be sources. Sources the caller cannot
+    open are kept (they could not see them to send them back).
+  - `POST /brief`: editor, rate limited like the other AI routes. Reads the sources with
+    the caller's access (about 60,000 characters, shared fairly between sources), sends
+    answered questions as decisions and dismissed ones as "do not ask", and writes a new
+    `Brief` page. An earlier brief is renamed "(earlier draft)" rather than overwritten,
+    because it may be open in someone's editor. Open questions are replaced by the new
+    ones; answered and dismissed ones stay.
+  - `PATCH /questions/<id>` `{answer?, status?: open|dismissed}`: a blank answer reopens.
+  - `POST /approve`: editor; needs a brief and no open questions. Saves a named version
+    "Approved brief" of the brief and freezes sources, questions and rewrites.
+  - `POST /reopen`: takes the approval back.
+- **Model**: the same provider as the rest of the AI layer (`YMER_AI_PROVIDER`), with
+  structured output (`BRIEF_SCHEMA`). Model output is cleaned and capped before
+  anything is written, and the source text is wrapped in tags the model is told to
+  treat as data.
+
+Assumptions for F1, open to change:
+
+- Writing the brief runs in the request, like Phase 4's generation. Long-running stages
+  (the build) will run on a worker queue.
+- The brief reads the last saved state of each source (collab saves about 2 seconds
+  after the last edit).
+- Only editors approve; there is no separate "approver" role yet.
+
+### Stage F2: the architecture
+
+Migration `0008` adds to `factory_projects` the chosen `stack`, the ids of the
+architecture, system map and task pages, and the plan's approval. Stages now run
+`sources` → `brief` → `approved` (brief approved) → `architecture` → `planned`.
+
+- **Stacks** (`ymer/factory/stacks.py`): `static-web`, `python-cli` and `flask-react`,
+  each with its languages, test command and what gets delivered. Building on a few known
+  project shapes is what will make the build stage reliable.
+- **Routes**:
+  - `POST /architecture` `{stack?}`: editor, rate limited; needs an approved brief.
+    Reads the brief page as it is now (people may have edited it), asks the model for an
+    architecture (`architecture_schema()`), and writes three pages under the factory:
+    *Architecture* (document), *System map* (mind map: app, components, each
+    component's tasks) and *Tasks* (database: Task, Status, Component, Priority, Size,
+    Depends on, Detail; a table view and a board by Status that hides the long text
+    columns). Redesigning renames the earlier pages "(earlier draft)".
+  - `POST /approve-plan`: editor; saves named versions "Approved architecture" and
+    "Approved system map" and freezes the design.
+  - `POST /reopen` now steps back one approval: an approved plan goes back to review,
+    otherwise the brief opens again (the architecture pages stay).
+- **Cleaning**: the model's components, tasks and dependencies are capped (12
+  components, 20 entities, 60 tasks), unknown stacks fall back to `flask-react`, and
+  dependencies on components or tasks that do not exist are dropped.
+- **Demo model** (`fake_architecture`): picks a stack from words in the brief (terminal
+  or CLI → `python-cli`; shared use, votes, accounts, history → `flask-react`;
+  otherwise `static-web`), makes a setup task, one task per feature with its priority,
+  and an end-to-end test task, and guesses entities from features like "Suggest a place:
+  name, cuisine and walking time".
+
+Assumptions for F2, open to change:
+
+- Three stacks to start; which ones matter most is an open question in the plan.
+- Task dependencies are stored as text ("Depends on") rather than a relation, so the
+  board stays simple; the build stage will read them from there.
+- Designing runs in the request like the brief. With Claude it can take a minute.
+
+### Stage F3: the build
+
+Migration `0009` adds `factory_runs` (status, who started it, a snapshot of what it
+builds from, steps, tokens, tasks done, summary, error), `factory_run_events` (the log,
+numbered per run) and `factory_files` (the app's current files, one row per path). The
+stage after a passing build is `built`.
+
+- **Flow** (`ymer/factory/build.py`): `POST /runs` captures the stack, the brief and
+  architecture text and the tasks with the starter's access, and queues a run. A worker
+  claims it (`FOR UPDATE SKIP LOCKED`, so several workers are safe) and works through
+  the tasks in order, skipping Done ones and waiting on unfinished dependencies. Each
+  task is a fresh agent conversation that sees the brief and architecture (cached in the
+  system prompt), the task list, notes from earlier tasks and the files so far. The task
+  moves To do → In progress → Done in the Tasks database. Every step is committed, so
+  the page can follow the log while it runs.
+- **Agent** (`ymer/factory/agent.py`): tools `list_files`, `read_file`, `write_file`,
+  `delete_file`, `run_tests`, `run_command` and `finish_task`. With Claude, it is tool
+  use over the Messages API, streamed, with adaptive thinking, `eager_input_streaming`
+  on each tool, and every tool input checked against its schema before it runs; a reply
+  cut off at `max_tokens` is sent back as an error rather than run. `finish_task` with
+  outcome `done` is refused until the tests pass after the last change. Paths must stay
+  inside the app (no absolute paths, `..` or `.git`). The OpenAI-compatible provider
+  does not do builds yet. The demo model (`fake_agent.py`) writes a placeholder module
+  and test per task.
+- **Sandbox** (`ymer/factory/sandbox/`): one method, `run(files, command, image,
+  timeout)`, stateless. `docker` copies the files into a temporary directory and runs a
+  new container per command with `--network none`, `--read-only`, `--cap-drop ALL`,
+  `no-new-privileges`, user `nobody`, and memory, CPU, process and time limits. The
+  images (`infra/factory/`) carry each stack's test tools, because there is no network
+  to install anything. `fake` runs nothing: it parses Python with `ast` and counts tests.
+- **Stopping and budgets**: `POST /runs/<id>/stop` stops a queued run at once and a
+  running one after its current step. A run fails at the first blocked task, after
+  `YMER_FACTORY_TASK_STEPS` steps on one task, or when it reaches
+  `YMER_FACTORY_MAX_STEPS` or `YMER_FACTORY_MAX_TOKENS`. A task left In progress goes
+  back to To do. Files written so far are kept, so the next build continues.
+- **Routes**: `POST /runs` (editor; needs an approved plan, one run at a time), `GET
+  /runs`, `GET /runs/<id>?after=<seq>` (the log after a line), `POST /runs/<id>/stop`,
+  `GET /files`, `GET /files/content?path=` (viewer). `POST /reopen` on a built factory
+  reopens the plan; the files stay.
+- **Settings**:
+
+  | Setting | Default | What it does |
+  |---|---|---|
+  | `YMER_FACTORY_SANDBOX` | `fake` | `docker`, `fake` (runs nothing) or `off` |
+  | `YMER_FACTORY_RUN_INLINE` | `false` | Run builds in a thread of the API process (`.env.example` sets `true`) |
+  | `YMER_FACTORY_DOCKER_BIN` | `docker` | The Docker command |
+  | `YMER_FACTORY_MEMORY` / `YMER_FACTORY_CPUS` | `1g` / `1` | Container limits |
+  | `YMER_FACTORY_COMMAND_TIMEOUT` | `300` | Seconds per command |
+  | `YMER_FACTORY_MAX_STEPS` | `300` | Model steps per build |
+  | `YMER_FACTORY_TASK_STEPS` | `30` | Model steps per task |
+  | `YMER_FACTORY_MAX_TOKENS` | `3000000` | Tokens per build (cache reads count a tenth) |
+
+Assumptions for F3, open to change:
+
+- Docker first, hosted later: a hosted sandbox only needs to implement `run`. The
+  Docker sandbox needs a Docker daemon next to the worker; giving a worker the Docker
+  socket gives it control of that host, so run workers on a machine meant for it.
+- The flask-react stack builds and tests the backend; the front end is built when the
+  app is delivered (F4), since installing npm packages needs network.
+- A worker that dies mid-run leaves that run marked running; there is no automatic
+  recovery yet. Pressing Stop twice marks it stopped without waiting for the worker.
+- Builds start from the tasks as they were when the build started; edits to the Tasks
+  database during a build apply to the next one.
+

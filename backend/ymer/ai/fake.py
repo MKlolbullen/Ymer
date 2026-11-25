@@ -119,6 +119,14 @@ class FakeChat:
             return json.dumps(mindmap_from_outline(data.get("title", ""), data.get("text", "")))
         if task == "generate.database":
             return json.dumps(database_from_outline(data.get("title", ""), data.get("text", "")))
+        if task == "factory.brief":
+            from ymer.factory.fake import fake_brief  # the factory builds on this module
+
+            return fake_brief(data)
+        if task == "factory.architecture":
+            from ymer.factory.fake import fake_architecture
+
+            return fake_architecture(data)
         return ""
 
     def _assist(self, action: str, data: dict) -> str:

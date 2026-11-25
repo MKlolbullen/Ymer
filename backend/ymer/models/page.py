@@ -32,6 +32,7 @@ class PageType(enum.StrEnum):
     MINDMAP = "mindmap"
     FOLDER = "folder"
     DRAWING = "drawing"
+    FACTORY = "factory"
 
 
 # Page types whose content is a Yjs document edited live through the collab service.

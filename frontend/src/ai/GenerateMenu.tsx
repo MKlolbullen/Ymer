@@ -21,7 +21,7 @@ export function GenerateMenu({ page }: { page: Page }) {
   const [paste, setPaste] = useState<null | GenerateBody["kind"]>(null);
   const [text, setText] = useState("");
 
-  if (!status.data?.enabled || !atLeast(page.my_role, "editor") || page.type === "folder") return null;
+  if (!status.data?.enabled || !atLeast(page.my_role, "editor") || page.type === "folder" || page.type === "factory") return null;
 
   const run = (body: Omit<GenerateBody, "parent_id">) =>
     generate.mutate(
