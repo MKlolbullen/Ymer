@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Integer, String, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, LargeBinary, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ymer.db import Base
@@ -30,9 +30,22 @@ class User(TimestampMixin, Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
 
+    ai_provider: Mapped[str | None] = mapped_column(String(20))
+
     memberships: Mapped[list["WorkspaceMember"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+
+
+class UserAiProfile(Base):
+    __tablename__ = "user_ai_profiles"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(20), primary_key=True)
+    model: Mapped[str] = mapped_column(String(200))
+    encrypted_key: Mapped[bytes] = mapped_column(LargeBinary)

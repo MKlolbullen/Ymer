@@ -108,6 +108,21 @@ what is planned.
 
 ### AI layer
 
+Open **AI settings** beside your account name in the workspace sidebar. Choose Anthropic,
+OpenAI, xAI, Gemini or Venice.ai, enter the exact chat model ID available to your account,
+and save your API key. Your choice follows you across workspaces. Each provider remembers its
+own model and key. Leave the key blank to keep it, enter a new key to replace it, or choose
+**Server default** to switch back. Saving settings makes no provider call. AI requests send
+the relevant content to your selected provider and may incur charges.
+
+Ymer encrypts personal keys before saving them. For a manual installation, set a stable
+random `YMER_AI_CREDENTIAL_SECRET` (generate one with `openssl rand -hex 32`) on the API and
+Factory worker. Otherwise Ymer derives the key from `YMER_SECRET_KEY` (minimum 32 characters).
+Back up the secret separately from the database. Changing it requires users to re-enter their keys.
+Existing installations need the database migration (`make migrate`). Embeddings use the server
+configuration. Setting `YMER_AI_PROVIDER=off` disables chat for everyone. Factory code builds
+support Anthropic and the server demo. Structured generation requires a compatible model.
+
 | Feature | What you get |
 |---|---|
 | **Writing assist** | ✨ AI in the editor toolbar. Select text and improve it, fix spelling and grammar, shorten, expand, summarize, turn it into bullets, or give your own instruction. You see the result first, then replace the selection, insert it below, or copy it. With nothing selected, anyone who can read the page can summarize it. |
@@ -253,7 +268,7 @@ to every page type (documents, canvases, charts and the Factory), and this brows
 - **Storage**: Postgres for everything structured (Yjs state, versions, comments, databases, full-text search),
   MinIO (any S3 API) for file bytes. Redis holds the AI rate limit counters.
 - **AI layer** (`backend/ymer/ai/`): part of the Flask app, not a separate service. Flask proxies every model call,
-  so keys never reach the browser and every read goes through the permission checks. Pages and database rows are
+  uses saved keys server-side, and applies workspace permissions to each read. Pages and database rows are
   split into chunks and embedded into pgvector; edits put the page on a queue that `make ai-worker` (`flask
   ai-worker`) drains in the background. The chat model and the embedding model are configured separately with
   `YMER_AI_*` settings.

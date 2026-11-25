@@ -6,6 +6,7 @@ import { AskPage } from "./ai/AskPage";
 import { ApiError } from "./lib/api";
 import { useSession } from "./lib/auth";
 import { AuthPage } from "./pages/AuthPage";
+import { AiSettingsPage } from "./pages/AiSettingsPage";
 import { MembersPage } from "./pages/MembersPage";
 import { PageView } from "./pages/PageView";
 import { Home, NewWorkspace, WorkspaceHome, WorkspaceLayout } from "./pages/workspace";
@@ -36,6 +37,7 @@ export function AppRoutes() {
       <Route path="/w/:workspaceId" element={<RequireAuth><WorkspaceLayout /></RequireAuth>}>
         <Route index element={<WorkspaceHome />} />
         <Route path="p/:pageId" element={<PageView />} />
+        <Route path="settings" element={<AiSettingsPage />} />
         <Route path="members" element={<MembersPage />} />
         <Route path="ask" element={<AskPage />} />
         <Route path="ask/:conversationId" element={<AskPage />} />

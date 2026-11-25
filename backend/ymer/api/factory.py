@@ -38,9 +38,10 @@ from werkzeug.exceptions import (
     UnprocessableEntity,
 )
 
-from ymer.ai import AiError, ChatRequest, get_ai
+from ymer.ai import AiError, ChatRequest
 from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty
+from ymer.ai.personal import user_ai
 from ymer.api.ai import ai_endpoint, page_text
 from ymer.api.documents import _person
 from ymer.api.pages import page_json
@@ -351,7 +352,7 @@ def write_brief(workspace_id: uuid.UUID, page_id: uuid.UUID):
     scope = scope_for(workspace_id)
     page, project = _factory(scope, page_id, Role.EDITOR)
     _require_open(project)
-    chat = get_ai().require_chat()
+    chat = user_ai().require_chat()
 
     sources = _source_texts(scope, project)
     if not sources:
@@ -414,7 +415,7 @@ def write_brief(workspace_id: uuid.UUID, page_id: uuid.UUID):
     db_session.flush()
     data = factory_json(scope, page, project)
     db_session.commit()
-    return jsonify(factory=data, demo=get_ai().demo), 201
+    return jsonify(factory=data, demo=user_ai().demo), 201
 
 
 # --- questions ------------------------------------------------------------------------
@@ -569,7 +570,7 @@ def design_architecture(workspace_id: uuid.UUID, page_id: uuid.UUID):
     body = parse_body(ArchitectureBody)
     if body.stack is not None and body.stack not in STACKS:
         raise BadRequest(f"Unknown stack. Choose one of: {', '.join(STACKS)}.")
-    chat = get_ai().require_chat()
+    chat = user_ai().require_chat()
 
     # The brief as it reads now: people may have edited it after it was written.
     brief_page = _visible(scope, project.brief_page_id) if project.brief_page_id else None
@@ -619,7 +620,7 @@ def design_architecture(workspace_id: uuid.UUID, page_id: uuid.UUID):
     db_session.flush()
     data = factory_json(scope, page, project)
     db_session.commit()
-    return jsonify(factory=data, demo=get_ai().demo), 201
+    return jsonify(factory=data, demo=user_ai().demo), 201
 
 
 @factory_bp.post("/approve-plan")
@@ -720,12 +721,16 @@ def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
         raise Conflict("Approve the architecture and its tasks before building.")
     if _active_run(project) is not None:
         raise Conflict("A build is already running.")
-    chat = get_ai().chat
+    chat = user_ai().chat
     if chat is None:
         raise ServiceUnavailable("AI features are turned off on this server.")
     sandbox = sandbox_for(current_app)
     if sandbox is None:
         raise ServiceUnavailable("Builds are turned off on this server.")
+    if chat.name not in {"anthropic", "fake"}:
+        raise UnprocessableEntity(
+            "Factory builds currently require Anthropic or the demo provider."
+        )
     # The build works from what the person starting it can read.
     texts = {}
     for key, pid in (
@@ -746,6 +751,8 @@ def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
         user_id=current_user().id,
     )
     run.context = {**run.context, "sandbox": sandbox.name, "model": chat.model}
+    if current_user().ai_provider:
+        run.context = {**run.context, "personal_provider": current_user().ai_provider}
     db_session.commit()
     if settings_for(current_app).factory_run_inline:
         start_inline(current_app._get_current_object(), run.id)

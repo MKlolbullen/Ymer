@@ -182,9 +182,9 @@ class AnthropicAgent:
             "system": self.system,
             "messages": self.messages,
             "tools": self.tools,
-            "thinking": {"type": "adaptive"},
-            "output_config": {"effort": p.effort},
         }
+        if p.effort:
+            kwargs.update(thinking={"type": "adaptive"}, output_config={"effort": p.effort})
         if p.fallbacks:
             kwargs["betas"] = [p.FALLBACK_BETA]
             kwargs["fallbacks"] = "default"
@@ -196,7 +196,7 @@ class AnthropicAgent:
         except errors.RateLimitError as exc:
             raise AiError("The AI provider is rate limiting requests.") from exc
         except errors.APIStatusError as exc:
-            log.warning("Claude build step failed: %s %s", exc.status_code, exc.message)
+            log.warning("Claude build step failed: %s", exc.status_code)
             raise AiError(f"The AI provider answered with an error ({exc.status_code}).") from exc
         except errors.APIConnectionError as exc:
             raise AiError("Could not reach the AI provider.") from exc
