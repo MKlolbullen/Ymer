@@ -15,6 +15,7 @@ dependencies = [
   "redis>=5.2",
   "boto3>=1.35",
   "python-dotenv>=1.0",
+  "cryptography>=43",
   "pyjwt>=2.10",
   "email-validator>=2.2",
   "pycrdt>=0.12",

@@ -32,6 +32,7 @@ from werkzeug.exceptions import BadGateway, NotFound, TooManyRequests, Unprocess
 from ymer.ai import AiError, AiRefused, ChatRequest, get_ai, prompts
 from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty, page_chunks
+from ymer.ai.personal import user_ai
 from ymer.ai.retrieval import semantic_search
 from ymer.api.pages import _require_can_create_under, page_json
 from ymer.api.validation import parse_body
@@ -114,7 +115,7 @@ def ai_endpoint(view):
 @ai_status_bp.get("/status")
 @login_required
 def status():
-    ai = get_ai()
+    ai = user_ai()
     settings = settings_for(current_app)
     return jsonify(
         enabled=ai.chat is not None,
@@ -162,7 +163,7 @@ def assist(workspace_id: uuid.UUID, page_id: uuid.UUID):
     body = parse_body(AssistBody)
     minimum = Role.VIEWER if body.action in prompts.READ_ONLY_ACTIONS else Role.EDITOR
     page = scope.get_page(page_id, minimum)
-    chat = get_ai().require_chat()
+    chat = user_ai().require_chat()
     if body.action == "custom" and not body.instruction.strip():
         raise UnprocessableEntity("Say what the AI should do with the text.")
     text = body.text.strip() or page_text(page)
@@ -182,7 +183,7 @@ def assist(workspace_id: uuid.UUID, page_id: uuid.UUID):
             max_tokens=8000,
         )
     )
-    return jsonify(action=body.action, text=result.strip(), demo=get_ai().demo)
+    return jsonify(action=body.action, text=result.strip(), demo=user_ai().demo)
 
 
 # --- semantic search ------------------------------------------------------------------
@@ -275,7 +276,7 @@ def message_json(m: AiMessage, visible: set[str] | None = None) -> dict:
 def ask(workspace_id: uuid.UUID):
     scope = scope_for(workspace_id)
     body = parse_body(AskBody)
-    ai = get_ai()
+    ai = user_ai()
     chat = ai.require_chat()
     embedder = ai.require_embedder()
     question = body.question.strip()
@@ -409,7 +410,7 @@ class GenerateBody(BaseModel):
 def generate(workspace_id: uuid.UUID):
     scope = scope_for(workspace_id)
     body = parse_body(GenerateBody)
-    chat = get_ai().require_chat()
+    chat = user_ai().require_chat()
     _require_can_create_under(scope, body.parent_id)
 
     source_title = body.title

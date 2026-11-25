@@ -110,6 +110,9 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
             Sign out
           </button>
         </div>
+        <NavLink to={`/w/${workspace.id}/settings`} className={navClass} onClick={() => setMenuOpen(false)}>
+          <span aria-hidden>⚙</span> AI settings
+        </NavLink>
         <AppearancePicker />
         <ApiStatus />
       </div>

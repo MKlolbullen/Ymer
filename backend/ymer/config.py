@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     ai_effort: str = "medium"
     # Retry a declined Claude request on Anthropic's recommended fallback model.
     ai_fallbacks: bool = True
+    ai_credential_secret: str | None = None
     ai_api_key: str | None = None
     ai_base_url: str | None = None
     ai_timeout: float = 120.0

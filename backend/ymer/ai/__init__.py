@@ -52,7 +52,7 @@ class AiServices:
 
     @property
     def demo(self) -> bool:
-        return isinstance(self.chat, FakeChat) or isinstance(self.embedder, HashEmbedder)
+        return isinstance(self.chat, FakeChat)
 
     def require_chat(self) -> ChatProvider:
         if self.chat is None:

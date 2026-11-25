@@ -1,6 +1,7 @@
 /** The AI layer's API: status, writing assist, semantic search, Q&A and generation. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSession } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { keys as baseKeys } from "@/lib/queries";
 import type { Page, SearchResult } from "@/lib/types";
@@ -46,8 +47,9 @@ export const aiKeys = {
 };
 
 export function useAiStatus() {
+  const session = useSession();
   return useQuery({
-    queryKey: aiKeys.status,
+    queryKey: [...aiKeys.status, session?.user.id],
     queryFn: () => api<AiStatus>("/ai/status"),
     staleTime: 5 * 60_000,
   });

@@ -453,6 +453,16 @@ def execute_run(
     try:
         if chat is None:
             raise RunFailed("AI features are turned off on this server.")
+        if provider := run.context.get("personal_provider"):
+            from ymer.ai.personal import profile_chat
+            from ymer.models.user import UserAiProfile
+
+            profile = (
+                session.get(UserAiProfile, (run.started_by_id, provider))
+                if run.started_by_id
+                else None
+            )
+            chat = profile_chat(settings, profile, run.context["model"])
         if sandbox is None:
             raise RunFailed("Builds are turned off on this server (YMER_FACTORY_SANDBOX=off).")
         if not tasks:

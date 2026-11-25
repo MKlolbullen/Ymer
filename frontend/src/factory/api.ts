@@ -257,7 +257,7 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
 
 /** Add newly fetched log lines, skipping any already shown. */
 export function mergeEvents(previous: RunEvent[], next: RunEvent[]): RunEvent[] {
-  const last = previous.length ? previous[previous.length - 1].seq : 0;
+  const last = previous.at(-1)?.seq ?? 0;
   const fresh = next.filter((e) => e.seq > last);
   return fresh.length ? [...previous, ...fresh] : previous;
 }
@@ -289,8 +289,9 @@ export function useRunLog(workspaceId: string, pageId: string, runId: string | n
         );
         if (stopped) return;
         setRun(r.run);
-        if (r.events.length) {
-          lastSeq.current = r.events[r.events.length - 1].seq;
+        const latest = r.events.at(-1);
+        if (latest) {
+          lastSeq.current = latest.seq;
           setEvents((prev) => mergeEvents(prev, r.events));
         }
         if (runActive(r.run) || r.events.length) {
