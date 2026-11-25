@@ -350,7 +350,7 @@ Assumptions made for this phase, open to change:
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
 
-## Factory, stages F1 to F3: the brief, the architecture and the build
+## Factory, stages F1 to F4: the brief, the architecture, the build and delivery
 
 The Factory turns a workspace's notes into a working app in reviewed stages (brief,
 architecture, build, review, deliver). The plan for all stages lives in the project's
@@ -494,4 +494,51 @@ Assumptions for F3, open to change:
   recovery yet. Pressing Stop twice marks it stopped without waiting for the worker.
 - Builds start from the tasks as they were when the build started; edits to the Tasks
   database during a build apply to the next one.
+
+### Stage F4: review and delivery
+
+Migration `0010` adds `factory_releases` (a numbered, frozen copy of the app's files
+with notes, who approved it and what changed since the release before), `factory_pushes`
+(each push of a release to git: remote without credentials, branch, status, commit or
+error) and, on `factory_projects`, the last `git_remote` and `git_branch`. The stage after
+the first release is `released`; building again stays possible.
+
+- **Releases** (`ymer/factory/releases.py`): `POST /releases {notes?}` (editor) needs
+  the latest build to have passed, no build running, and files that differ from the last
+  release. The factory's `delivery` block shows what is unreleased (`added`, `changed`,
+  `removed`), which the Review section lists.
+- **Packaging** (`ymer/factory/package.py`): a delivered release gets `RELEASE.md` (how to
+  run and test it, the notes), a `.gitignore` and, for `python-cli` and `flask-react`, a
+  `Dockerfile` (multi-stage for Flask + React). Fixed templates, not model output, and a
+  file the build already wrote wins. `GET /releases/<n>/download` returns it as a zip
+  under one folder, with stable ordering and timestamps.
+- **Preview** (static web apps with an `index.html`): `POST /releases/<n>/preview`
+  returns a signed link (`itsdangerous`, `YMER_FACTORY_PREVIEW_MINUTES`) under
+  `/api/factory-preview/<token>/...`, which serves the release's files without the login
+  header, since an iframe cannot send one. Every response carries
+  `Content-Security-Policy: sandbox allow-scripts allow-forms allow-modals` (no
+  `allow-same-origin`) and `connect-src 'none'`, so the app runs in an opaque origin even
+  when the link is opened in its own tab: it cannot read Ymer's local storage or call the
+  API. The link stops working when its creator loses access to the factory.
+- **Git** (`ymer/factory/git.py`): `POST /releases/<n>/push {remote, branch, token?}`
+  (editor). Only `https://` URLs on `YMER_FACTORY_GIT_HOSTS`, with no credentials in the
+  URL; branch names are checked. The token reaches git through `GIT_ASKPASS` in a
+  temporary home with system and global config, hooks and credential helpers off, and is
+  scrubbed from any error. Ymer fetches the branch (depth 1), replaces its files with the
+  release, commits as "Ymer Factory" and pushes without force; if the branch already has
+  this release the push is recorded as `unchanged`.
+- **Settings**: `YMER_FACTORY_GIT_HOSTS`, `YMER_FACTORY_GIT_ALLOW_LOCAL` (`file://`
+  remotes, for tests only), `YMER_FACTORY_GIT_TIMEOUT` (120 s),
+  `YMER_FACTORY_PREVIEW_MINUTES` (60).
+
+Assumptions for F4, open to change:
+
+- Ymer writes a Dockerfile but does not build or publish images: that needs network and
+  a Docker daemon with registry credentials, which belongs in the team's CI.
+- Only static web apps preview in the page. Previewing the Flask + React stack would need
+  a running container per preview, which can come with a hosted sandbox.
+- A push runs in the request (up to two minutes). Tokens are never stored, so each push
+  asks for one; a stored deploy key per factory could come later.
+- Releases store a full copy of the files in Postgres (JSONB). That is fine for apps of a
+  few hundred files; large apps would move to object storage.
 

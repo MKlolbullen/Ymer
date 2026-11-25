@@ -21,6 +21,7 @@ import {
   type FactoryQuestion,
 } from "./api";
 import { Build } from "./Build";
+import { Deliver, Review } from "./Deliver";
 import { errorText, primary, quiet, secondary, Section } from "./ui";
 
 const STEPS = [
@@ -330,7 +331,7 @@ export function FactoryPage({ page }: { page: Page }) {
             <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
               The approved text is saved as a named version of the brief. Next, design the architecture below.
             </p>
-            {f.can_edit && f.stage !== "planned" && f.stage !== "built" && (
+            {f.can_edit && f.stage !== "planned" && f.stage !== "built" && f.stage !== "released" && (
               <button onClick={() => reopen.mutate()} className={`${quiet} mt-2`}>
                 Reopen the brief
               </button>
@@ -361,6 +362,8 @@ export function FactoryPage({ page }: { page: Page }) {
 
       <Architecture page={page} factory={f} aiOff={!!aiOff} demo={!!status.data?.demo} />
       <Build page={page} factory={f} />
+      <Review page={page} factory={f} />
+      <Deliver page={page} factory={f} />
     </div>
   );
 }
@@ -375,7 +378,7 @@ function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: 
   const { designArchitecture, approvePlan, reopen } = useFactoryMutations(page.workspace_id, page.id);
   const [stack, setStack] = useState<string | null>(f.stack);
   const open = briefApproved(f);
-  const planned = f.stage === "planned" || f.stage === "built";
+  const planned = f.stage === "planned" || f.stage === "built" || f.stage === "released";
   const editable = f.can_edit && open && !planned;
   const designed = !!f.architecture;
 

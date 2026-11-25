@@ -11,6 +11,9 @@ the bookkeeping:
 - ``factory_questions``: gaps the AI found in the sources, and the answers people gave.
 - ``factory_runs`` / ``factory_run_events``: build runs and their step-by-step log.
 - ``factory_files``: the code the build wrote, one row per file (the current tree).
+- ``factory_releases``: builds an editor reviewed and approved, as numbered snapshots of
+  the files; what gets downloaded, previewed and pushed.
+- ``factory_pushes``: each push of a release to a git repository.
 """
 
 import enum
@@ -42,6 +45,7 @@ class FactoryStage(enum.StrEnum):
     ARCHITECTURE = "architecture"  # an architecture was designed from the approved brief
     PLANNED = "planned"  # an editor approved the architecture and its tasks
     BUILT = "built"  # a build run finished every task with passing tests
+    RELEASED = "released"  # an editor approved a build as a release
 
 
 class QuestionStatus(enum.StrEnum):
@@ -83,6 +87,9 @@ class FactoryProject(TimestampMixin, Base):
     plan_approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Stage F4: where releases were last pushed, offered again next time.
+    git_remote: Mapped[str | None] = mapped_column(String(500))
+    git_branch: Mapped[str | None] = mapped_column(String(200))
 
 
 class FactorySource(Base):
@@ -217,4 +224,68 @@ class FactoryFile(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FactoryRelease(Base):
+    """An approved build: a frozen copy of the files, numbered per factory (v1, v2...)."""
+
+    __tablename__ = "factory_releases"
+    __table_args__ = (
+        UniqueConstraint("factory_id", "number", name="uq_factory_releases_factory_number"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    factory_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("factory_projects.page_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_runs.id", ondelete="SET NULL")
+    )
+    stack: Mapped[str] = mapped_column(String(40), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    # {path: content}: the app as built, without the packaging files added on download.
+    files: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    file_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    # {added: [...], changed: [...], removed: [...]} against the release before it.
+    changes: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class FactoryPush(Base):
+    """A push of a release to a git repository. Tokens are used once and never stored."""
+
+    __tablename__ = "factory_pushes"
+    __table_args__ = (Index("ix_factory_pushes_release_id", "release_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    release_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_releases.id", ondelete="CASCADE"), nullable=False
+    )
+    # The repository URL without credentials.
+    remote: Mapped[str] = mapped_column(String(500), nullable=False)
+    branch: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # pushed, unchanged, failed
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
+    error: Mapped[str | None] = mapped_column(Text)
+    pushed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
     )

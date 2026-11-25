@@ -257,7 +257,7 @@ export function Build({ page, factory: f }: { page: Page; factory: Factory }) {
               <RunCard run={run} />
               {run.status === "passed" && run.summary && (
                 <p className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  ✓ {run.summary} Packaging and delivering the app is the next Factory stage.
+                  ✓ {run.summary} Review it below and approve it as a release.
                 </p>
               )}
               {run.error && (
