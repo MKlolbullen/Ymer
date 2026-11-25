@@ -1,4 +1,4 @@
-"""The Factory, stages F1 (the brief) and F2 (the architecture).
+"""The Factory: F1 (the brief), F2 (the architecture) and F3 (the build).
 
 Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 
@@ -10,6 +10,12 @@ Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 - ``POST   /architecture``         {stack?}: design the architecture from the approved brief
 - ``POST   /approve-plan``         approve the architecture and its tasks
 - ``POST   /reopen``               step back one approval (the plan, else the brief)
+- ``POST   /runs``                 start a build of the approved plan
+- ``GET    /runs``                 recent builds
+- ``GET    /runs/<id>?after=<seq>`` one build and its log (events after ``seq``)
+- ``POST   /runs/<id>/stop``       stop a build after its current step
+- ``GET    /files``                the files the builds wrote
+- ``GET    /files/content?path=``  one file's text
 
 Reading the factory needs viewer access; everything else needs editor. Sources are read
 with the caller's own access, so a source they cannot open is left out of the brief they
@@ -21,10 +27,16 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
-from werkzeug.exceptions import BadRequest, Conflict, NotFound, UnprocessableEntity
+from werkzeug.exceptions import (
+    BadRequest,
+    Conflict,
+    NotFound,
+    ServiceUnavailable,
+    UnprocessableEntity,
+)
 
 from ymer.ai import AiError, ChatRequest, get_ai
 from ymer.ai.generate import create_database, mindmap_state
@@ -56,22 +68,29 @@ from ymer.factory.brief import (
     clean_brief,
     fit_sources,
 )
+from ymer.factory.build import queue_run
 from ymer.factory.document import document_state
+from ymer.factory.runner import sandbox_for, start_inline
 from ymer.factory.stacks import STACKS, stacks_json
 from ymer.models import (
+    ACTIVE_RUN_STATUSES,
     DatabaseProperty,
     DatabaseRow,
     DatabaseView,
     DocumentContent,
     DocumentVersion,
+    FactoryFile,
     FactoryProject,
     FactoryQuestion,
+    FactoryRun,
+    FactoryRunEvent,
     FactorySource,
     FactoryStage,
     Page,
     PageType,
     QuestionStatus,
     Role,
+    RunStatus,
     User,
     ViewType,
 )
@@ -205,6 +224,7 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
         "architecture_generated_at": _iso(project.architecture_generated_at),
         "plan_approved_at": _iso(project.plan_approved_at),
         "plan_approved_by": person(project.plan_approved_by_id),
+        "build": build_json(project),
     }
 
 
@@ -472,11 +492,14 @@ def approve(workspace_id: uuid.UUID, page_id: uuid.UUID):
 @factory_bp.post("/reopen")
 @login_required
 def reopen(workspace_id: uuid.UUID, page_id: uuid.UUID):
-    """Step back one approval: an approved plan goes back to review, otherwise an approved
-    brief opens for changes again (an architecture made from it stays, marked as earlier)."""
+    """Step back one approval: an approved plan goes back to review (also after a build;
+    the files stay), otherwise an approved brief opens for changes again (an architecture
+    made from it stays, marked as earlier)."""
     scope = scope_for(workspace_id)
     page, project = _factory(scope, page_id, Role.EDITOR)
-    if project.stage == FactoryStage.PLANNED.value:
+    if _active_run(project) is not None:
+        raise Conflict("A build is running. Stop it first.")
+    if project.stage in (FactoryStage.PLANNED.value, FactoryStage.BUILT.value):
         project.stage = FactoryStage.ARCHITECTURE.value
         project.plan_approved_at = None
         project.plan_approved_by_id = None
@@ -614,3 +637,197 @@ def approve_plan(workspace_id: uuid.UUID, page_id: uuid.UUID):
     data = factory_json(scope, page, project)
     db_session.commit()
     return jsonify(factory=data)
+
+
+# --- build (stage F3) -----------------------------------------------------------------
+
+BUILDABLE = {FactoryStage.PLANNED.value, FactoryStage.BUILT.value}
+MAX_EVENTS = 500
+
+
+def _active_run(project: FactoryProject) -> FactoryRun | None:
+    return db_session.scalars(
+        select(FactoryRun)
+        .where(FactoryRun.factory_id == project.page_id, FactoryRun.status.in_(ACTIVE_RUN_STATUSES))
+        .order_by(FactoryRun.created_at.desc())
+        .limit(1)
+    ).first()
+
+
+def run_json(run: FactoryRun) -> dict:
+    return {
+        "id": str(run.id),
+        "status": run.status,
+        "started_by": _person(
+            db_session.get(User, run.started_by_id) if run.started_by_id else None
+        ),
+        "created_at": _iso(run.created_at),
+        "started_at": _iso(run.started_at),
+        "finished_at": _iso(run.finished_at),
+        "steps": run.steps,
+        "tokens": run.tokens,
+        "tasks_done": run.tasks_done,
+        "tasks_total": run.tasks_total,
+        "summary": run.summary,
+        "error": run.error,
+        "sandbox": run.context.get("sandbox"),
+        "model": run.context.get("model"),
+    }
+
+
+def build_json(project: FactoryProject) -> dict:
+    latest = db_session.scalars(
+        select(FactoryRun)
+        .where(FactoryRun.factory_id == project.page_id)
+        .order_by(FactoryRun.created_at.desc())
+        .limit(1)
+    ).first()
+    sandbox = sandbox_for(current_app)
+    return {
+        "latest_run": run_json(latest) if latest else None,
+        "file_count": db_session.scalar(
+            select(func.count()).where(FactoryFile.factory_id == project.page_id)
+        ),
+        "sandbox": sandbox.name if sandbox else None,
+    }
+
+
+def _run(project: FactoryProject, run_id: uuid.UUID) -> FactoryRun:
+    run = db_session.get(FactoryRun, run_id)
+    if run is None or run.factory_id != project.page_id:
+        raise NotFound("No such build.")
+    return run
+
+
+@factory_bp.post("/runs")
+@login_required
+def start_run(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    page, project = _factory(scope, page_id, Role.EDITOR)
+    if project.stage not in BUILDABLE:
+        raise Conflict("Approve the architecture and its tasks before building.")
+    if _active_run(project) is not None:
+        raise Conflict("A build is already running.")
+    chat = get_ai().chat
+    if chat is None:
+        raise ServiceUnavailable("AI features are turned off on this server.")
+    sandbox = sandbox_for(current_app)
+    if sandbox is None:
+        raise ServiceUnavailable("Builds are turned off on this server.")
+    # The build works from what the person starting it can read.
+    texts = {}
+    for key, pid in (
+        ("brief", project.brief_page_id),
+        ("architecture", project.architecture_page_id),
+        ("tasks", project.tasks_page_id),
+    ):
+        seen = _visible(scope, pid) if pid else None
+        if seen is None:
+            raise Conflict(f"You need access to the {key} page to start a build.")
+        texts[key] = page_text(seen[0]).strip() if key != "tasks" else ""
+    run = queue_run(
+        db_session,
+        project,
+        title=page.title,
+        brief_text=texts["brief"],
+        architecture_text=texts["architecture"],
+        user_id=current_user().id,
+    )
+    run.context = {**run.context, "sandbox": sandbox.name, "model": chat.model}
+    db_session.commit()
+    if settings_for(current_app).factory_run_inline:
+        start_inline(current_app._get_current_object(), run.id)
+    return jsonify(run=run_json(run)), 202
+
+
+@factory_bp.get("/runs")
+@login_required
+def list_runs(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    _page, project = _factory(scope, page_id, Role.VIEWER)
+    runs = db_session.scalars(
+        select(FactoryRun)
+        .where(FactoryRun.factory_id == project.page_id)
+        .order_by(FactoryRun.created_at.desc())
+        .limit(20)
+    ).all()
+    return jsonify(runs=[run_json(r) for r in runs])
+
+
+@factory_bp.get("/runs/<uuid:run_id>")
+@login_required
+def get_run(workspace_id: uuid.UUID, page_id: uuid.UUID, run_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    _page, project = _factory(scope, page_id, Role.VIEWER)
+    run = _run(project, run_id)
+    after = request.args.get("after", default=0, type=int)
+    events = db_session.scalars(
+        select(FactoryRunEvent)
+        .where(FactoryRunEvent.run_id == run.id, FactoryRunEvent.seq > after)
+        .order_by(FactoryRunEvent.seq)
+        .limit(MAX_EVENTS)
+    ).all()
+    return jsonify(
+        run=run_json(run),
+        events=[
+            {
+                "seq": e.seq,
+                "kind": e.kind,
+                "title": e.title,
+                "detail": e.detail,
+                "at": _iso(e.created_at),
+            }
+            for e in events
+        ],
+        stage=project.stage,
+    )
+
+
+@factory_bp.post("/runs/<uuid:run_id>/stop")
+@login_required
+def stop_run(workspace_id: uuid.UUID, page_id: uuid.UUID, run_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    _page, project = _factory(scope, page_id, Role.EDITOR)
+    run = db_session.scalars(
+        select(FactoryRun).where(FactoryRun.id == _run(project, run_id).id).with_for_update()
+    ).one()
+    if run.status == RunStatus.QUEUED.value:
+        run.status = RunStatus.STOPPED.value
+        run.summary = "Stopped before it started."
+        run.finished_at = datetime.now(UTC)
+    elif run.status == RunStatus.STOPPING.value:
+        # Asked twice: the worker is gone or stuck, so mark the run stopped now.
+        run.status = RunStatus.STOPPED.value
+        run.summary = "Stopped by a person (the build did not answer)."
+        run.finished_at = datetime.now(UTC)
+    elif run.status == RunStatus.RUNNING.value:
+        run.status = RunStatus.STOPPING.value
+    db_session.commit()
+    return jsonify(run=run_json(run))
+
+
+@factory_bp.get("/files")
+@login_required
+def list_files(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    _page, project = _factory(scope, page_id, Role.VIEWER)
+    rows = db_session.execute(
+        select(FactoryFile.path, func.length(FactoryFile.content), FactoryFile.updated_at)
+        .where(FactoryFile.factory_id == project.page_id)
+        .order_by(FactoryFile.path)
+    ).all()
+    return jsonify(
+        files=[{"path": p, "size": size, "updated_at": _iso(at)} for p, size, at in rows]
+    )
+
+
+@factory_bp.get("/files/content")
+@login_required
+def file_content(workspace_id: uuid.UUID, page_id: uuid.UUID):
+    scope = scope_for(workspace_id)
+    _page, project = _factory(scope, page_id, Role.VIEWER)
+    path = request.args.get("path", "")
+    row = db_session.get(FactoryFile, (project.page_id, path)) if path else None
+    if row is None:
+        raise NotFound("No such file.")
+    return jsonify(path=row.path, content=row.content, updated_at=_iso(row.updated_at))

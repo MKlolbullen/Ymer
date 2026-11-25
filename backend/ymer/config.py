@@ -89,6 +89,24 @@ class Settings(BaseSettings):
     # AI requests per user per minute (0 = unlimited). Counted in Redis.
     ai_rate_limit: int = 30
 
+    # --- Factory builds (ymer.factory) ------------------------------------------------
+    # Where code the AI writes is run (tests, builds):
+    #   fake    nothing runs: test files are only checked for syntax; for development/tests
+    #   docker  one locked-down container per command (no network, CPU/memory/time limits)
+    #   off     builds are turned off
+    factory_sandbox: Literal["fake", "docker", "off"] = "fake"
+    factory_docker_bin: str = "docker"
+    factory_memory: str = "1g"
+    factory_cpus: str = "1"
+    factory_command_timeout: int = 300
+    # Run builds in the request that starts them (development) instead of in
+    # `flask --app wsgi factory-worker`.
+    factory_run_inline: bool = False
+    # Budgets per build run: model turns in total, turns per task, and tokens.
+    factory_max_steps: int = 300
+    factory_task_steps: int = 30
+    factory_max_tokens: int = 3_000_000
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

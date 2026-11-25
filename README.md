@@ -145,8 +145,8 @@ what is planned.
 ### Factory (in progress)
 
 The Factory turns what your team writes in Ymer into a working app, one reviewed stage at a time:
-brief, architecture, build, review and delivery. The first two stages, the brief and the architecture, work
-today; the [roadmap](#roadmap) covers the rest.
+brief, architecture, build, review and delivery. The first three stages (the brief, the architecture and the
+build) work today; the [roadmap](#roadmap) covers the rest.
 
 | Feature | What you get |
 |---|---|
@@ -155,6 +155,8 @@ today; the [roadmap](#roadmap) covers the rest.
 | **Questions** | What the sources do not say (who uses it, where it runs, what it stores, sign-in) comes back as questions. Answer them or mark them not needed, and the next brief includes your answers as decisions. |
 | **Approval** | An editor approves the brief once no questions are open. The approved text is saved as a named version, and the brief is frozen until someone reopens it. |
 | **Architecture** | From the approved brief, the AI picks one of three stacks (static web tool, Python command-line tool, Flask + React web app), or uses the one you choose, and designs the app: an Architecture document (stack, components, data model, interfaces, risks), a System map mind map, and a Tasks database with status, component, priority, size and dependencies, shown as a table and a board. An editor approves the plan; redesigning keeps earlier drafts. |
+| **Build** | An AI agent works through the approved tasks in order. For each one it reads the files so far, writes code and tests, runs the tests in a sandbox, and marks the task Done in the Tasks database when they pass. Follow it in a live log, stop it at any time, and browse the files it wrote. A build stops at the first task it cannot finish, and the next build picks up from there. |
+| **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway Docker container with no network, a read-only system, no privileges, and limits on memory, CPU, processes and time. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
 
 <table>
   <tr>
@@ -179,6 +181,26 @@ today; the [roadmap](#roadmap) covers the rest.
   <img src="docs/assets/screenshots/factory-tasks.png" alt="The generated task database as a board grouped by status" width="900">
   <br><sub>The plan's tasks, ready for the build stage: a database like any other, shown as a board.</sub>
 </p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-build.png" alt="The build step: a passed build of six tasks and its log of files written and tests run"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-files.png" alt="The build log above a file browser showing the code the build wrote"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A finished build and its log, task by task.</sub></td>
+    <td align="center"><sub>The files it wrote, in the file browser.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/assets/screenshots/factory-tasks-done.png" alt="The task board after the build, with every task in Done" width="900">
+  <br><sub>After the build, every task has moved to Done.</sub>
+</p>
+
+> These screenshots use the demo model and the demo sandbox, so the code is placeholder and the tests were checked
+> rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` the agent writes real code
+> and the tests really run.
 
 ### Foundation
 
@@ -209,6 +231,10 @@ today; the [roadmap](#roadmap) covers the rest.
   split into chunks and embedded into pgvector; edits put the page on a queue that `make ai-worker` (`flask
   ai-worker`) drains in the background. The chat model and the embedding model are configured separately with
   `YMER_AI_*` settings.
+- **Factory builds** (`backend/ymer/factory/`): queued in Postgres and run by `make factory-worker` (`flask
+  factory-worker`), one build per worker. The agent talks to the model over tool use and runs code only through a
+  sandbox interface: Docker containers today (`YMER_FACTORY_SANDBOX=docker`, images from `make factory-images`),
+  with room for a hosted sandbox later.
 
 Deeper notes on each part (routes, settings, the permission rules, how collab storage works) are in
 [DEVELOPMENT.md](DEVELOPMENT.md).
@@ -230,6 +256,7 @@ make backend     # Flask API on http://localhost:5000
 make collab      # collab service on ws://localhost:1234
 make frontend    # the app on http://localhost:5173
 make ai-worker   # optional: keeps AI search embeddings up to date in the background
+make factory-worker  # optional: runs Factory builds (.env.example runs them in the API process instead)
 ```
 
 Open http://localhost:5173, create an account, then a workspace. The **+** next to *Pages* creates a document,
@@ -242,7 +269,9 @@ is optional in development. To use Claude, set `YMER_AI_PROVIDER=anthropic` and 
 OpenAI-compatible server (including local ones) set `YMER_AI_PROVIDER=openai`, `YMER_AI_BASE_URL` and
 `YMER_AI_MODEL`. Claude has no embeddings API, so semantic search uses `YMER_AI_EMBEDDING_PROVIDER` (`fake` for a
 built-in hashing embedder, or `openai` for any OpenAI-compatible embeddings endpoint). After changing the embedding
-model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
+model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index. Factory builds use the demo
+sandbox by default; to run the code they write, install Docker, run `make factory-images` and set
+`YMER_FACTORY_SANDBOX=docker`. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
 
 `curl localhost:5000/api/health/ready` should report `database`, `redis` and `storage` as `ok`.
 `make test` runs all test suites and `make lint` the linters and type checks. `make help` lists every target.
@@ -258,7 +287,7 @@ backend/     Flask API (Python package `ymer`), models, Alembic migrations, pyte
 collab/      Hocuspocus realtime service (TypeScript, run directly by Node 22)
 frontend/    React app: app shell and page tree, editor (src/editor), databases (src/database),
              mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai), Factory (src/factory)
-infra/       Init scripts for the Compose services
+infra/       Init scripts for the Compose services, and the Factory's sandbox images (infra/factory)
 docs/assets/ Logo, architecture diagram and screenshots used in this README
 ```
 
@@ -273,8 +302,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ✅ Done |
 | **F1. Factory: brief** | Factory pages, source pages, AI brief with open questions, answers and approval | ✅ Done |
 | **F2. Factory: architecture** | Pick a stack; generate an architecture document, a system mind map and a task database; approve them | ✅ Done |
-| **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ⏭️ Next |
-| **F4. Factory: deliver** | Zip download, preview of web apps, push to a git repository, container images | Planned |
+| **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
+| **F4. Factory: deliver** | Zip download, preview of web apps, push to a git repository, container images | ⏭️ Next |
 | **F5. Factory: iterate** | Change requests on a built app, rebuilding only what changed, more stacks, budgets | Planned |
 | **5. Polish and hardening** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, audit logs, wider rate limiting | Planned |
 
@@ -284,8 +313,8 @@ Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, d
 `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live page type),
 `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views` (table, board,
 chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
-re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources` and
-`factory_questions`. Mind maps and drawings need no tables of their own: they are Yjs
+re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
+`factory_questions`, `factory_runs`, `factory_run_events` and `factory_files`. Mind maps and drawings need no tables of their own: they are Yjs
 documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, an `activity_log` for auditing and tables for public links. This is a sketch and will

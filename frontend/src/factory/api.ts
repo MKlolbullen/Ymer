@@ -1,11 +1,41 @@
-/** The Factory's API: sources, the brief, its questions and approval (stage F1). */
+/** The Factory's API: the brief (F1), the architecture (F2) and the build (F3). */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { keys as baseKeys } from "@/lib/queries";
 import type { Page, PageType, Person } from "@/lib/types";
 
-export type FactoryStage = "sources" | "brief" | "approved" | "architecture" | "planned";
+export type FactoryStage = "sources" | "brief" | "approved" | "architecture" | "planned" | "built";
+
+export type RunStatus = "queued" | "running" | "stopping" | "passed" | "failed" | "stopped";
+
+export type FactoryRun = {
+  id: string;
+  status: RunStatus;
+  started_by: Person | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  steps: number;
+  tokens: number;
+  tasks_done: number;
+  tasks_total: number;
+  summary: string | null;
+  error: string | null;
+  sandbox: string | null;
+  model: string | null;
+};
+
+export type RunEvent = {
+  seq: number;
+  kind: "start" | "task" | "note" | "file" | "tests" | "command" | "done" | "blocked" | "finish" | string;
+  title: string;
+  detail: string | null;
+  at: string;
+};
+
+export type FactoryFile = { path: string; size: number; updated_at: string };
 
 export type Stack = {
   key: string;
@@ -49,10 +79,22 @@ export type Factory = {
   architecture_generated_at: string | null;
   plan_approved_at: string | null;
   plan_approved_by: Person | null;
+  build: {
+    latest_run: FactoryRun | null;
+    file_count: number;
+    sandbox: string | null;
+  };
 };
 
 /** Brief approved, so the architecture step is open (or already done). */
-export const briefApproved = (f: Factory) => f.stage === "approved" || f.stage === "architecture" || f.stage === "planned";
+export const briefApproved = (f: Factory) =>
+  f.stage === "approved" || f.stage === "architecture" || f.stage === "planned" || f.stage === "built";
+
+/** The plan is approved, so builds can start. */
+export const canBuild = (f: Factory) => f.stage === "planned" || f.stage === "built";
+
+export const runActive = (run: FactoryRun | null | undefined) =>
+  !!run && (run.status === "queued" || run.status === "running" || run.status === "stopping");
 
 const base = (w: string, p: string) => `/workspaces/${w}/factories/${p}`;
 export const factoryKey = (w: string, p: string) => ["factory", w, p] as const;
@@ -74,11 +116,17 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
   return {
     setSources: useMutation({
       mutationFn: (pageIds: string[]) =>
-        api<{ factory: Factory }>(`${url}/sources`, { method: "PUT", json: { page_ids: pageIds } }),
+        api<{ factory: Factory }>(`${url}/sources`, {
+          method: "PUT",
+          json: { page_ids: pageIds },
+        }),
       ...opts,
     }),
     writeBrief: useMutation({
-      mutationFn: () => api<{ factory: Factory; demo: boolean }>(`${url}/brief`, { method: "POST" }),
+      mutationFn: () =>
+        api<{ factory: Factory; demo: boolean }>(`${url}/brief`, {
+          method: "POST",
+        }),
       onSuccess: (r: { factory: Factory }) => {
         settle(r.factory);
         // The brief is a new page under the factory; an earlier one was renamed.
@@ -87,12 +135,18 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
     }),
     answer: useMutation({
       mutationFn: ({ id, ...body }: { id: string; answer?: string; status?: "open" | "dismissed" }) =>
-        api<{ factory: Factory }>(`${url}/questions/${id}`, { method: "PATCH", json: body }),
+        api<{ factory: Factory }>(`${url}/questions/${id}`, {
+          method: "PATCH",
+          json: body,
+        }),
       ...opts,
     }),
     designArchitecture: useMutation({
       mutationFn: (stack: string | null) =>
-        api<{ factory: Factory; demo: boolean }>(`${url}/architecture`, { method: "POST", json: { stack } }),
+        api<{ factory: Factory; demo: boolean }>(`${url}/architecture`, {
+          method: "POST",
+          json: { stack },
+        }),
       onSuccess: (r: { factory: Factory }) => {
         settle(r.factory);
         void qc.invalidateQueries({ queryKey: baseKeys.pages(workspaceId) });
@@ -110,7 +164,106 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
       mutationFn: () => api<{ factory: Factory }>(`${url}/reopen`, { method: "POST" }),
       ...opts,
     }),
+    startRun: useMutation({
+      mutationFn: () => api<{ run: FactoryRun }>(`${url}/runs`, { method: "POST" }),
+      onSuccess: () =>
+        void qc.invalidateQueries({
+          queryKey: factoryKey(workspaceId, pageId),
+        }),
+    }),
+    stopRun: useMutation({
+      mutationFn: (runId: string) =>
+        api<{ run: FactoryRun }>(`${url}/runs/${runId}/stop`, {
+          method: "POST",
+        }),
+      onSuccess: () =>
+        void qc.invalidateQueries({
+          queryKey: factoryKey(workspaceId, pageId),
+        }),
+    }),
   };
+}
+
+/** Add newly fetched log lines, skipping any already shown. */
+export function mergeEvents(previous: RunEvent[], next: RunEvent[]): RunEvent[] {
+  const last = previous.length ? previous[previous.length - 1].seq : 0;
+  const fresh = next.filter((e) => e.seq > last);
+  return fresh.length ? [...previous, ...fresh] : previous;
+}
+
+const POLL_MS = 1500;
+
+/**
+ * Follow one build: its status and its log. While the build is active the log is
+ * fetched every 1.5 s, asking only for lines after the last one shown. When it ends,
+ * the factory (stage, file count) and the Tasks database are refreshed.
+ */
+export function useRunLog(workspaceId: string, pageId: string, runId: string | null) {
+  const qc = useQueryClient();
+  const [run, setRun] = useState<FactoryRun | null>(null);
+  const [events, setEvents] = useState<RunEvent[]>([]);
+  const lastSeq = useRef(0);
+
+  useEffect(() => {
+    setRun(null);
+    setEvents([]);
+    lastSeq.current = 0;
+    if (!runId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const r = await api<{ run: FactoryRun; events: RunEvent[] }>(
+          `${base(workspaceId, pageId)}/runs/${runId}?after=${lastSeq.current}`,
+        );
+        if (stopped) return;
+        setRun(r.run);
+        if (r.events.length) {
+          lastSeq.current = r.events[r.events.length - 1].seq;
+          setEvents((prev) => mergeEvents(prev, r.events));
+        }
+        if (runActive(r.run) || r.events.length) {
+          timer = setTimeout(poll, runActive(r.run) ? POLL_MS : 0);
+        } else {
+          void qc.invalidateQueries({
+            queryKey: factoryKey(workspaceId, pageId),
+          });
+          void qc.invalidateQueries({
+            queryKey: ["factory-files", workspaceId, pageId],
+          });
+          void qc.invalidateQueries({ queryKey: ["rows", workspaceId] });
+        }
+      } catch {
+        if (!stopped) timer = setTimeout(poll, POLL_MS * 2);
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [workspaceId, pageId, runId, qc]);
+
+  return { run, events };
+}
+
+export function useFactoryFiles(workspaceId: string, pageId: string, enabled: boolean, version: string) {
+  return useQuery({
+    queryKey: ["factory-files", workspaceId, pageId, version],
+    queryFn: () => api<{ files: FactoryFile[] }>(`${base(workspaceId, pageId)}/files`).then((r) => r.files),
+    enabled,
+  });
+}
+
+export function useFactoryFile(workspaceId: string, pageId: string, path: string | null, version: string) {
+  return useQuery({
+    queryKey: ["factory-files", workspaceId, pageId, version, path],
+    queryFn: () =>
+      api<{ content: string }>(`${base(workspaceId, pageId)}/files/content?path=${encodeURIComponent(path!)}`).then(
+        (r) => r.content,
+      ),
+    enabled: !!path,
+  });
 }
 
 /** Answers given after the brief was written: the brief does not include them yet. */
@@ -143,8 +296,6 @@ export type StepState = "done" | "current" | "next" | "later";
 
 /** Brief, Architecture, Build, Review, Deliver: which are done, current or coming next. */
 export function stepStates(f: Factory): StepState[] {
-  const done = f.stage === "planned" ? 2 : briefApproved(f) ? 1 : 0;
-  return [0, 1, 2, 3, 4].map((i) =>
-    i < done ? "done" : i === done ? (done >= 2 ? "next" : "current") : "later",
-  );
+  const done = f.stage === "built" ? 3 : f.stage === "planned" ? 2 : briefApproved(f) ? 1 : 0;
+  return [0, 1, 2, 3, 4].map((i) => (i < done ? "done" : i === done ? (done >= 3 ? "next" : "current") : "later"));
 }

@@ -1,11 +1,10 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { DemoNote } from "@/ai/AssistMenu";
 import { useAiStatus } from "@/ai/api";
 import { PAGE_ICON } from "@/components/PageTree";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
-import { ApiError } from "@/lib/api";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { usePages } from "@/lib/queries";
 import type { Page } from "@/lib/types";
@@ -14,12 +13,15 @@ import {
   briefApproved,
   candidateSources,
   newAnswers,
+  runActive,
   stepStates,
   useFactory,
   useFactoryMutations,
   type Factory,
   type FactoryQuestion,
 } from "./api";
+import { Build } from "./Build";
+import { errorText, primary, quiet, secondary, Section } from "./ui";
 
 const STEPS = [
   { key: "brief", label: "Brief" },
@@ -28,16 +30,6 @@ const STEPS = [
   { key: "review", label: "Review" },
   { key: "deliver", label: "Deliver" },
 ];
-
-const primary =
-  "rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
-const secondary =
-  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
-const quiet = "rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800";
-
-function errorText(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 function Stepper({ factory }: { factory: Factory }) {
   const states = stepStates(factory);
@@ -68,21 +60,6 @@ function Stepper({ factory }: { factory: Factory }) {
         );
       })}
     </ol>
-  );
-}
-
-function Section({ n, title, hint, children }: { n: number; title: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="mb-10" aria-labelledby={`factory-step-${n}`}>
-      <h2 id={`factory-step-${n}`} className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-          {n}
-        </span>
-        {title}
-      </h2>
-      {hint && <p className="mt-1 mb-3 text-sm text-zinc-500">{hint}</p>}
-      {children}
-    </section>
   );
 }
 
@@ -353,7 +330,7 @@ export function FactoryPage({ page }: { page: Page }) {
             <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
               The approved text is saved as a named version of the brief. Next, design the architecture below.
             </p>
-            {f.can_edit && f.stage !== "planned" && (
+            {f.can_edit && f.stage !== "planned" && f.stage !== "built" && (
               <button onClick={() => reopen.mutate()} className={`${quiet} mt-2`}>
                 Reopen the brief
               </button>
@@ -383,6 +360,7 @@ export function FactoryPage({ page }: { page: Page }) {
       </Section>
 
       <Architecture page={page} factory={f} aiOff={!!aiOff} demo={!!status.data?.demo} />
+      <Build page={page} factory={f} />
     </div>
   );
 }
@@ -397,7 +375,7 @@ function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: 
   const { designArchitecture, approvePlan, reopen } = useFactoryMutations(page.workspace_id, page.id);
   const [stack, setStack] = useState<string | null>(f.stack);
   const open = briefApproved(f);
-  const planned = f.stage === "planned";
+  const planned = f.stage === "planned" || f.stage === "built";
   const editable = f.can_edit && open && !planned;
   const designed = !!f.architecture;
 
@@ -504,10 +482,10 @@ function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: 
                 {f.plan_approved_at ? ` on ${formatDateTime(f.plan_approved_at)}` : ""}.
               </p>
               <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
-                The architecture and system map are saved as named versions. Building it, task by task in a sandbox, is
-                the next Factory stage.
+                The architecture and system map are saved as named versions. Build it below, task by task in a
+                sandbox.
               </p>
-              {f.can_edit && (
+              {f.can_edit && !runActive(f.build.latest_run) && (
                 <button onClick={() => reopen.mutate()} className={`${quiet} mt-2`}>
                   Reopen the plan
                 </button>

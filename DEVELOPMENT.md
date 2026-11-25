@@ -350,7 +350,7 @@ Assumptions made for this phase, open to change:
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
 
-## Factory, stages F1 and F2: the brief and the architecture
+## Factory, stages F1 to F3: the brief, the architecture and the build
 
 The Factory turns a workspace's notes into a working app in reviewed stages (brief,
 architecture, build, review, deliver). The plan for all stages lives in the project's
@@ -430,3 +430,68 @@ Assumptions for F2, open to change:
 - Task dependencies are stored as text ("Depends on") rather than a relation, so the
   board stays simple; the build stage will read them from there.
 - Designing runs in the request like the brief. With Claude it can take a minute.
+
+### Stage F3: the build
+
+Migration `0009` adds `factory_runs` (status, who started it, a snapshot of what it
+builds from, steps, tokens, tasks done, summary, error), `factory_run_events` (the log,
+numbered per run) and `factory_files` (the app's current files, one row per path). The
+stage after a passing build is `built`.
+
+- **Flow** (`ymer/factory/build.py`): `POST /runs` captures the stack, the brief and
+  architecture text and the tasks with the starter's access, and queues a run. A worker
+  claims it (`FOR UPDATE SKIP LOCKED`, so several workers are safe) and works through
+  the tasks in order, skipping Done ones and waiting on unfinished dependencies. Each
+  task is a fresh agent conversation that sees the brief and architecture (cached in the
+  system prompt), the task list, notes from earlier tasks and the files so far. The task
+  moves To do → In progress → Done in the Tasks database. Every step is committed, so
+  the page can follow the log while it runs.
+- **Agent** (`ymer/factory/agent.py`): tools `list_files`, `read_file`, `write_file`,
+  `delete_file`, `run_tests`, `run_command` and `finish_task`. With Claude, it is tool
+  use over the Messages API, streamed, with adaptive thinking, `eager_input_streaming`
+  on each tool, and every tool input checked against its schema before it runs; a reply
+  cut off at `max_tokens` is sent back as an error rather than run. `finish_task` with
+  outcome `done` is refused until the tests pass after the last change. Paths must stay
+  inside the app (no absolute paths, `..` or `.git`). The OpenAI-compatible provider
+  does not do builds yet. The demo model (`fake_agent.py`) writes a placeholder module
+  and test per task.
+- **Sandbox** (`ymer/factory/sandbox/`): one method, `run(files, command, image,
+  timeout)`, stateless. `docker` copies the files into a temporary directory and runs a
+  new container per command with `--network none`, `--read-only`, `--cap-drop ALL`,
+  `no-new-privileges`, user `nobody`, and memory, CPU, process and time limits. The
+  images (`infra/factory/`) carry each stack's test tools, because there is no network
+  to install anything. `fake` runs nothing: it parses Python with `ast` and counts tests.
+- **Stopping and budgets**: `POST /runs/<id>/stop` stops a queued run at once and a
+  running one after its current step. A run fails at the first blocked task, after
+  `YMER_FACTORY_TASK_STEPS` steps on one task, or when it reaches
+  `YMER_FACTORY_MAX_STEPS` or `YMER_FACTORY_MAX_TOKENS`. A task left In progress goes
+  back to To do. Files written so far are kept, so the next build continues.
+- **Routes**: `POST /runs` (editor; needs an approved plan, one run at a time), `GET
+  /runs`, `GET /runs/<id>?after=<seq>` (the log after a line), `POST /runs/<id>/stop`,
+  `GET /files`, `GET /files/content?path=` (viewer). `POST /reopen` on a built factory
+  reopens the plan; the files stay.
+- **Settings**:
+
+  | Setting | Default | What it does |
+  |---|---|---|
+  | `YMER_FACTORY_SANDBOX` | `fake` | `docker`, `fake` (runs nothing) or `off` |
+  | `YMER_FACTORY_RUN_INLINE` | `false` | Run builds in a thread of the API process (`.env.example` sets `true`) |
+  | `YMER_FACTORY_DOCKER_BIN` | `docker` | The Docker command |
+  | `YMER_FACTORY_MEMORY` / `YMER_FACTORY_CPUS` | `1g` / `1` | Container limits |
+  | `YMER_FACTORY_COMMAND_TIMEOUT` | `300` | Seconds per command |
+  | `YMER_FACTORY_MAX_STEPS` | `300` | Model steps per build |
+  | `YMER_FACTORY_TASK_STEPS` | `30` | Model steps per task |
+  | `YMER_FACTORY_MAX_TOKENS` | `3000000` | Tokens per build (cache reads count a tenth) |
+
+Assumptions for F3, open to change:
+
+- Docker first, hosted later: a hosted sandbox only needs to implement `run`. The
+  Docker sandbox needs a Docker daemon next to the worker; giving a worker the Docker
+  socket gives it control of that host, so run workers on a machine meant for it.
+- The flask-react stack builds and tests the backend; the front end is built when the
+  app is delivered (F4), since installing npm packages needs network.
+- A worker that dies mid-run leaves that run marked running; there is no automatic
+  recovery yet. Pressing Stop twice marks it stopped without waiting for the worker.
+- Builds start from the tasks as they were when the build started; edits to the Tasks
+  database during a build apply to the next one.
+

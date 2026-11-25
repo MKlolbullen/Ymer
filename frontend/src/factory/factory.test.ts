@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import type { Page } from "@/lib/types";
 
-import { briefApproved, candidateSources, newAnswers, stepStates, type Factory } from "./api";
+import {
+  briefApproved,
+  canBuild,
+  candidateSources,
+  mergeEvents,
+  newAnswers,
+  runActive,
+  stepStates,
+  type Factory,
+  type RunEvent,
+} from "./api";
 
 const page = (id: string, title: string, extra: Partial<Page> = {}): Page => ({
   id,
@@ -35,6 +45,7 @@ const factory = (extra: Partial<Factory> = {}): Factory => ({
   architecture_generated_at: null,
   plan_approved_at: null,
   plan_approved_by: null,
+  build: { latest_run: null, file_count: 0, sandbox: "fake" },
   ...extra,
 });
 
@@ -78,8 +89,29 @@ describe("stepStates", () => {
   it("marks finished, current and next stages", () => {
     expect(stepStates(factory({ stage: "brief" })).slice(0, 2)).toEqual(["current", "later"]);
     expect(stepStates(factory({ stage: "architecture" })).slice(0, 3)).toEqual(["done", "current", "later"]);
-    expect(stepStates(factory({ stage: "planned" })).slice(0, 3)).toEqual(["done", "done", "next"]);
+    expect(stepStates(factory({ stage: "planned" })).slice(0, 3)).toEqual(["done", "done", "current"]);
+    expect(stepStates(factory({ stage: "built" })).slice(0, 4)).toEqual(["done", "done", "done", "next"]);
+    expect(canBuild(factory({ stage: "architecture" }))).toBe(false);
+    expect(canBuild(factory({ stage: "built" }))).toBe(true);
     expect(briefApproved(factory({ stage: "brief" }))).toBe(false);
     expect(briefApproved(factory({ stage: "planned" }))).toBe(true);
+  });
+});
+
+describe("build log", () => {
+  const ev = (seq: number): RunEvent => ({ seq, kind: "note", title: `line ${seq}`, detail: null, at: "" });
+
+  it("appends only lines it has not shown", () => {
+    const shown = [ev(1), ev(2)];
+    expect(mergeEvents(shown, [ev(2), ev(3)]).map((e) => e.seq)).toEqual([1, 2, 3]);
+    expect(mergeEvents(shown, [])).toBe(shown);
+    expect(mergeEvents([], [ev(1)]).map((e) => e.seq)).toEqual([1]);
+  });
+
+  it("knows which builds are still going", () => {
+    const run = (status: string) => ({ status }) as Parameters<typeof runActive>[0];
+    expect(["queued", "running", "stopping"].every((s) => runActive(run(s)))).toBe(true);
+    expect(["passed", "failed", "stopped"].some((s) => runActive(run(s)))).toBe(false);
+    expect(runActive(null)).toBe(false);
   });
 });

@@ -16,8 +16,13 @@ class Stack:
     summary: str
     good_for: str
     languages: str
+    # Shown to people; the build runs ``sandbox_test`` in ``image``.
     test_command: str
     delivers: str
+    image: str
+    sandbox_test: str
+    # Where the agent should put things, so every app of a stack has the same shape.
+    layout: str
 
 
 STACKS: dict[str, Stack] = {
@@ -31,6 +36,13 @@ STACKS: dict[str, Stack] = {
             languages="HTML, CSS, JavaScript (ES modules), browser storage",
             test_command="node --test",
             delivers="A folder of static files to host anywhere",
+            image="ymer-factory/static-web:1",
+            sandbox_test="node --test tests/",
+            layout=(
+                "index.html and styles.css at the root; logic as ES modules in src/ that do "
+                "not touch the DOM where possible; tests in tests/*.test.mjs using node:test "
+                "and node:assert, importing from ../src/."
+            ),
         ),
         Stack(
             key="python-cli",
@@ -40,6 +52,12 @@ STACKS: dict[str, Stack] = {
             languages="Python 3.12, argparse, SQLite or files for storage",
             test_command="pytest",
             delivers="An installable Python package",
+            image="ymer-factory/python-cli:1",
+            sandbox_test="python -m pytest -q -p no:cacheprovider",
+            layout=(
+                "pyproject.toml; the package in src/app/ (cli.py holds main()); tests in "
+                "tests/test_*.py that import from app (pytest runs with pythonpath=src)."
+            ),
         ),
         Stack(
             key="flask-react",
@@ -51,6 +69,14 @@ STACKS: dict[str, Stack] = {
             languages="Python 3.12 (Flask, SQLAlchemy), TypeScript (React, Vite)",
             test_command="pytest && npm test",
             delivers="A container image that serves the API and the built front end",
+            image="ymer-factory/flask-react:1",
+            sandbox_test="cd backend && python -m pytest -q -p no:cacheprovider",
+            layout=(
+                "backend/ (Flask app factory in backend/app/__init__.py, tests in "
+                "backend/tests/test_*.py using the Flask test client and SQLite in memory) and "
+                "frontend/ (React + TypeScript with Vite). Builds run the backend tests; the "
+                "front end is built when the app is delivered."
+            ),
         ),
     )
 }
