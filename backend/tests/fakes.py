@@ -15,6 +15,10 @@ class FakeS3:
         for obj in Delete["Objects"]:
             self.objects.pop((Bucket, obj["Key"]), None)
 
+    def copy_object(self, Bucket, Key, CopySource):  # noqa: N803
+        data, extra = self.objects[(CopySource["Bucket"], CopySource["Key"])]
+        self.objects[(Bucket, Key)] = (data, dict(extra))
+
     def generate_presigned_url(self, op, Params, ExpiresIn):  # noqa: N803
         return (
             f"https://s3.test/{Params['Bucket']}/{Params['Key']}"

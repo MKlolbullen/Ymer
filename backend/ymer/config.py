@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     # Uploads per user per minute, and Factory git pushes per user per hour.
     rate_limit_uploads: int = 60
     rate_limit_git_push: int = 20
+    # Imports and template uses per user per minute.
+    rate_limit_imports: int = 10
 
     # Audit events older than this are removed by `flask --app wsgi prune-audit`.
     audit_retention_days: int = 365
@@ -79,6 +81,8 @@ class Settings(BaseSettings):
     s3_public_endpoint_url: str | None = None
     # Largest upload accepted, in bytes.
     max_upload_bytes: int = 25 * 1024 * 1024
+    # Largest import (a zip of Markdown/CSV, such as a Notion export), in bytes.
+    max_import_bytes: int = 100 * 1024 * 1024
 
     # Shared secret the collab service (collab/) sends on /internal/collab/* requests.
     collab_secret: str = "change-me-collab"

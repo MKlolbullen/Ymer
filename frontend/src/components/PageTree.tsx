@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router";
 
 import { useCreatePage, useMovePage } from "@/lib/queries";
 import { atLeast, type Page, type PageType } from "@/lib/types";
+import { TemplatesDialog } from "@/templates/TemplatesDialog";
 
 import { MenuItem, Popover } from "./Popover";
 
@@ -91,6 +92,7 @@ export function NewPageButton({
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [library, setLibrary] = useState(false);
   const create = useCreatePage(workspaceId);
   const navigate = useNavigate();
   const add = async (type: PageType) => {
@@ -111,8 +113,18 @@ export function NewPageButton({
               <span aria-hidden>{PAGE_ICON[t.type]}</span> {t.label}
             </MenuItem>
           ))}
+          <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              setLibrary(true);
+            }}
+          >
+            <span aria-hidden>🧩</span> From a template or import…
+          </MenuItem>
         </Popover>
       )}
+      {library && <TemplatesDialog workspaceId={workspaceId} parentId={parentId} onClose={() => setLibrary(false)} />}
     </>
   );
 }

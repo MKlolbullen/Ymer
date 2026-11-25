@@ -16,6 +16,8 @@ export type Page = {
   type: PageType;
   title: string;
   position: number;
+  /** Saved as a template for its workspace (listed under Templates). */
+  is_template?: boolean;
   my_role: Role;
   created_at: string;
   updated_at: string;

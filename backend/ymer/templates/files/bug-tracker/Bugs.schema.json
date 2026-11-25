@@ -1,0 +1,7 @@
+{"properties": [
+  {"name": "Bug", "type": "title"},
+  {"name": "Severity", "type": "select", "options": ["Critical", "High", "Medium", "Low"]},
+  {"name": "Status", "type": "select", "options": ["Open", "In progress", "Fixed", "Won't fix"]},
+  {"name": "Area", "type": "select", "options": ["Frontend", "Backend", "Infrastructure"]},
+  {"name": "Reported", "type": "date"}
+]}

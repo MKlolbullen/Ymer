@@ -1,0 +1,7 @@
+{"properties": [
+  {"name": "Feature", "type": "title"},
+  {"name": "Status", "type": "select", "options": ["Exploring", "Planned", "Building", "Shipped"]},
+  {"name": "Quarter", "type": "select", "options": ["Q1", "Q2", "Q3", "Q4"]},
+  {"name": "Effort", "type": "select", "options": ["S", "M", "L"]},
+  {"name": "Spec", "type": "url"}
+]}

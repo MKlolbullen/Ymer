@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Computed,
     DateTime,
@@ -58,6 +59,11 @@ class Page(TimestampMixin, Base):
         Index("ix_pages_parent_id", "parent_id"),
         Index("ix_pages_search_vector", "search_vector", postgresql_using="gin"),
         Index(
+            "ix_pages_workspace_id_templates",
+            "workspace_id",
+            postgresql_where=text("is_template"),
+        ),
+        Index(
             "ix_pages_title_trgm",
             "title",
             postgresql_using="gin",
@@ -87,6 +93,10 @@ class Page(TimestampMixin, Base):
     )
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Saved as a template: listed under "Templates" for the workspace (ymer.duplicate).
+    is_template: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     # Plain text of a document's content, extracted from its Yjs state on every save
     # (``ymer.content``). Deferred: only search reads it.

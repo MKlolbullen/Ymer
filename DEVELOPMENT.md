@@ -394,6 +394,38 @@ Assumptions made for this phase, open to change:
 - Answers are not streamed to the browser yet; the UI shows a waiting state.
 - There is no per-workspace AI switch or usage accounting yet.
 
+## Templates and import
+
+Code: `backend/ymer/importing/` (Markdown and CSV conversion, reading zips, planning the page tree, creating
+pages), `backend/ymer/templates/` (the built-in templates), `backend/ymer/duplicate.py` (copying a page tree),
+`backend/ymer/api/templates.py`, and `frontend/src/templates/`. Migration `0014` adds `pages.is_template`.
+
+- **One pipeline.** An import is read into files (`bundle.read_uploads`: zips, one level of nested zips, paths with
+  `..` or hidden names dropped, at most `MAX_FILES` files and 200 MB unpacked), planned into a tree
+  (`bundle.build_plan`), then created in one transaction (`run.run_plan`). Built-in templates are folders of the same
+  files under `ymer/templates/files/<id>/` and go through the same pipeline, so adding a template is adding files.
+  `{{date}}` in a template file becomes today's date; a `Name.schema.json` next to `Name.csv` pins column types.
+- **Layout rules.** `Name.md` is a document, `Name.csv` a database, `Name.mindmap.json` a mind map; a folder
+  `Name/` next to `Name.md` holds its sub-pages; other folders become folder pages. Notion's 32-character ids are
+  stripped from titles and used for `notion.so` links; of `Name.csv` and `Name_all.csv` the `_all` one is used;
+  database row pages are kept only if they have more than their `Property: value` lines.
+- **Markdown → Yjs.** `importing/markdown.py` parses with markdown-it-py and writes TipTap's XML fragment with pycrdt,
+  marks as y-prosemirror formatting attributes (`{"bold": {}}`, `{"link": {"href": …}}`). Links to imported pages
+  become `pageMention` nodes (so `page_links` and backlinks fill in), linked files are uploaded to S3 and become
+  `image`/`fileAttachment` nodes by file id. Tables become a code block (no table node in the schema yet).
+- **CSV → database.** `importing/tables.py` infers each column's type and feeds
+  `ai.generate.create_database` (now with configurable limits: 40 properties, 5,000 rows for imports).
+- **Duplicate / custom templates.** `copy_page` copies the visible subtree: pages, Yjs state (with page and file ids
+  inside documents and mind maps rewritten to the copies), files (S3 `copy_object`), databases (properties, rows,
+  relations within the copy, views; ids in JSON config remapped). Relations to databases outside the copy are left
+  out. Applying a saved template is a copy of that page.
+- **API.** `GET /api/templates`, `GET /api/workspaces/<ws>/templates`, `POST .../templates/apply`
+  (`template_id` or `page_id`, `parent_id`), `POST .../import` (multipart `file`, `parent_id`),
+  `POST .../pages/<id>/duplicate`, `PATCH .../pages/<id>` with `is_template`. `POST /api/workspaces` takes
+  `template` (default `blank`; the app offers `getting-started`). Imports are capped by `YMER_MAX_IMPORT_BYTES`
+  (100 MB) and, with template uses, rate limited by `YMER_RATE_LIMIT_IMPORTS` per user per minute. Each writes an
+  audit event (`import`, `template.apply`, `page.duplicate`, `page.template`).
+
 ## Factory, stages F1 to F5: the brief, the architecture, the build, delivery and iterating
 
 The Factory turns a workspace's notes into a working app in reviewed stages (brief,
