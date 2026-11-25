@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 
+import { wipeOfflineData } from "@/offline/store";
+
 import { api, loadSession } from "./api";
 import {
   getSession,
@@ -17,6 +19,7 @@ type AuthResponse = { user: User; csrf_token: string };
 
 function store(response: AuthResponse): Session {
   setCsrfToken(response.csrf_token);
+  void wipeOfflineData({ keepUser: response.user.id });
   const session = { user: response.user };
   setSession(session);
   return session;
@@ -57,10 +60,12 @@ export async function register(
   );
 }
 
+/** Sign out and delete this device's offline copies (edits not yet synced are lost). */
 export async function logout(): Promise<void> {
   try {
     await api("/auth/logout", { method: "POST" });
   } finally {
     setSession(null);
+    await wipeOfflineData();
   }
 }

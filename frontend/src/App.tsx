@@ -8,6 +8,7 @@ import { startSession, useSession, useSessionStatus } from "./lib/auth";
 import { AuthPage } from "./pages/AuthPage";
 import { AiSettingsPage } from "./pages/AiSettingsPage";
 import { AuditPage } from "./pages/AuditPage";
+import { UpdatePrompt } from "./offline/UpdatePrompt";
 import { MembersPage } from "./pages/MembersPage";
 import { PageView } from "./pages/PageView";
 import { Home, NewWorkspace, WorkspaceHome, WorkspaceLayout } from "./pages/workspace";
@@ -16,7 +17,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+      // Always try the request: offline, the service worker answers from its cache.
+      networkMode: "offlineFirst",
+      retry: (count, error) => navigator.onLine && !(error instanceof ApiError && error.status < 500) && count < 2,
     },
   },
 });
@@ -60,6 +63,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
+      <UpdatePrompt />
     </QueryClientProvider>
   );
 }

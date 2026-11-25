@@ -7,7 +7,9 @@
  * change something. The CSRF token is not a credential on its own (it is useless
  * without the cookies), so keeping it in localStorage across reloads is fine.
  *
- * On load the session is unknown ("loading") until `GET /api/auth/me` answers.
+ * On load the session is unknown ("loading") until `GET /api/auth/me` answers. The user
+ * (id, name, email; no secret) is also remembered, so the app can open from the device's
+ * offline copies when the API cannot be reached at all.
  */
 import type { User } from "./types";
 
@@ -18,6 +20,7 @@ type Listener = () => void;
 const CSRF_KEY = "ymer.csrf";
 /** Written on sign-in and sign-out so other tabs notice (holds no secret). */
 const SIGNAL_KEY = "ymer.auth";
+const USER_KEY = "ymer.user";
 const listeners = new Set<Listener>();
 let current: Session | null = null;
 let status: SessionStatus = "loading";
@@ -39,6 +42,12 @@ export function setSession(session: Session | null, { broadcast = true } = {}): 
   current = session;
   status = session ? "signed-in" : "signed-out";
   if (!session) setCsrfToken(null);
+  try {
+    if (session) localStorage.setItem(USER_KEY, JSON.stringify(session.user));
+    else localStorage.removeItem(USER_KEY);
+  } catch {
+    // storage unavailable: no offline start-up in this browser
+  }
   if (broadcast && changedUser) {
     try {
       localStorage.setItem(SIGNAL_KEY, `${session?.user.id ?? ""}:${Date.now()}`);
@@ -47,6 +56,16 @@ export function setSession(session: Session | null, { broadcast = true } = {}): 
     }
   }
   notify();
+}
+
+/** The user last signed in on this device, for starting up without a network. */
+export function rememberedUser(): User | null {
+  try {
+    const user = JSON.parse(localStorage.getItem(USER_KEY) ?? "null") as User | null;
+    return user && typeof user.id === "string" ? user : null;
+  } catch {
+    return null;
+  }
 }
 
 export function getCsrfToken(): string | null {

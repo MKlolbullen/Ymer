@@ -199,7 +199,7 @@ export function AskPage() {
                 remove(c.id);
                 if (c.id === conversationId) navigate(`/w/${workspace.id}/ask`);
               }}
-              className="invisible px-1.5 text-zinc-400 group-hover:visible hover:text-rose-600"
+              className="invisible px-1.5 text-zinc-400 group-hover:visible pointer-coarse:visible hover:text-rose-600"
             >
               ×
             </button>

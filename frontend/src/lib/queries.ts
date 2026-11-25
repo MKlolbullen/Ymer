@@ -71,9 +71,14 @@ export function usePages(workspaceId: string) {
 }
 
 export function usePage(workspaceId: string, pageId: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: keys.page(workspaceId, pageId),
     queryFn: () => api<{ page: Page }>(pg(workspaceId, pageId)).then((r) => r.page),
+    // The sidebar's page list already has this page: show it at once (and offline),
+    // while the request for the latest version runs.
+    initialData: () => qc.getQueryData<Page[]>(keys.pages(workspaceId))?.find((p) => p.id === pageId),
+    initialDataUpdatedAt: 0,
   });
 }
 

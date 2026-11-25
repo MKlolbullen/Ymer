@@ -91,7 +91,7 @@ function Sources({ page, factory, locked }: { page: Page; factory: Factory; lock
                   <button
                     aria-label={`Remove “${s.title || "Untitled"}”`}
                     onClick={() => save(visibleIds.filter((id) => id !== s.page_id))}
-                    className="invisible px-1.5 text-zinc-400 group-hover:visible hover:text-rose-600 focus:visible"
+                    className="invisible px-1.5 text-zinc-400 group-hover:visible pointer-coarse:visible hover:text-rose-600 focus:visible"
                   >
                     ×
                   </button>

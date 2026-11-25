@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { GenerateMenu } from "@/ai/GenerateMenu";
@@ -27,14 +27,25 @@ function TitleInput({ page }: { page: Page }) {
     if (title !== page.title) update.mutate({ title: title.trim() });
   };
 
+  // Grow with the text so long titles wrap instead of scrolling sideways on phones.
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title]);
+
   return (
-    <input
+    <textarea
+      ref={ref}
+      rows={1}
       aria-label="Page title"
       value={title}
       readOnly={!canEdit}
       placeholder="Untitled"
       maxLength={500}
-      onChange={(e) => setTitle(e.target.value)}
+      onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
       onBlur={save}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
@@ -43,7 +54,7 @@ function TitleInput({ page }: { page: Page }) {
           (document.querySelector(".ProseMirror") as HTMLElement | null)?.focus();
         }
       }}
-      className="mb-4 w-full bg-transparent text-3xl font-bold tracking-tight placeholder:text-zinc-300 focus:outline-none dark:placeholder:text-zinc-700"
+      className="mb-4 block w-full resize-none overflow-hidden bg-transparent text-2xl font-bold tracking-tight placeholder:text-zinc-300 focus:outline-none sm:text-3xl dark:placeholder:text-zinc-700"
     />
   );
 }
@@ -54,7 +65,7 @@ function Breadcrumbs({ page }: { page: Page }) {
   return (
     <nav aria-label="Breadcrumbs" className="flex min-w-0 flex-1 items-center gap-1 truncate text-sm text-zinc-500">
       {trail.map((p) => (
-        <span key={p.id} className="flex min-w-0 items-center gap-1">
+        <span key={p.id} className="hidden min-w-0 items-center gap-1 sm:flex">
           <Link to={`/w/${page.workspace_id}/p/${p.id}`} className="max-w-40 truncate hover:text-zinc-900 dark:hover:text-white">
             {p.title || "Untitled"}
           </Link>
@@ -75,9 +86,11 @@ function ShareButton({ page }: { page: Page }) {
         ref={ref}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="rounded-md px-2.5 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        aria-label="Share"
+        title="Share"
+        className="rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
-        Share
+        <Label icon="🔗" text="Share" />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={380} label="Share">
@@ -134,14 +147,28 @@ function FolderView({ page }: { page: Page }) {
   );
 }
 
-function HeaderButton({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) {
+/** A header action: an icon on phones, the word on wider screens. */
+function Label({ icon, text }: { icon: string; text: string }) {
+  return (
+    <>
+      <span aria-hidden className="sm:hidden">
+        {icon}
+      </span>
+      <span className="hidden sm:inline">{text}</span>
+    </>
+  );
+}
+
+function HeaderButton({ active, onClick, icon, label }: { active?: boolean; onClick: () => void; icon: string; label: string }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
-      className="rounded-md px-2.5 py-1 text-sm text-zinc-600 hover:bg-zinc-100 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700"
+      aria-label={label}
+      title={label}
+      className="rounded-md px-2 py-1 text-sm whitespace-nowrap text-zinc-600 hover:bg-zinc-100 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700"
     >
-      {children}
+      <Label icon={icon} text={label} />
     </button>
   );
 }
@@ -156,7 +183,10 @@ export function PageView() {
   const [panel, setPanel] = useState<Panel>(null);
   const [presence, setPresence] = useState<ReactNode>(null);
 
-  const data = page.data;
+  // Offline, a page never opened here has no cached response of its own; the sidebar's
+  // page list still knows it.
+  const list = usePages(workspace.id);
+  const data = page.data ?? list.data?.find((p) => p.id === pageId);
   useEffect(() => {
     if (!data) return setHeader(null);
     const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
@@ -164,36 +194,34 @@ export function PageView() {
       <>
         <Breadcrumbs page={data} />
         {presence}
-        {data.type === "document" && (
-          <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")}>
-            Comments
-          </HeaderButton>
-        )}
-        {LIVE_PAGE_TYPES.includes(data.type) && (
-          <HeaderButton active={panel === "history"} onClick={() => toggle("history")}>
-            History
-          </HeaderButton>
-        )}
-        <GenerateMenu page={data} />
-        {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
-        {atLeast(data.my_role, "editor") && (
-          <HeaderButton
-            onClick={async () => {
-              if (!window.confirm(`Delete “${data.title || "Untitled"}” and every page inside it?`)) return;
-              await deletePage(data.id);
-              navigate(`/w/${workspace.id}`);
-            }}
-          >
-            Delete
-          </HeaderButton>
-        )}
+        <div className="flex shrink-0 items-center sm:gap-1">
+          {data.type === "document" && (
+            <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")} icon="💬" label="Comments" />
+          )}
+          {LIVE_PAGE_TYPES.includes(data.type) && (
+            <HeaderButton active={panel === "history"} onClick={() => toggle("history")} icon="🕘" label="History" />
+          )}
+          <GenerateMenu page={data} />
+          {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
+          {atLeast(data.my_role, "editor") && (
+            <HeaderButton
+              icon="🗑"
+              label="Delete"
+              onClick={async () => {
+                if (!window.confirm(`Delete “${data.title || "Untitled"}” and every page inside it?`)) return;
+                await deletePage(data.id);
+                navigate(`/w/${workspace.id}`);
+              }}
+            />
+          )}
+        </div>
       </>,
     );
   }, [data, panel, presence, setHeader, deletePage, navigate, workspace.id]);
   useEffect(() => () => setHeader(null), [setHeader]);
 
-  if (page.isLoading) return <p className="text-sm text-zinc-500">Loading…</p>;
-  if (page.isError) {
+  if (!data && page.isLoading) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (page.isError && !data) {
     const missing = page.error instanceof ApiError && page.error.status === 404;
     return <p className="text-sm text-zinc-500">{missing ? "This page does not exist or you do not have access to it." : "Could not load the page."}</p>;
   }
