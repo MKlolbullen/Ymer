@@ -54,9 +54,11 @@ what is planned.
 
 | Feature | What you get |
 |---|---|
-| **Databases** | Notion-style databases with title, text, number, select, multi-select, date, checkbox, URL and person properties. |
+| **Databases** | Notion-style databases with title, text, number, select, multi-select, date, date range, checkbox, URL, person and file properties. A person can be a member or just a name ("K. Lind"), which links to the member with that name once they join. Files are uploads or links (`https://`, `s3://`). |
 | **Views** | Table, board and chart views, each with its own filters and sorts (and grouping for boards). Drag rows and cards to reorder. |
-| **Relations and rollups** | One- or two-way relations between databases, with count, sum, average, min, max and percent-checked rollups. |
+| **Relations and rollups** | One- or two-way relations between databases. Rollups count, sum, average, take the median, min or max, a weighted average, the highest option (worst severity) or the percent checked. They can filter the rows they reach (open findings: status is none of Closed, False Positive), follow a second relation (Students → Enrollments → Courses credits), compare with the row itself (this enrollment's student), and build on formulas and other rollups. |
+| **Formulas** | `prop("Score") / prop("Max Points") * 100`, `ifs(prop("Grade") >= 90, "A", …)`: arithmetic, comparisons, `if`/`ifs`, text, rounding and date functions over a row's properties. Renaming a property keeps formulas working. |
+| **Relational import** | A zip of CSV or JSON tables that point at each other by id (`engagement_id`) becomes linked databases: id columns become two-way relations, columns that repeat the related row's name are dropped, copied values (an assignment's max points on each grade) become lookups, `start_date`/`end_date` pairs become date ranges, and `s3://` paths become files. |
 | **Search** | Ctrl/Cmd+K searches page titles, document text, mind map ideas, drawing text and database rows, with typo tolerance. Results only show what you may see. |
 | **Page tree and sharing** | Drag pages to nest and reorder them. Share a page by email and manage members and roles. |
 
@@ -75,6 +77,26 @@ what is planned.
     <td align="center"><sub>Search across pages and rows.</sub></td>
   </tr>
 </table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/filtered-rollup.png" alt="Rollup settings counting open critical and high findings per engagement"></td>
+    <td width="50%"><img src="docs/assets/screenshots/two-step-rollup.png" alt="A rollup through two relations with a weighted average of grades"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Imported SecOps tables: open Critical/High findings per engagement, a filtered rollup.</sub></td>
+    <td align="center"><sub>Imported school tables: an enrollment's weighted grade, through Course → Grades for this student.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/assets/screenshots/formula.png" alt="Editing a formula that turns a numeric grade into a letter" width="900">
+  <br><sub>A formula property: letter grades from the numeric grade.</sub>
+</p>
+
+The two example workspaces in [`projects/`](projects) (a SecOps platform and a school platform) are the acceptance
+tests for the database engine: `backend/tests/test_blueprints.py` imports each seed zip as it is, adds the formulas
+and rollups the blueprint describes and checks every benchmark number, plus the suggested stress tests.
 
 ### Mind maps, drawings and charts
 
@@ -115,7 +137,7 @@ New workspaces do not have to start empty, and neither do new pages.
 | **Starter sets** | Creating a workspace offers *Getting started* (a short tour, a task list and a mind map), *Team wiki*, *Personal notes*, *Product team*, or blank. They can also be added to an existing workspace later. |
 | **Page templates** | Meeting notes, project brief, weekly plan, decision record, retrospective, task tracker, reading list, bug tracker and brainstorm, from *Templates* in the sidebar or *From a template or import…* in any **+** menu. Dates in titles are filled in. |
 | **Your own templates** | *Save as template* in a page's **⋯** menu offers that page, with everything inside it, to the whole workspace. Using one makes a full copy, as does *Duplicate*: documents, mind maps, drawings, databases with their rows and views, and attached files, with links inside the copy pointing at the copied pages. |
-| **Notion import** | Drop a Notion *Markdown & CSV* export zip as it is. Pages keep their tree and their order, databases become Ymer databases with typed columns (select, multi-select, date, number, checkbox, URL), links between pages become page mentions with backlinks, and linked images and files are attached. Database row pages with their own content come along as sub-pages. |
+| **Notion import** | Drop a Notion *Markdown & CSV* export zip as it is. Pages keep their tree and their order, databases become Ymer databases with typed columns (select, multi-select, date or date range, number, checkbox, URL, person), links between pages become page mentions with backlinks, and linked images and files are attached. Database row pages with their own content come along as sub-pages. |
 | **Markdown import** | Single `.md` files, CSV files, or a zip of a folder of notes (an Obsidian vault works, `[[wiki links]]` included). Folders become the page tree, front matter titles are used, and everything is searchable straight away. |
 
 Imports map onto what Ymer documents can hold: tables become text blocks for now, and anything that could not be
@@ -425,6 +447,7 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **0. Foundation** | Monorepo and dev stack, auth, workspaces and roles, page tree and permissions, layout shell | ✅ Done |
 | **1. Collaborative documents** | TipTap + Yjs editing with presence and cursors, comments, version history, file uploads | ✅ Done |
 | **2. Notebooks and databases** | Page hierarchy and backlinks, database engine (properties, rows, table and board views), relations and rollups, full-text search, sharing | ✅ Done |
+| **D. Database engine v2** | Formulas, filtered rollups and rollups through two relations, weighted averages, date range / file / person-by-name properties, relational import of linked CSV/JSON tables, the `projects/` blueprints as acceptance tests | ✅ Done |
 | **3. Mind maps and visuals** | Collaborative React Flow mind maps, Excalidraw drawings, chart views and chart blocks from database data | ✅ Done |
 | **4. AI layer** | Pluggable LLM proxy (hosted or local models), summarize / rewrite / expand on a selection, generate mind maps or databases from notes, workspace Q&A over pgvector, background jobs | ✅ Done |
 | **F1. Factory: brief** | Factory pages, source pages, AI brief with open questions, answers and approval | ✅ Done |

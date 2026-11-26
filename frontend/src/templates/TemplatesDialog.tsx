@@ -129,7 +129,7 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
   const add = (list: FileList | null) => {
     const picked = Array.from(list ?? []);
     const ok = picked.filter(importable);
-    setError(ok.length < picked.length ? "Only .zip, .md and .csv files can be imported." : null);
+    setError(ok.length < picked.length ? "Only .zip, .md, .csv and .json files can be imported." : null);
     setFiles((current) => [...current, ...ok]);
   };
   const onDrop = (e: DragEvent) => {
@@ -182,11 +182,11 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
         <span aria-hidden className="text-3xl">
           📥
         </span>
-        <p className="text-sm">Drop a Notion export, Markdown files or a CSV here</p>
+        <p className="text-sm">Drop a Notion export, Markdown files, or CSV/JSON tables here</p>
         <button type="button" onClick={() => input.current?.click()} className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-500">
           or choose files
         </button>
-        <input ref={input} type="file" multiple accept=".zip,.md,.markdown,.csv" aria-label="Files to import" className="hidden" onChange={(e) => add(e.target.files)} />
+        <input ref={input} type="file" multiple accept=".zip,.md,.markdown,.csv,.json" aria-label="Files to import" className="hidden" onChange={(e) => add(e.target.files)} />
       </div>
       {files.length > 0 && (
         <ul className="space-y-1 text-sm">
@@ -220,7 +220,11 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
           </li>
           <li>Folders become the page tree. Markdown files become documents, CSV files become databases with typed columns.</li>
           <li>Links between imported pages become page links (with backlinks), and linked images and files are attached.</li>
-          <li>Obsidian-style [[wiki links]] work too. Tables become text blocks for now.</li>
+          <li>
+            Tables that point at each other by id (an <code>engagement_id</code> column next to an <code>engagements</code> table) become related databases. Columns that
+            only repeat the related row&apos;s name are dropped, and other copied values become lookups.
+          </li>
+          <li>Obsidian-style [[wiki links]] work too. Tables inside documents become text blocks for now.</li>
         </ul>
       </details>
     </div>

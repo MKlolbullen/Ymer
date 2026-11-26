@@ -1,6 +1,8 @@
 /** Pure helpers for database views: labels, colors, grouping, formatting. */
 import type {
   DatabaseView,
+  DateRange,
+  FileRef,
   FilterOp,
   Person,
   Property,
@@ -23,7 +25,13 @@ export const PROPERTY_TYPES: { type: PropertyType; label: string; icon: string }
   { type: "person", label: "Person", icon: "👤" },
   { type: "relation", label: "Relation", icon: "↗" },
   { type: "rollup", label: "Rollup", icon: "∑" },
+  { type: "formula", label: "Formula", icon: "ƒ" },
+  { type: "date_range", label: "Date range", icon: "📆" },
+  { type: "file", label: "Files", icon: "📎" },
 ];
+
+/** Properties computed by the server: never edited in a cell. */
+export const COMPUTED: PropertyType[] = ["rollup", "formula"];
 
 export const TYPE_ICON: Record<PropertyType, string> = {
   title: "Aa",
@@ -31,7 +39,7 @@ export const TYPE_ICON: Record<PropertyType, string> = {
 } as Record<PropertyType, string>;
 
 /** Types that can be switched between without losing the property (server converts values). */
-export const CONVERTIBLE: PropertyType[] = ["text", "number", "select", "multi_select", "date", "checkbox", "url", "person"];
+export const CONVERTIBLE: PropertyType[] = ["text", "number", "select", "multi_select", "date", "checkbox", "url", "person", "date_range", "file"];
 
 export const ROLLUP_FUNCTIONS: { fn: RollupFunction; label: string }[] = [
   { fn: "show_original", label: "Show original" },
@@ -43,6 +51,9 @@ export const ROLLUP_FUNCTIONS: { fn: RollupFunction; label: string }[] = [
   { fn: "min", label: "Min / earliest" },
   { fn: "max", label: "Max / latest" },
   { fn: "percent_checked", label: "Percent checked" },
+  { fn: "median", label: "Median" },
+  { fn: "weighted_average", label: "Weighted average" },
+  { fn: "top_option", label: "Highest option (first in option order)" },
 ];
 
 export const OPTION_COLORS = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"] as const;
@@ -71,6 +82,8 @@ const OP_LABEL: Record<FilterOp, string> = {
   lte: "at most",
   is_empty: "is empty",
   is_not_empty: "is not empty",
+  in: "is any of",
+  not_in: "is none of",
 };
 
 /** The filter operators that make sense for a property type, with labels. */
@@ -79,8 +92,10 @@ export function opsFor(type: PropertyType): { op: FilterOp; label: string }[] {
     switch (type) {
       case "number":
       case "rollup":
+      case "formula":
         return ["equals", "not_equals", "gt", "gte", "lt", "lte", "is_empty", "is_not_empty"];
       case "date":
+      case "date_range":
         return ["equals", "gt", "lt", "is_empty", "is_not_empty"];
       case "checkbox":
         return ["equals"];
@@ -89,6 +104,7 @@ export function opsFor(type: PropertyType): { op: FilterOp; label: string }[] {
       case "multi_select":
       case "person":
       case "relation":
+      case "file":
         return ["contains", "not_contains", "is_empty", "is_not_empty"];
       default:
         return ["contains", "not_contains", "equals", "not_equals", "is_empty", "is_not_empty"];
@@ -96,8 +112,22 @@ export function opsFor(type: PropertyType): { op: FilterOp; label: string }[] {
   })();
   return ops.map((op) => ({
     op,
-    label: type === "date" && op === "gt" ? "is after" : type === "date" && op === "lt" ? "is before" : OP_LABEL[op],
+    label:
+      type === "date_range" && op === "equals"
+        ? "includes"
+        : (type === "date" || type === "date_range") && op === "gt"
+          ? "is after"
+          : (type === "date" || type === "date_range") && op === "lt"
+            ? "is before"
+            : OP_LABEL[op],
   }));
+}
+
+/** Operators for a rollup filter: the view ones, plus "is any of" / "is none of" for selects. */
+export function rollupOpsFor(type: PropertyType): { op: FilterOp; label: string }[] {
+  const ops = opsFor(type);
+  if (type === "select") ops.splice(2, 0, { op: "in", label: OP_LABEL.in }, { op: "not_in", label: OP_LABEL.not_in });
+  return ops;
 }
 
 export function needsValue(op: FilterOp): boolean {
@@ -168,6 +198,27 @@ export function formatNumber(value: number, format: string | undefined): string 
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(value);
 }
 
+export function formatDateRange(value: DateRange): string {
+  if (!value.end || value.end === value.start) return formatDate(value.start);
+  return `${formatDate(value.start)} → ${formatDate(value.end)}`;
+}
+
+/** The file name to show for a file value. */
+export function fileLabel(file: FileRef): string {
+  return file.name || file.url?.split("/").pop() || "File";
+}
+
+/** A formula or rollup result as text: numbers formatted, lists joined, true as ✓. */
+function computedText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(computedText).filter(Boolean).join(", ");
+  if (typeof value === "boolean") return value ? "✓" : "";
+  // Computed numbers (averages, percentages) show two decimals; the API keeps the full value.
+  if (typeof value === "number") return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
+  if (value && typeof value === "object" && "start" in value) return formatDateRange(value as DateRange);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}(T[\d:.]+)?$/.test(value)) return formatDate(value);
+  return value === null || value === undefined ? "" : String(value);
+}
+
 export function formatDate(value: string): string {
   const date = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -198,15 +249,32 @@ export function displayText(property: Property, value: unknown): string {
     case "relation":
       return (value as RelationRef[]).map((r) => r.title ?? "Restricted").join(", ");
     case "rollup":
-      if (Array.isArray(value)) return value.map((v) => (typeof v === "boolean" ? (v ? "✓" : "") : String(v))).join(", ");
       if (property.config.function === "percent_checked" && typeof value === "number") return `${value}%`;
-      return typeof value === "number" ? formatNumber(value, undefined) : String(value);
+      return computedText(value);
+    case "formula":
+      return computedText(value);
+    case "date_range":
+      return formatDateRange(value as DateRange);
+    case "file":
+      return (value as FileRef[]).map(fileLabel).join(", ");
     default:
       return String(value);
   }
 }
 
-/** The relation property ids (in the related database) that rollups can roll up. */
+/** The properties (in the related database) that rollups can roll up: any of them, including
+ * other rollups and formulas; the server leaves a loop of properties empty. */
 export function rollupTargets(properties: Property[]): Property[] {
-  return properties.filter((p) => p.type !== "rollup");
+  return properties;
+}
+
+/** The functions that fit a rolled-up property. */
+export function rollupFunctionsFor(target: Property | undefined): { fn: RollupFunction; label: string }[] {
+  if (!target) return ROLLUP_FUNCTIONS;
+  return ROLLUP_FUNCTIONS.filter((f) => f.fn !== "top_option" || target.type === "select" || target.type === "multi_select");
+}
+
+/** Wrap a property name for a formula: prop("Name"), with quotes escaped. */
+export function propRef(name: string): string {
+  return `prop("${name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
 }

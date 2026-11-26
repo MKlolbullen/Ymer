@@ -14,6 +14,9 @@ export type ImportSummary = {
   databases?: number;
   rows?: number;
   files: number;
+  relations?: number;
+  links?: number;
+  lookups?: number;
   warnings: string[];
 };
 
@@ -89,10 +92,13 @@ export function describeSummary(summary: ImportSummary): string {
   const parts = [`${summary.pages} page${summary.pages === 1 ? "" : "s"}`];
   if (summary.databases) parts.push(`${summary.databases} database${summary.databases === 1 ? "" : "s"} with ${summary.rows ?? 0} rows`);
   if (summary.files) parts.push(`${summary.files} file${summary.files === 1 ? "" : "s"}`);
-  return `Added ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.`;
+  const added = `Added ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.`;
+  if (!summary.relations) return added;
+  const linked = `Linked the tables with ${summary.relations} relation${summary.relations === 1 ? "" : "s"} (${summary.links ?? 0} link${summary.links === 1 ? "" : "s"})`;
+  return `${added} ${linked}${summary.lookups ? ` and ${summary.lookups} lookup${summary.lookups === 1 ? "" : "s"}` : ""}.`;
 }
 
 /** Files the import accepts (zips are unpacked on the server). */
 export function importable(file: File): boolean {
-  return /\.(zip|md|markdown|csv)$/i.test(file.name);
+  return /\.(zip|md|markdown|csv|json)$/i.test(file.name);
 }

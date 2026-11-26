@@ -46,6 +46,9 @@ class PropertyType(enum.StrEnum):
     PERSON = "person"
     RELATION = "relation"
     ROLLUP = "rollup"
+    FORMULA = "formula"
+    DATE_RANGE = "date_range"
+    FILE = "file"
 
 
 class ViewType(enum.StrEnum):
@@ -83,7 +86,11 @@ class DatabaseProperty(Base):
     - relation: ``{"database_id": <target page>}`` plus either ``"reverse_property_id"``
       (this side owns the links; the other side is the given property) or ``"reverse_of"``
       (this is the read-from-the-other-side half of a two-way relation)
-    - rollup: ``{"relation_property_id", "target_property_id", "function"}``
+    - rollup: ``{"relation_property_id", "target_property_id", "function"}``, optionally
+      ``"filters"`` (on the related rows), ``"through_property_id"`` and
+      ``"through_filters"`` (a second relation, followed from the related rows) and
+      ``"weight_property_id"`` (weighted average); see :mod:`ymer.databases`
+    - formula: ``{"expression": 'prop("Score") / prop("Max Points") * 100'}``
     """
 
     __tablename__ = "database_properties"

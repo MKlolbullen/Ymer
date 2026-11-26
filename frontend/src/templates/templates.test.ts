@@ -10,11 +10,21 @@ describe("import summaries", () => {
     );
   });
 
-  it("accepts zips, Markdown and CSV only", () => {
+  it("mentions the links between imported tables", () => {
+    expect(describeSummary({ pages: 6, databases: 5, rows: 54, files: 0, relations: 7, links: 52, lookups: 0, warnings: [] })).toBe(
+      "Added 6 pages and 5 databases with 54 rows. Linked the tables with 7 relations (52 links).",
+    );
+    expect(describeSummary({ pages: 7, databases: 6, rows: 86, files: 0, relations: 8, links: 1, lookups: 5, warnings: [] })).toBe(
+      "Added 7 pages and 6 databases with 86 rows. Linked the tables with 8 relations (1 link) and 5 lookups.",
+    );
+  });
+
+  it("accepts zips, Markdown, CSV and JSON only", () => {
     const file = (name: string) => new File(["x"], name);
     expect(importable(file("Export-1234.zip"))).toBe(true);
     expect(importable(file("Notes.MD"))).toBe(true);
     expect(importable(file("tasks.csv"))).toBe(true);
+    expect(importable(file("assets.json"))).toBe(true);
     expect(importable(file("photo.png"))).toBe(false);
   });
 });

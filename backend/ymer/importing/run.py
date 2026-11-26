@@ -19,10 +19,19 @@ from sqlalchemy.orm import Session
 from ymer.ai.generate import create_database, mindmap_state
 from ymer.ai.indexing import mark_dirty
 from ymer.content import index_document
+from ymer.databases import relation_target_id
 from ymer.documents import save_state
 from ymer.importing.bundle import Plan, PlanNode, SourceFile, resolve_path
 from ymer.importing.markdown import Asset, Mention, Resolved, markdown_to_state
-from ymer.models import File, Page, PageType
+from ymer.models import (
+    DatabaseProperty,
+    DatabaseRelation,
+    DatabaseRow,
+    File,
+    Page,
+    PageType,
+    PropertyType,
+)
 
 MAX_DATABASE_PROPERTIES = 40
 MAX_DATABASE_ROWS = 5000
@@ -47,6 +56,9 @@ class Result:
     databases: int = 0
     rows: int = 0
     files: int = 0
+    relations: int = 0
+    links: int = 0
+    lookups: int = 0
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -55,6 +67,9 @@ class Result:
             "databases": self.databases,
             "rows": self.rows,
             "files": self.files,
+            "relations": self.relations,
+            "links": self.links,
+            "lookups": self.lookups,
             "warnings": self.warnings[:50],
         }
 
@@ -189,6 +204,9 @@ class _Runner:
                 spec.setdefault("title", node.title)
                 state, _ = mindmap_state(spec)
                 self.save(node, state)
+        linked = [n for n in self.plan.nodes() if n.spec and n.spec.get("relations") is not None]
+        if linked:
+            self.link_databases(linked)
         mark_dirty(self.session, list(self.pages))
         if self.tables:
             self.result.warnings.append(
@@ -207,6 +225,172 @@ class _Runner:
                 f"{len(unused)} file(s) were not linked from any page, so they were skipped."
             )
         return self.result
+
+    # --- related tables (ymer.importing.relational) ----------------------------------
+
+    def link_databases(self, nodes: list[PlanNode]) -> None:
+        self.session.flush()
+        props = {n.id: self._props(n.id) for n in nodes}
+        rows = {
+            n.id: list(
+                self.session.scalars(
+                    select(DatabaseRow.id)
+                    .where(DatabaseRow.database_id == n.id)
+                    .order_by(DatabaseRow.position)
+                )
+            )
+            for n in nodes
+        }
+        # Each table's key -> row id, for the tables others point at.
+        by_key = {
+            n.id: {
+                key: rows[n.id][i] for i, key in enumerate(n.spec["keys"]) if i < len(rows[n.id])
+            }
+            for n in nodes
+        }
+        missing = 0
+        for node in nodes:
+            for spec in node.spec["relations"]:
+                target = uuid.UUID(spec["target"])
+                if target not in by_key:
+                    continue
+                prop = self._relation(node, target, spec, props)
+                for i, cell in enumerate(spec["cells"]):
+                    if i >= len(rows[node.id]) or not cell:
+                        continue
+                    seen: set[uuid.UUID] = set()
+                    for position, key in enumerate(p.strip() for p in cell.split(",")):
+                        other = by_key[target].get(key)
+                        if other is None:
+                            missing += 1
+                            continue
+                        if other in seen:
+                            continue
+                        seen.add(other)
+                        self.session.add(
+                            DatabaseRelation(
+                                property_id=prop.id,
+                                from_row_id=rows[node.id][i],
+                                to_row_id=other,
+                                position=position,
+                            )
+                        )
+                        self.result.links += 1
+        self._lookups(nodes, props)
+        for node in nodes:
+            order = {name.lower(): i for i, name in enumerate(node.spec.get("order", []))}
+            ordered = sorted(
+                props[node.id],
+                key=lambda p, o=order: (
+                    p.type is not PropertyType.TITLE,
+                    o.get(p.name.lower(), 999),
+                ),
+            )
+            for i, prop in enumerate(ordered):
+                prop.position = i
+        if missing:
+            self.result.warnings.append(
+                f"{missing} id(s) in the imported tables point at rows that are not there, "
+                "so those links were left out."
+            )
+
+    def _props(self, database_id: uuid.UUID) -> list[DatabaseProperty]:
+        return list(
+            self.session.scalars(
+                select(DatabaseProperty).where(DatabaseProperty.database_id == database_id)
+            )
+        )
+
+    def _relation(
+        self,
+        node: PlanNode,
+        target: uuid.UUID,
+        spec: dict,
+        props: dict[uuid.UUID, list[DatabaseProperty]],
+    ) -> DatabaseProperty:
+        prop = DatabaseProperty(
+            id=uuid.uuid4(),
+            workspace_id=self.target.workspace_id,
+            database_id=node.id,
+            name=_unique(spec["name"], props[node.id]),
+            type=PropertyType.RELATION,
+            config={"database_id": str(target)},
+            position=len(props[node.id]),
+        )
+        props[node.id].append(prop)
+        self.session.add(prop)
+        if spec.get("reverse_name") and target != node.id:
+            reverse = DatabaseProperty(
+                id=uuid.uuid4(),
+                workspace_id=self.target.workspace_id,
+                database_id=target,
+                name=_unique(spec["reverse_name"], props[target]),
+                type=PropertyType.RELATION,
+                config={"database_id": str(node.id), "reverse_of": str(prop.id)},
+                position=len(props[target]) + 100,  # after the table's own columns
+            )
+            prop.config = {**prop.config, "reverse_property_id": str(reverse.id)}
+            props[target].append(reverse)
+            self.session.add(reverse)
+        self.session.flush()
+        self.result.relations += 1
+        return prop
+
+    def _lookups(self, nodes: list[PlanNode], props: dict[uuid.UUID, list[DatabaseProperty]]):
+        """Lookups are rollups showing the related row's value. One can show another
+        lookup, so they are made in rounds until no more can be."""
+        waiting = [(n, spec) for n in nodes for spec in n.spec.get("lookups", [])]
+        while waiting:
+            later = []
+            for node, spec in waiting:
+                relation = _named(props[node.id], spec["relation"], PropertyType.RELATION)
+                target_db = relation_target_id(relation) if relation else None
+                shown = (
+                    _named(props.get(target_db, []), spec["target_property"]) if target_db else None
+                )
+                if relation is None or target_db is None:
+                    continue
+                if shown is None:
+                    later.append((node, spec))
+                    continue
+                lookup = DatabaseProperty(
+                    workspace_id=self.target.workspace_id,
+                    database_id=node.id,
+                    name=_unique(spec["name"], props[node.id]),
+                    type=PropertyType.ROLLUP,
+                    config={
+                        "relation_property_id": str(relation.id),
+                        "target_property_id": str(shown.id),
+                        "function": "show_original",
+                    },
+                    position=len(props[node.id]),
+                )
+                props[node.id].append(lookup)
+                self.session.add(lookup)
+                self.result.lookups += 1
+            if len(later) == len(waiting):
+                break  # what is left points at columns that do not exist
+            waiting = later
+        self.session.flush()
+
+
+def _named(
+    props: list[DatabaseProperty], name: str, kind: PropertyType | None = None
+) -> DatabaseProperty | None:
+    return next(
+        (p for p in props if p.name.lower() == name.lower() and (kind is None or p.type is kind)),
+        None,
+    )
+
+
+def _unique(name: str, props: list[DatabaseProperty]) -> str:
+    taken = {p.name.lower() for p in props}
+    candidate = name[:200]
+    n = 2
+    while candidate.lower() in taken:
+        candidate = f"{name[:190]} ({n})"
+        n += 1
+    return candidate
 
 
 def run_plan(session: Session, plan: Plan, target: Target) -> Result:

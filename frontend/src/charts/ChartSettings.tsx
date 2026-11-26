@@ -19,7 +19,7 @@ export function ChartSettings({ config, properties, onChange, disabled }: Props)
   const set = (patch: Partial<ChartConfig>) => onChange({ ...config, ...patch });
   const groups = groupable(properties);
   const numbers = numeric(properties);
-  const isDate = (id: string | null) => properties.find((p) => p.id === id)?.type === "date";
+  const isDate = (id: string | null) => ["date", "date_range"].includes(properties.find((p) => p.id === id)?.type ?? "");
   const pie = isPie(config.kind);
 
   return (

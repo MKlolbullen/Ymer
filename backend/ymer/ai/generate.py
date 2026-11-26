@@ -138,6 +138,9 @@ TYPES = {
     "date": PropertyType.DATE,
     "checkbox": PropertyType.CHECKBOX,
     "url": PropertyType.URL,
+    "person": PropertyType.PERSON,
+    "date_range": PropertyType.DATE_RANGE,
+    "file": PropertyType.FILE,
 }
 MAX_PROPERTIES = 12
 MAX_ROWS = 100
@@ -178,7 +181,11 @@ def _raw_value(prop: DatabaseProperty, value: str) -> Any:
                 return None
             return ids[0] if prop.type is PropertyType.SELECT else ids
         case PropertyType.DATE:
+            if len(value) > 10 and value[10] in "T ":
+                return value.replace(" ", "T", 1)  # a timestamp; clean_value checks it
             return value[:10] if len(value) >= 10 else value
+        case PropertyType.PERSON:
+            return [{"name": n.strip()} for n in value.split(",") if n.strip()]
     return value
 
 
@@ -190,6 +197,7 @@ def add_rows(
     *,
     user_id: uuid.UUID,
     start: float = 1.0,
+    keep_empty: bool = False,
 ) -> list[DatabaseRow]:
     """Add rows given as ``{"values": [{"property": name, "value": text}]}`` to a database,
     after any rows at positions below ``start``. Select options are added as needed."""
@@ -212,7 +220,7 @@ def add_rows(
                 continue
             if cleaned is not None:
                 values[str(prop.id)] = cleaned
-        if not values:
+        if not values and not keep_empty:
             continue
         row = DatabaseRow(
             workspace_id=page.workspace_id,
@@ -292,7 +300,16 @@ def create_database(
     session.flush()
 
     rows = spec.get("rows") if isinstance(spec.get("rows"), list) else []
-    count = len(add_rows(session, page, props, rows[:max_rows], user_id=user_id))
+    count = len(
+        add_rows(
+            session,
+            page,
+            props,
+            rows[:max_rows],
+            user_id=user_id,
+            keep_empty=bool(spec.get("all_rows")),
+        )
+    )
 
     session.add(
         DatabaseView(

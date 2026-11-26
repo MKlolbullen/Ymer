@@ -4,7 +4,11 @@ Folders become the page tree, the way Notion's "Markdown & CSV" export, an Obsid
 vault or a plain folder of notes lays it out:
 
 - ``Name.md`` is a document; ``Name.csv`` is a database; ``Name.mindmap.json`` is a mind
-  map (templates use that one).
+  map (templates use that one). ``Name.json`` holding a list of records is a database
+  too, and one holding ``{"table": [records], …}`` is one database per table. A table
+  that comes both as CSV and as JSON (exports often include both) is imported once.
+- Tables that point at each other by id (``engagement_id``) become related databases:
+  see :mod:`ymer.importing.relational`.
 - A folder next to a file with the same name (``Name/``) holds that page's sub-pages.
   Any other folder becomes a folder page, if it holds anything importable.
 - Notion adds a 32-character id to every name (``Name 1f2e…``). It is left out of titles
@@ -28,7 +32,8 @@ from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 from ymer.importing import markdown
-from ymer.importing.tables import csv_spec
+from ymer.importing.relational import humanize, link_tables
+from ymer.importing.tables import json_rows, read_rows, table_spec
 from ymer.models import PageType
 
 MAX_FILES = 3000
@@ -60,6 +65,8 @@ class PlanNode:
     path: str | None = None
     text: str = ""  # a document's Markdown (front matter and title removed)
     spec: dict | None = None  # a database's or mind map's content
+    table: tuple[list[str], list[list[str]]] | None = None  # a database's cells, as read
+    schema: dict | None = None  # types pinned by a template's .schema.json
     children: list["PlanNode"] = field(default_factory=list)
     id: uuid.UUID = field(default_factory=uuid.uuid4)
 
@@ -77,6 +84,7 @@ class Plan:
     by_title: dict[str, PlanNode]
     assets: dict[str, SourceFile]
     skipped: list[str] = field(default_factory=list)
+    relations: int = 0
 
     def nodes(self):
         for root in self.roots:
@@ -170,6 +178,8 @@ def _kind_and_stem(filename: str) -> tuple[PageType, str] | None:
             return PageType.DOCUMENT, filename[: -len(ext)]
     if lower.endswith(".csv"):
         return PageType.DATABASE, filename[:-4]
+    if lower.endswith(".json") and not lower.endswith(".schema.json"):
+        return PageType.DATABASE, filename[:-5]
     return None
 
 
@@ -209,13 +219,66 @@ class _Planner:
                 directory = parent
         self.plan = Plan([], {}, {}, {}, {})
         self.count = 0
+        self.json_tables = self.read_json_tables(files)
+
+    @staticmethod
+    def read_json_tables(files: list[SourceFile]) -> dict[str, list[tuple[str, tuple]]]:
+        """JSON files that hold tables: path -> [(table name, (header, body))].
+
+        A table already present as CSV (or in an earlier JSON file) is left out, so an
+        export with ``csv/`` and ``json/`` copies of each table imports it once."""
+        names = {
+            posixpath.basename(f.path)[:-4].removesuffix("_all").lower()
+            for f in files
+            if f.path.lower().endswith(".csv")
+        }
+        found: dict[str, list[tuple[str, tuple]]] = {}
+        candidates = [
+            f
+            for f in files
+            if f.path.lower().endswith(".json")
+            and not f.path.lower().endswith((".schema.json", ".mindmap.json"))
+            and len(f.data) <= MAX_TEXT_BYTES
+        ]
+
+        def parse(file: SourceFile):
+            try:
+                return json.loads(file.data.decode("utf-8", errors="replace"))
+            except ValueError:
+                return None
+
+        parsed = [(f, parse(f)) for f in candidates]
+        # Single tables first, then files bundling several (they repeat the singles).
+        singles = [(f, d) for f, d in parsed if isinstance(d, list)]
+        bundles = [(f, d) for f, d in parsed if isinstance(d, dict)]
+        for file, data in singles:
+            name = posixpath.basename(file.path)[:-5]
+            table = json_rows(data)
+            if table is None:
+                continue
+            found[file.path] = []
+            if name.lower() not in names:
+                names.add(name.lower())
+                found[file.path].append((name, table))
+        for file, data in bundles:
+            tables = [(str(k), json_rows(v)) for k, v in data.items()]
+            if not tables or any(t is None for _, t in tables):
+                continue
+            found[file.path] = []
+            for name, table in tables:
+                if name.lower() not in names:
+                    names.add(name.lower())
+                    found[file.path].append((name, table))
+        return found
 
     def substitute(self, text: str) -> str:
         for key, value in self.subs.items():
             text = text.replace("{{" + key + "}}", value)
         return text
 
-    def node(self, file: SourceFile, kind: PageType, stem: str) -> PlanNode:
+    def node(
+        self, file: SourceFile, kind: PageType, stem: str, table: tuple | None = None
+    ) -> PlanNode:
         self.count += 1
         if self.count > MAX_PAGES:
             raise ImportProblem(f"That import has more than {MAX_PAGES:,} pages.")
@@ -226,6 +289,9 @@ class _Planner:
             node.text = prepared.text
             if prepared.title:
                 node.title = prepared.title[:500]
+        elif kind is PageType.DATABASE and table is not None:
+            node.table = table
+            node.spec = table_spec(*table)
         elif kind is PageType.DATABASE:
             directory = posixpath.dirname(file.path)
             schema_file = next(
@@ -242,9 +308,9 @@ class _Planner:
                     schema = json.loads(_text(schema_file))
                 except ValueError:
                     self.plan.skipped.append(schema_file.path)
-            node.spec = csv_spec(
-                self.substitute(_text(file)), schema if isinstance(schema, dict) else None
-            )
+            node.schema = schema if isinstance(schema, dict) else None
+            node.table = read_rows(self.substitute(_text(file)))
+            node.spec = table_spec(*node.table, node.schema)
         else:
             try:
                 spec = json.loads(self.substitute(_text(file)))
@@ -274,6 +340,13 @@ class _Planner:
                     self.plan.assets[file.path] = file
                 continue
             kind, stem = found
+            if kind is PageType.DATABASE and filename.lower().endswith(".json"):
+                tables = self.json_tables.get(file.path)
+                if tables is None:
+                    self.plan.assets[file.path] = file  # JSON that is not a table
+                for name, table in tables or []:
+                    nodes.append(self.node(file, kind, name, table))
+                continue
             if kind is PageType.DATABASE:
                 if stem.endswith("_all"):
                     stem = stem[:-4]
@@ -328,10 +401,27 @@ class _Planner:
             node.children.sort(key=position)
 
 
-def build_plan(files: list[SourceFile], substitutions: dict[str, str] | None = None) -> Plan:
+GENERIC_FOLDERS = {"csv", "json", "data", "tables", "export", "exports", "seed", "seeds"}
+
+
+def build_plan(
+    files: list[SourceFile],
+    substitutions: dict[str, str] | None = None,
+    *,
+    source_name: str | None = None,
+) -> Plan:
+    """Plan the pages an import becomes. ``source_name`` (the uploaded file's name)
+    titles a top folder that only has a generic name such as ``csv``."""
     planner = _Planner(files, substitutions)
     planner.plan.roots = planner.build("")
     planner.order_by_links()
+    databases = [n for n in planner.plan.nodes() if n.kind is PageType.DATABASE and n.table]
+    if len(databases) > 1:
+        planner.plan.relations = link_tables(databases)
+    stem = posixpath.splitext(posixpath.basename(source_name or ""))[0]
+    for root in planner.plan.roots:
+        if root.kind is PageType.FOLDER and root.title.lower() in GENERIC_FOLDERS and stem:
+            root.title = humanize(re.sub(r"\s*\(\d+\)$", "", stem).replace(" ", "_"))
     if not planner.plan.roots:
         raise ImportProblem(
             "Nothing to import: add Markdown (.md) or CSV files, or a zip of them "

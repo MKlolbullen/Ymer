@@ -6,7 +6,7 @@ import { highlight } from "@/components/SearchDialog";
 import { matchPages } from "@/editor/mentions";
 import type { Page, Property, Row } from "@/lib/types";
 
-import { displayText, groupRows, normalizeConfig, opsFor, positionBetween } from "./logic";
+import { displayText, groupRows, normalizeConfig, opsFor, positionBetween, propRef, rollupFunctionsFor, rollupOpsFor } from "./logic";
 
 const page = (id: string, parent: string | null, position = 0, title = id): Page => ({
   id,
@@ -107,4 +107,27 @@ test("search snippets highlight matches without using HTML", () => {
 test("matchPages prefers titles that start with the query and skips the current page", () => {
   const pages = [page("1", null, 0, "Project plan"), page("2", null, 0, "Plan B"), page("3", null, 0, "Planets")];
   expect(matchPages(pages, "plan", "3").map((p) => p.title)).toEqual(["Plan B", "Project plan"]);
+});
+
+test("engine v2 values display as text", () => {
+  const prop = (type: Property["type"], config: Property["config"] = {}): Property => ({ id: "p", name: "P", type, config, position: 0 });
+  expect(displayText(prop("date_range"), { start: "2026-11-02", end: "2026-12-04" })).toMatch(/2026.*→.*2026/);
+  expect(displayText(prop("date_range"), { start: "2026-11-02", end: null })).not.toContain("→");
+  expect(displayText(prop("file"), [{ name: "roe.pdf", url: "s3://b/roe.pdf" }, { url: "https://x.test/a.png", name: "" }])).toBe("roe.pdf, a.png");
+  expect(displayText(prop("formula"), 73.825)).toBe("73.83");
+  expect(displayText(prop("formula"), true)).toBe("✓");
+  expect(displayText(prop("formula"), "A")).toBe("A");
+  expect(displayText(prop("rollup", { function: "show_original" }), [100])).toBe("100");
+  expect(displayText(prop("person"), [{ id: null, display_name: "M. Vance" }])).toBe("M. Vance");
+});
+
+test("rollup settings offer what fits the property", () => {
+  const select: Property = { id: "s", name: "Severity", type: "select", config: { options: [] }, position: 0 };
+  const number: Property = { id: "n", name: "CVSS", type: "number", config: {}, position: 0 };
+  expect(rollupFunctionsFor(select).map((f) => f.fn)).toContain("top_option");
+  expect(rollupFunctionsFor(number).map((f) => f.fn)).not.toContain("top_option");
+  expect(rollupOpsFor("select").map((o) => o.op)).toContain("in");
+  expect(opsFor("select").map((o) => o.op)).not.toContain("in");
+  expect(opsFor("date_range")[0]?.label).toBe("includes");
+  expect(propRef('Say "hi"')).toBe('prop("Say \\"hi\\"")');
 });

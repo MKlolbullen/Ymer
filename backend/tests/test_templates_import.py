@@ -144,7 +144,7 @@ def test_csv_types_are_inferred_the_way_notion_exports_them():
         "Name": "title",
         "Done": "checkbox",
         "Points": "number",
-        "Due": "date",
+        "Due": "date_range",  # one row is a "start → end" range
         "Status": "select",
         "Tags": "multi_select",
         "Site": "url",
@@ -152,6 +152,8 @@ def test_csv_types_are_inferred_the_way_notion_exports_them():
     }
     first = {v["property"]: v["value"] for v in spec["rows"][0]["values"]}
     assert first["Due"] == "2026-11-25"
+    second = {v["property"]: v["value"] for v in spec["rows"][1]["values"]}
+    assert second["Due"] == "2026-12-01 → 2026-12-03"
     assert first["Related"] == "B"
     third = {v["property"]: v["value"] for v in spec["rows"][2]["values"]}
     assert third["Points"] == "1200"
