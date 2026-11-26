@@ -1,19 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Search, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { useAiStatus, useSemanticSearch } from "@/ai/api";
 import { useSearch } from "@/lib/queries";
 import type { SearchResult } from "@/lib/types";
 
-const ICON: Record<string, string> = {
-  document: "📄",
-  folder: "📁",
-  database: "🗃️",
-  mindmap: "🧠",
-  drawing: "✏️",
-  factory: "🏭",
-  row: "▤",
-};
+import { Icon, PageIcon } from "./icons";
 
 type Item =
   | { kind: "ask"; key: string }
@@ -99,6 +92,8 @@ export function SearchDialog({ workspaceId, onClose }: { workspaceId: string; on
         onMouseDown={(e) => e.stopPropagation()}
         className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900"
       >
+        <div className="flex items-center gap-2 border-b border-zinc-200 px-4 dark:border-zinc-700">
+        <Icon icon={Search} size={18} className="text-zinc-400" />
         <input
           autoFocus
           type="search"
@@ -118,8 +113,9 @@ export function SearchDialog({ workspaceId, onClose }: { workspaceId: string; on
             }
             if (e.key === "Enter") open(items[index]);
           }}
-          className="w-full border-b border-zinc-200 bg-transparent px-4 py-3 text-base focus:outline-none dark:border-zinc-700"
+          className="w-full bg-transparent py-3 text-base focus:outline-none"
         />
+        </div>
         <ul role="listbox" aria-label="Results" className="max-h-[55vh] overflow-y-auto p-1">
           {items.map((item, i) => (
             <li key={item.key}>
@@ -136,13 +132,13 @@ export function SearchDialog({ workspaceId, onClose }: { workspaceId: string; on
               >
                 {item.kind === "ask" ? (
                   <span className="flex w-full items-center gap-2 text-sm font-medium text-brand-600 dark:text-brand-500">
-                    <span aria-hidden>✨</span>
+                    <Icon icon={Sparkles} />
                     <span className="truncate">Ask AI: “{q}”</span>
                   </span>
                 ) : (
                   <>
                     <span className="flex w-full items-center gap-2 text-sm font-medium">
-                      <span aria-hidden>{ICON[item.result.type] ?? "📄"}</span>
+                      <PageIcon type={item.result.type} className="text-zinc-500" />
                       <span className="truncate">{item.result.title || "Untitled"}</span>
                       {item.result.kind === "row" && (
                         <span className="ml-auto shrink-0 text-xs font-normal text-zinc-500">

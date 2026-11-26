@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
+import { ClipboardPaste, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router";
 
+import { Icon, PageIcon } from "@/components/icons";
 import { MenuItem, Popover } from "@/components/Popover";
 import { ApiError } from "@/lib/api";
 import { atLeast, type Page } from "@/lib/types";
@@ -9,7 +11,7 @@ import { useAiStatus, useGenerate, type GenerateBody } from "./api";
 import { DemoNote } from "./AssistMenu";
 
 /**
- * "✨ Generate" in a page's header: a mind map or a database made from this page's
+ * "Generate" in a page's header: a mind map or a database made from this page's
  * notes (or from pasted text), created inside this page so it sits next to its source.
  */
 export function GenerateMenu({ page }: { page: Page }) {
@@ -45,9 +47,9 @@ export function GenerateMenu({ page }: { page: Page }) {
         }}
         aria-expanded={open}
         aria-label="Generate"
-        className="rounded-md px-2 py-1 text-sm whitespace-nowrap text-brand-600 hover:bg-zinc-100 sm:px-2.5 dark:text-brand-500 dark:hover:bg-zinc-800"
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm whitespace-nowrap text-brand-600 hover:bg-zinc-100 sm:px-2.5 dark:text-brand-500 dark:hover:bg-zinc-800"
       >
-        ✨<span className="hidden sm:inline"> Generate</span>
+        <Icon icon={Sparkles} /><span className="hidden sm:inline">Generate</span>
       </button>
       {open && (
         <Popover anchor={button.current} onClose={() => setOpen(false)} width={340} label="Generate with AI">
@@ -89,20 +91,20 @@ export function GenerateMenu({ page }: { page: Page }) {
               <p className="px-2 pt-1 pb-2 text-xs text-zinc-500">Creates a new page inside “{page.title || "Untitled"}”.</p>
               {page.type !== "mindmap" && (
                 <MenuItem onClick={() => run({ kind: "mindmap", source_page_id: page.id })}>
-                  <span aria-hidden>🧠</span> Mind map from this page
+                  <PageIcon type="mindmap" className="text-zinc-500" /> Mind map from this page
                 </MenuItem>
               )}
               {page.type !== "database" && (
                 <MenuItem onClick={() => run({ kind: "database", source_page_id: page.id })}>
-                  <span aria-hidden>🗃️</span> Database from this page
+                  <PageIcon type="database" className="text-zinc-500" /> Database from this page
                 </MenuItem>
               )}
               <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
               <MenuItem onClick={() => setPaste("mindmap")}>
-                <span aria-hidden>📋</span> Mind map from pasted notes…
+                <Icon icon={ClipboardPaste} className="text-zinc-500" /> Mind map from pasted notes…
               </MenuItem>
               <MenuItem onClick={() => setPaste("database")}>
-                <span aria-hidden>📋</span> Database from pasted notes…
+                <Icon icon={ClipboardPaste} className="text-zinc-500" /> Database from pasted notes…
               </MenuItem>
               {status.data.demo && <DemoNote className="px-2 pt-2 pb-1" />}
             </div>

@@ -1,7 +1,8 @@
-import { useRef, useState, type DragEvent } from "react";
+import { FileArchive, FileSpreadsheet, FileText, Upload, X } from "lucide-react";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
-import { PAGE_ICON } from "@/components/PageTree";
+import { Icon, PageIcon, TemplateIcon } from "@/components/icons";
 import { usePages } from "@/lib/queries";
 import type { Page } from "@/lib/types";
 
@@ -30,7 +31,7 @@ const tabClass = (active: boolean) =>
     active ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
   }`;
 
-function Card({ icon, name, description, onClick, disabled }: { icon: string; name: string; description: string; onClick: () => void; disabled: boolean }) {
+function Card({ icon, name, description, onClick, disabled }: { icon: ReactNode; name: string; description: string; onClick: () => void; disabled: boolean }) {
   return (
     <button
       type="button"
@@ -38,7 +39,7 @@ function Card({ icon, name, description, onClick, disabled }: { icon: string; na
       disabled={disabled}
       className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 text-left hover:border-brand-500 hover:bg-brand-50/40 disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-800/60"
     >
-      <span aria-hidden className="text-xl leading-none">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-lg text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
         {icon}
       </span>
       <span className="min-w-0">
@@ -79,7 +80,7 @@ function TemplatesTabView({ workspaceId, parentId, onDone }: { workspaceId: stri
   const grid = (items: Template[]) => (
     <div className="grid gap-2 sm:grid-cols-2">
       {items.map((t) => (
-        <Card key={t.id} icon={t.icon} name={t.name} description={t.description} disabled={apply.isPending} onClick={() => void use({ template_id: t.id })} />
+        <Card key={t.id} icon={<TemplateIcon id={t.id} fallback={t.icon} size={18} />} name={t.name} description={t.description} disabled={apply.isPending} onClick={() => void use({ template_id: t.id })} />
       ))}
     </div>
   );
@@ -93,7 +94,7 @@ function TemplatesTabView({ workspaceId, parentId, onDone }: { workspaceId: stri
             {custom.map((p) => (
               <Card
                 key={p.id}
-                icon={PAGE_ICON[p.type]}
+                icon={<PageIcon type={p.type} size={18} />}
                 name={p.title || "Untitled"}
                 description="Saved as a template. A copy is added, with everything inside it."
                 disabled={apply.isPending}
@@ -154,8 +155,8 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
         <Warnings summary={done.summary} />
         <div className="flex flex-wrap gap-2">
           {done.pages.slice(0, 6).map((p) => (
-            <button key={p.id} onClick={() => onDone(p)} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
-              {PAGE_ICON[p.type]} Open {p.title || "Untitled"}
+            <button key={p.id} onClick={() => onDone(p)} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
+              <PageIcon type={p.type} className="text-zinc-500" /> Open {p.title || "Untitled"}
             </button>
           ))}
           <button onClick={() => setDone(null)} className="px-2 text-sm text-zinc-500">
@@ -179,9 +180,7 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
           over ? "border-brand-500 bg-brand-50/50 dark:bg-zinc-800" : "border-zinc-300 dark:border-zinc-700"
         }`}
       >
-        <span aria-hidden className="text-3xl">
-          📥
-        </span>
+        <Icon icon={Upload} size={28} className="text-zinc-400" />
         <p className="text-sm">Drop a Notion export, Markdown files, or CSV/JSON tables here</p>
         <button type="button" onClick={() => input.current?.click()} className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-500">
           or choose files
@@ -192,7 +191,7 @@ function ImportTabView({ workspaceId, parentId, onDone }: { workspaceId: string;
         <ul className="space-y-1 text-sm">
           {files.map((f, i) => (
             <li key={`${f.name}-${i}`} className="flex items-center gap-2">
-              <span aria-hidden>{f.name.toLowerCase().endsWith(".zip") ? "🗜️" : f.name.toLowerCase().endsWith(".csv") ? "🗃️" : "📄"}</span>
+              <Icon icon={f.name.toLowerCase().endsWith(".zip") ? FileArchive : f.name.toLowerCase().endsWith(".csv") ? FileSpreadsheet : FileText} className="text-zinc-500" />
               <span className="truncate">{f.name}</span>
               <span className="text-xs text-zinc-500">{Math.max(1, Math.round(f.size / 1024))} KB</span>
               <button aria-label={`Remove ${f.name}`} onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))} className="ml-auto text-xs text-zinc-500 hover:text-rose-600">
@@ -259,10 +258,10 @@ export function TemplatesDialog({ workspaceId, parentId, initialTab = "templates
             Import
           </button>
           <span className="ml-auto truncate pl-2 text-xs text-zinc-500">
-            Adds to: {parent ? `${PAGE_ICON[parent.type]} ${parent.title || "Untitled"}` : "top level"}
+            Adds to: {parent ? parent.title || "Untitled" : "top level"}
           </span>
-          <button aria-label="Close" onClick={onClose} className="ml-2 rounded px-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-            ✕
+          <button aria-label="Close" onClick={onClose} className="ml-2 rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+            <Icon icon={X} />
           </button>
         </div>
         <div className="overflow-y-auto">

@@ -85,6 +85,9 @@ Tests use pytest. Tests marked `@pytest.mark.db` need Postgres at
   `VITE_API_PROXY_TARGET` (default `http://localhost:5000`).
 - Tailwind 4 is configured in CSS (`src/index.css`, `@theme` block), not in a JS config.
 - `@/` is an alias for `src/`.
+- Icons are [Lucide](https://lucide.dev) (`lucide-react`). `src/components/icons.tsx` has `<Icon>` (16px, 1.75px
+  stroke, `aria-hidden`) and the shared icons for page types, property types and templates; use those rather
+  than emoji so every list, menu and theme looks the same.
 
 ```sh
 npm run dev | build | preview | typecheck | test

@@ -12,6 +12,7 @@ import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Link } from "react-router";
 
+import { PageIcon } from "@/components/icons";
 import { usePages } from "@/lib/queries";
 import type { Page } from "@/lib/types";
 
@@ -21,7 +22,6 @@ export type MentionContext = {
   pages: () => Page[];
 };
 
-const ICON: Record<string, string> = { document: "📄", folder: "📁", database: "🗃️", mindmap: "🧠" };
 
 /** Pages matching what was typed after "@", best matches first. */
 export function matchPages(pages: Page[], query: string, exclude?: string): Page[] {
@@ -46,7 +46,7 @@ function MentionView({ node, extension }: NodeViewProps) {
     <NodeViewWrapper as="span" className="page-mention" data-page-id={id}>
       {page ? (
         <Link to={`/w/${workspaceId}/p/${id}`} contentEditable={false} className="page-mention-link">
-          <span aria-hidden>{ICON[page.type] ?? "📄"}</span> {label}
+          <PageIcon type={page.type} size={14} className="mr-0.5 inline-block align-[-2px]" />{label}
         </Link>
       ) : (
         <span contentEditable={false} className="page-mention-missing" title="This page was deleted or you cannot see it">
@@ -98,7 +98,7 @@ const MentionList = forwardRef<ListHandle, SuggestionProps<Page>>(function Menti
             }}
             className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left ${i === index ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
           >
-            <span aria-hidden>{ICON[page.type] ?? "📄"}</span>
+            <PageIcon type={page.type} className="text-zinc-500" />
             <span className="truncate">{page.title || "Untitled"}</span>
           </button>
         ))

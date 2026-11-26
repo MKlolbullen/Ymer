@@ -1,11 +1,12 @@
 /** A mind map page: a live React Flow canvas over the page's Yjs document. */
+import { CornerDownRight, LayoutGrid, Link, PencilLine, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import * as Y from "yjs";
 
+import { Icon, PageIcon } from "@/components/icons";
 import { useColorMode } from "@/lib/appearance";
-import { PAGE_ICON } from "@/components/PageTree";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { CollabNotice } from "@/editor/CollabNotice";
 import { colorFor, notify, useCollabSession, type CollabSession } from "@/editor/collab";
@@ -105,7 +106,7 @@ function ToolButton({ label, onClick, disabled, children, buttonRef }: { label: 
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
     >
       {children}
     </button>
@@ -127,7 +128,7 @@ function PagePicker({ pages, current, onPick, onClose, anchor }: { pages: Page[]
       )}
       {matches.map((p) => (
         <MenuItem key={p.id} onClick={() => onPick(p.id)}>
-          <span aria-hidden>{PAGE_ICON[p.type]}</span> {p.title || "Untitled"}
+          <PageIcon type={p.type} className="text-zinc-500" /> {p.title || "Untitled"}
         </MenuItem>
       ))}
       {!matches.length && <p className="px-3 py-2 text-xs text-zinc-500">No pages match.</p>}
@@ -304,20 +305,20 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
           {canEdit ? (
             <>
               <ToolButton label="Add a child idea (Tab)" onClick={() => add("child")}>
-                + Child
+                <Icon icon={CornerDownRight} /> Child
               </ToolButton>
               <ToolButton label="Add a sibling idea (Enter)" disabled={!current || current.id === ROOT_ID} onClick={() => add("sibling")}>
-                + Sibling
+                <Icon icon={Plus} /> Sibling
               </ToolButton>
               <ToolButton label="Rename (F2 or double-click)" disabled={!current} onClick={() => current && startEditing(current.id)}>
-                Rename
+                <Icon icon={PencilLine} /> Rename
               </ToolButton>
               <ToolButton label="Delete idea and everything under it (Delete)" disabled={!current || current.id === ROOT_ID} onClick={remove}>
-                Delete
+                <Icon icon={Trash2} /> Delete
               </ToolButton>
               <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
               <ToolButton buttonRef={linkButton} label="Link the idea to a page" disabled={!current} onClick={() => setLinking(true)}>
-                ↗ Link page
+                <Icon icon={Link} /> Link page
               </ToolButton>
               {current && current.id !== ROOT_ID && (
                 <span className="flex items-center gap-0.5 px-1" role="group" aria-label="Branch colour">
@@ -337,10 +338,10 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
               )}
               <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
               <ToolButton label="Undo (Ctrl+Z)" onClick={() => undo?.undo()}>
-                ↶
+                <Icon icon={Undo2} />
               </ToolButton>
               <ToolButton label="Redo (Ctrl+Shift+Z)" onClick={() => undo?.redo()}>
-                ↷
+                <Icon icon={Redo2} />
               </ToolButton>
               <ToolButton
                 label="Tidy up the layout"
@@ -349,7 +350,7 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
                   setFitKey((k) => k + 1);
                 }}
               >
-                Tidy up
+                <Icon icon={LayoutGrid} /> Tidy up
               </ToolButton>
             </>
           ) : (

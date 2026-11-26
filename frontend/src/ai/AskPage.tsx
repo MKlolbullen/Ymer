@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
+import { Icon, PageIcon } from "@/components/icons";
 import { useWorkspaceLayout } from "@/pages/workspace";
 import { ApiError } from "@/lib/api";
 
@@ -15,16 +17,6 @@ import {
   type Source,
 } from "./api";
 import { DemoNote } from "./AssistMenu";
-
-const ICON: Record<string, string> = {
-  document: "📄",
-  database: "🗃️",
-  mindmap: "🧠",
-  drawing: "✏️",
-  factory: "🏭",
-  folder: "📁",
-  row: "▤",
-};
 
 function sourcePath(workspaceId: string, s: Source) {
   const base = `/w/${workspaceId}/p/${s.page_id}`;
@@ -99,7 +91,7 @@ function Answer({ message, workspaceId }: { message: AiMessage; workspaceId: str
               >
                 <span className="flex items-center gap-1.5 font-medium">
                   <span className="rounded bg-zinc-100 px-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{s.n}</span>
-                  <span aria-hidden>{ICON[s.type] ?? "📄"}</span>
+                  <PageIcon type={s.type} className="text-zinc-500" />
                   <span className="truncate">{s.title || "Untitled"}</span>
                 </span>
                 <span className="line-clamp-2 text-xs text-zinc-500">{s.snippet}</span>
@@ -129,7 +121,7 @@ export function AskPage() {
   const asked = useRef(false);
 
   useEffect(() => {
-    setHeader(<h1 className="text-sm font-medium">✨ Ask AI</h1>);
+    setHeader(<h1 className="flex items-center gap-1.5 text-sm font-medium"><Icon icon={Sparkles} className="text-brand-600 dark:text-brand-500" /> Ask AI</h1>);
     return () => setHeader(null);
   }, [setHeader]);
 
@@ -180,7 +172,7 @@ export function AskPage() {
           onClick={() => navigate(`/w/${workspace.id}/ask`)}
           className="mb-2 rounded-md border border-zinc-300 px-3 py-1.5 text-left text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
         >
-          + New question
+          <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />New question
         </button>
         {(list.data ?? []).map((c) => (
           <div key={c.id} className="group flex items-center">
@@ -201,7 +193,7 @@ export function AskPage() {
               }}
               className="invisible px-1.5 text-zinc-400 group-hover:visible pointer-coarse:visible hover:text-rose-600"
             >
-              ×
+              <Icon icon={X} size={14} />
             </button>
           </div>
         ))}
@@ -211,9 +203,9 @@ export function AskPage() {
         <div className="flex-1 space-y-6 pb-4">
           {!messages.length && !pending && (
             <div className="mx-auto max-w-xl pt-10 text-center">
-              <p className="text-3xl" aria-hidden>
-                ✨
-              </p>
+              <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-zinc-800 dark:text-brand-500">
+                <Icon icon={Sparkles} size={24} />
+              </span>
               <h2 className="mt-2 text-xl font-semibold tracking-tight">Ask your workspace</h2>
               <p className="mt-2 text-sm text-zinc-500">
                 Answers are drawn only from pages and database rows you can open, with links to where each fact comes

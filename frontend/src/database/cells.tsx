@@ -1,7 +1,9 @@
 /** Showing and editing one value of one row. Used by the table, board cards and row panel. */
+import { ArrowUpRight, Check, Paperclip, SquareCheck, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
+import { Icon } from "@/components/icons";
 import { inputClass, Popover } from "@/components/Popover";
 import { api } from "@/lib/api";
 import { fetchDatabase, fetchRows, uploadFile, useMembers } from "@/lib/queries";
@@ -16,7 +18,7 @@ export function OptionChip({ option, onRemove }: { option: SelectOption; onRemov
       <span className="truncate">{option.name}</span>
       {onRemove && (
         <button type="button" aria-label={`Remove ${option.name}`} onClick={onRemove} className="opacity-60 hover:opacity-100">
-          ×
+          <Icon icon={X} size={14} />
         </button>
       )}
     </span>
@@ -30,7 +32,7 @@ export function CellValue({ property, value }: { property: Property; value: unkn
   if (value === null || value === undefined || value === "") return null;
   switch (property.type) {
     case "checkbox":
-      return <span aria-label="checked">✓</span>;
+      return <Icon icon={SquareCheck} aria-hidden={false} aria-label="checked" className="text-brand-600 dark:text-brand-500" />;
     case "select": {
       const option = optionsOf(property).find((o) => o.id === value);
       return option ? <OptionChip option={option} /> : null;
@@ -73,7 +75,7 @@ export function CellValue({ property, value }: { property: Property; value: unkn
         <span className="flex flex-wrap gap-1">
           {(value as RelationRef[]).map((r) => (
             <span key={r.id} className={`${chip} ${r.title === null ? "italic text-zinc-500" : "underline decoration-zinc-300 underline-offset-2"}`}>
-              ↗ {r.title === null ? "Restricted" : r.title || "Untitled"}
+              <Icon icon={ArrowUpRight} size={12} className="mr-0.5 inline-block align-[-2px]" />{r.title === null ? "Restricted" : r.title || "Untitled"}
             </span>
           ))}
         </span>
@@ -270,7 +272,7 @@ function OptionPicker({ row, property }: { row: Row; property: Property }) {
               className="flex w-full items-center justify-between rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <OptionChip option={option} />
-              {selected.includes(option.id) && <span aria-hidden>✓</span>}
+              {selected.includes(option.id) && <Icon icon={Check} size={14} />}
             </button>
           </li>
         ))}
@@ -314,7 +316,7 @@ function PersonPicker({ row, property }: { row: Row; property: Property }) {
             {name}
           </span>
           <button type="button" aria-label={`Remove ${name}`} onClick={() => write(selected, names.filter((n) => n !== name))} className="text-zinc-400 hover:text-rose-600">
-            ×
+            <Icon icon={X} size={14} />
           </button>
         </div>
       ))}
@@ -329,7 +331,7 @@ function PersonPicker({ row, property }: { row: Row; property: Property }) {
           <span className="truncate">
             {m.display_name} <span className="text-xs text-zinc-500">{m.email}</span>
           </span>
-          {selected.includes(m.user_id) && <span aria-hidden>✓</span>}
+          {selected.includes(m.user_id) && <Icon icon={Check} size={14} />}
         </button>
       ))}
       {typed && !list.length && (
@@ -394,19 +396,19 @@ function FileChip({ file }: { file: FileRef }) {
   if (web)
     return (
       <a href={file.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className={`${chip} text-brand-600 underline underline-offset-2`} title={file.url}>
-        📎 {label}
+        <Icon icon={Paperclip} size={12} className="mr-0.5 inline-block align-[-2px]" />{label}
       </a>
     );
   if (file.file_id)
     return (
       <button type="button" onClick={(e) => void open(e)} className={`${chip} text-brand-600 underline underline-offset-2`}>
-        📎 {label}
+        <Icon icon={Paperclip} size={12} className="mr-0.5 inline-block align-[-2px]" />{label}
       </button>
     );
   // s3:// and similar paths are kept as references: show where the file lives.
   return (
     <span className={chip} title={file.url}>
-      📎 {label}
+      <Icon icon={Paperclip} size={12} className="mr-0.5 inline-block align-[-2px]" />{label}
     </span>
   );
 }
@@ -451,7 +453,7 @@ function FilePicker({ row, property }: { row: Row; property: Property }) {
         <div key={`${f.file_id ?? f.url}-${i}`} className="flex items-center justify-between gap-2">
           <FileChip file={f} />
           <button type="button" aria-label={`Remove ${fileLabel(f)}`} onClick={() => write(files.filter((_, j) => j !== i))} className="text-zinc-400 hover:text-rose-600">
-            ×
+            <Icon icon={X} size={14} />
           </button>
         </div>
       ))}
@@ -507,8 +509,8 @@ function RelationPicker({ row, property }: { row: Row; property: Property }) {
           onClick={() => toggle(candidate.id)}
           className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          <span className="truncate">↗ {rowTitle(candidate, schema.data?.properties ?? []) || "Untitled"}</span>
-          {ids.includes(candidate.id) && <span aria-hidden>✓</span>}
+          <span className="truncate"><Icon icon={ArrowUpRight} size={12} className="mr-0.5 inline-block align-[-2px]" />{rowTitle(candidate, schema.data?.properties ?? []) || "Untitled"}</span>
+          {ids.includes(candidate.id) && <Icon icon={Check} size={14} />}
         </button>
       ))}
       {candidates.data?.length === 0 && <p className="px-2 py-1 text-xs text-zinc-500">No rows found.</p>}

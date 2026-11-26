@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Import, LayoutTemplate, Menu, Search, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { NavLink, useNavigate } from "react-router";
 
 import { useAiStatus } from "@/ai/api";
@@ -12,6 +13,7 @@ import { TemplatesDialog, type TemplatesTab } from "@/templates/TemplatesDialog"
 
 import { AppearancePicker } from "./AppearancePicker";
 import { ApiStatus } from "./ApiStatus";
+import { Icon } from "./icons";
 import { NewPageButton, PageTree } from "./PageTree";
 import { SearchDialog } from "./SearchDialog";
 
@@ -91,12 +93,12 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           }}
           className={navClass({ isActive: false })}
         >
-          <span aria-hidden>🔍</span> Search
+          <Icon icon={Search} /> Search
           <kbd className="ml-auto text-xs text-zinc-400 pointer-coarse:hidden">Ctrl K</kbd>
         </button>
         {ai.data?.enabled && (
           <NavLink to={`/w/${workspace.id}/ask`} className={navClass} onClick={() => setMenuOpen(false)}>
-            <span aria-hidden>✨</span> Ask AI
+            <Icon icon={Sparkles} /> Ask AI
           </NavLink>
         )}
         {atLeast(workspace.role, "editor") && (
@@ -108,7 +110,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
               }}
               className={navClass({ isActive: false })}
             >
-              <span aria-hidden>🧩</span> Templates
+              <Icon icon={LayoutTemplate} /> Templates
             </button>
             <button
               onClick={() => {
@@ -117,18 +119,18 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
               }}
               className={navClass({ isActive: false })}
             >
-              <span aria-hidden>📥</span> Import
+              <Icon icon={Import} /> Import
             </button>
           </>
         )}
         {workspace.role !== null && (
           <NavLink to={`/w/${workspace.id}/members`} className={navClass} onClick={() => setMenuOpen(false)}>
-            <span aria-hidden>👥</span> Members
+            <Icon icon={Users} /> Members
           </NavLink>
         )}
         {workspace.role === "owner" && (
           <NavLink to={`/w/${workspace.id}/activity`} className={navClass} onClick={() => setMenuOpen(false)}>
-            <span aria-hidden>🛡</span> Activity log
+            <Icon icon={ShieldCheck} /> Activity log
           </NavLink>
         )}
       </div>
@@ -162,7 +164,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           </button>
         </div>
         <NavLink to={`/w/${workspace.id}/settings`} className={navClass} onClick={() => setMenuOpen(false)}>
-          <span aria-hidden>⚙</span> AI settings
+          <Icon icon={Settings} /> AI settings
         </NavLink>
         <AppearancePicker />
         {pending.length > 0 && (
@@ -199,7 +201,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
             aria-label="Open menu"
             onClick={() => setMenuOpen(true)}
           >
-            ☰
+            <Icon icon={Menu} size={20} />
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-3">{header}</div>
           {!online && (

@@ -14,29 +14,24 @@ import type {
   ViewConfig,
 } from "@/lib/types";
 
-export const PROPERTY_TYPES: { type: PropertyType; label: string; icon: string }[] = [
-  { type: "text", label: "Text", icon: "≡" },
-  { type: "number", label: "Number", icon: "#" },
-  { type: "select", label: "Select", icon: "◉" },
-  { type: "multi_select", label: "Multi-select", icon: "☰" },
-  { type: "date", label: "Date", icon: "📅" },
-  { type: "checkbox", label: "Checkbox", icon: "☑" },
-  { type: "url", label: "URL", icon: "🔗" },
-  { type: "person", label: "Person", icon: "👤" },
-  { type: "relation", label: "Relation", icon: "↗" },
-  { type: "rollup", label: "Rollup", icon: "∑" },
-  { type: "formula", label: "Formula", icon: "ƒ" },
-  { type: "date_range", label: "Date range", icon: "📆" },
-  { type: "file", label: "Files", icon: "📎" },
+export const PROPERTY_TYPES: { type: PropertyType; label: string }[] = [
+  { type: "text", label: "Text" },
+  { type: "number", label: "Number" },
+  { type: "select", label: "Select" },
+  { type: "multi_select", label: "Multi-select" },
+  { type: "date", label: "Date" },
+  { type: "checkbox", label: "Checkbox" },
+  { type: "url", label: "URL" },
+  { type: "person", label: "Person" },
+  { type: "relation", label: "Relation" },
+  { type: "rollup", label: "Rollup" },
+  { type: "formula", label: "Formula" },
+  { type: "date_range", label: "Date range" },
+  { type: "file", label: "Files" },
 ];
 
 /** Properties computed by the server: never edited in a cell. */
 export const COMPUTED: PropertyType[] = ["rollup", "formula"];
-
-export const TYPE_ICON: Record<PropertyType, string> = {
-  title: "Aa",
-  ...Object.fromEntries(PROPERTY_TYPES.map((t) => [t.type, t.icon])),
-} as Record<PropertyType, string>;
 
 /** Types that can be switched between without losing the property (server converts values). */
 export const CONVERTIBLE: PropertyType[] = ["text", "number", "select", "multi_select", "date", "checkbox", "url", "person", "date_range", "file"];

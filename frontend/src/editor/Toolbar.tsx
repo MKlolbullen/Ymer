@@ -1,7 +1,29 @@
 import { useEditorState, type Editor } from "@tiptap/react";
+import {
+  Bold,
+  ChartColumn,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
+  ImageUp,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  ListTodo,
+  MessageSquarePlus,
+  Minus,
+  Redo2,
+  SquareCode,
+  Strikethrough,
+  TextQuote,
+  Undo2,
+} from "lucide-react";
 import { useRef, type ReactNode } from "react";
 
 import { AssistMenu } from "@/ai/AssistMenu";
+import { Icon } from "@/components/icons";
 
 type Props = {
   editor: Editor;
@@ -35,7 +57,7 @@ function Button({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} // keep the editor's selection
       onClick={onClick}
-      className="inline-flex h-8 min-w-8 items-center justify-center rounded px-1.5 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700 dark:aria-pressed:text-white"
+      className="inline-flex h-8 min-w-7 items-center justify-center rounded px-1 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700 dark:aria-pressed:text-white"
     >
       {children}
     </button>
@@ -84,28 +106,28 @@ export function Toolbar({ editor, workspaceId, pageId, canEdit, canComment, onCo
       <AssistMenu editor={editor} workspaceId={workspaceId} pageId={pageId} canEdit={canEdit} />
       {canEdit && (
         <>
-          <Button label="Undo" disabled={!state.canUndo} onClick={() => chain().undo().run()}>↶</Button>
-          <Button label="Redo" disabled={!state.canRedo} onClick={() => chain().redo().run()}>↷</Button>
+          <Button label="Undo" disabled={!state.canUndo} onClick={() => chain().undo().run()}><Icon icon={Undo2} /></Button>
+          <Button label="Redo" disabled={!state.canRedo} onClick={() => chain().redo().run()}><Icon icon={Redo2} /></Button>
           <Divider />
-          <Button label="Heading 1" active={state.h1} onClick={() => chain().toggleHeading({ level: 1 }).run()}>H1</Button>
-          <Button label="Heading 2" active={state.h2} onClick={() => chain().toggleHeading({ level: 2 }).run()}>H2</Button>
-          <Button label="Heading 3" active={state.h3} onClick={() => chain().toggleHeading({ level: 3 }).run()}>H3</Button>
+          <Button label="Heading 1" active={state.h1} onClick={() => chain().toggleHeading({ level: 1 }).run()}><Icon icon={Heading1} /></Button>
+          <Button label="Heading 2" active={state.h2} onClick={() => chain().toggleHeading({ level: 2 }).run()}><Icon icon={Heading2} /></Button>
+          <Button label="Heading 3" active={state.h3} onClick={() => chain().toggleHeading({ level: 3 }).run()}><Icon icon={Heading3} /></Button>
           <Divider />
-          <Button label="Bold" active={state.bold} onClick={() => chain().toggleBold().run()}><b>B</b></Button>
-          <Button label="Italic" active={state.italic} onClick={() => chain().toggleItalic().run()}><i>I</i></Button>
-          <Button label="Strikethrough" active={state.strike} onClick={() => chain().toggleStrike().run()}><s>S</s></Button>
-          <Button label="Inline code" active={state.code} onClick={() => chain().toggleCode().run()}>{"</>"}</Button>
-          <Button label="Link" active={state.link} onClick={setLink}>🔗</Button>
+          <Button label="Bold" active={state.bold} onClick={() => chain().toggleBold().run()}><Icon icon={Bold} /></Button>
+          <Button label="Italic" active={state.italic} onClick={() => chain().toggleItalic().run()}><Icon icon={Italic} /></Button>
+          <Button label="Strikethrough" active={state.strike} onClick={() => chain().toggleStrike().run()}><Icon icon={Strikethrough} /></Button>
+          <Button label="Inline code" active={state.code} onClick={() => chain().toggleCode().run()}><Icon icon={Code} /></Button>
+          <Button label="Link" active={state.link} onClick={setLink}><Icon icon={Link} /></Button>
           <Divider />
-          <Button label="Bullet list" active={state.bullet} onClick={() => chain().toggleBulletList().run()}>•</Button>
-          <Button label="Numbered list" active={state.ordered} onClick={() => chain().toggleOrderedList().run()}>1.</Button>
-          <Button label="Task list" active={state.task} onClick={() => chain().toggleTaskList().run()}>☑</Button>
-          <Button label="Quote" active={state.quote} onClick={() => chain().toggleBlockquote().run()}>❝</Button>
-          <Button label="Code block" active={state.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>{"{}"}</Button>
-          <Button label="Divider" onClick={() => chain().setHorizontalRule().run()}>―</Button>
-          <Button label="Chart from a database" onClick={() => chain().insertChart().run()}>📊</Button>
+          <Button label="Bullet list" active={state.bullet} onClick={() => chain().toggleBulletList().run()}><Icon icon={List} /></Button>
+          <Button label="Numbered list" active={state.ordered} onClick={() => chain().toggleOrderedList().run()}><Icon icon={ListOrdered} /></Button>
+          <Button label="Task list" active={state.task} onClick={() => chain().toggleTaskList().run()}><Icon icon={ListTodo} /></Button>
+          <Button label="Quote" active={state.quote} onClick={() => chain().toggleBlockquote().run()}><Icon icon={TextQuote} /></Button>
+          <Button label="Code block" active={state.codeBlock} onClick={() => chain().toggleCodeBlock().run()}><Icon icon={SquareCode} /></Button>
+          <Button label="Divider" onClick={() => chain().setHorizontalRule().run()}><Icon icon={Minus} /></Button>
+          <Button label="Chart from a database" onClick={() => chain().insertChart().run()}><Icon icon={ChartColumn} /></Button>
           <Divider />
-          <Button label="Upload image or file" onClick={() => fileInput.current?.click()}>⤒</Button>
+          <Button label="Upload image or file" onClick={() => fileInput.current?.click()}><Icon icon={ImageUp} /></Button>
           <input
             ref={fileInput}
             type="file"
@@ -122,7 +144,7 @@ export function Toolbar({ editor, workspaceId, pageId, canEdit, canComment, onCo
         <>
           {canEdit && <Divider />}
           <Button label="Comment on selection" disabled={!state.hasSelection} onClick={onComment}>
-            💬<span className="ml-1 hidden sm:inline">Comment</span>
+            <Icon icon={MessageSquarePlus} /><span className="ml-1.5 hidden sm:inline">Comment</span>
           </Button>
         </>
       )}

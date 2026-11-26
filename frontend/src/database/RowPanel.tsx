@@ -1,11 +1,12 @@
+import { X } from "lucide-react";
 import { useEffect } from "react";
 
+import { Icon, PropertyIcon } from "@/components/icons";
 import { timeAgo } from "@/lib/format";
 import type { Row } from "@/lib/types";
 
 import { Cell } from "./cells";
 import { useDatabaseContext } from "./context";
-import { TYPE_ICON } from "./logic";
 
 /** A row opened on its own: every property, editable, in a side panel. */
 export function RowPanel({ row, onClose }: { row: Row; onClose: () => void }) {
@@ -41,8 +42,8 @@ export function RowPanel({ row, onClose }: { row: Row; onClose: () => void }) {
               Delete
             </button>
           )}
-          <button type="button" aria-label="Close" onClick={onClose} className="rounded-md px-2 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">
-            ✕
+          <button type="button" aria-label="Close" onClick={onClose} className="rounded-md p-1.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">
+            <Icon icon={X} />
           </button>
         </div>
       </div>
@@ -57,9 +58,7 @@ export function RowPanel({ row, onClose }: { row: Row; onClose: () => void }) {
           .map((p) => (
             <div key={p.id} className="grid grid-cols-[8rem_1fr] items-start gap-2 text-sm">
               <span className="truncate py-1.5 text-zinc-500" title={p.name}>
-                <span aria-hidden className="mr-1">
-                  {TYPE_ICON[p.type]}
-                </span>
+                <PropertyIcon type={p.type} size={14} className="mr-1 inline-block align-[-2px]" />
                 {p.name}
               </span>
               <div className="min-w-0 rounded-md">

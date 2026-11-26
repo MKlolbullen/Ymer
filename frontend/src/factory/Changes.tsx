@@ -3,9 +3,11 @@
  * edits to the source pages), planning turns them into new tasks, and the next build
  * works only on those. Also the workspace's monthly token budget for builds.
  */
+import { CircleCheck } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { Icon } from "@/components/icons";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Page } from "@/lib/types";
 
@@ -219,7 +221,7 @@ export function Iterate({ page, factory: f }: { page: Page; factory: Factory }) 
           )}
           {planned && (
             <p className="text-sm text-emerald-700 dark:text-emerald-400">
-              ✓ Added {planned.planned} task{planned.planned === 1 ? "" : "s"} to the Tasks database. Build them in step
+              <Icon icon={CircleCheck} className="mr-1 inline-block align-[-3px]" />Added {planned.planned} task{planned.planned === 1 ? "" : "s"} to the Tasks database. Build them in step
               5.
             </p>
           )}

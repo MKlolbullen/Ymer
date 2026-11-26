@@ -2,8 +2,10 @@
  * Stage F4: review a passed build and approve it as a release, then deliver releases:
  * download a zip, preview a web app in an isolated frame, or push to a git repository.
  */
+import { CircleCheck } from "lucide-react";
 import { useState } from "react";
 
+import { Icon } from "@/components/icons";
 import { apiOrigin, downloadFromApi } from "@/lib/api";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Page } from "@/lib/types";
@@ -265,9 +267,10 @@ function Push({ page, factory: f, release }: { page: Page; factory: Factory; rel
       )}
       {last && last.status !== "failed" && (
         <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-400">
+          <Icon icon={CircleCheck} className="mr-1 inline-block align-[-3px]" />
           {last.status === "pushed"
-            ? `✓ Pushed to ${last.branch} as ${last.commit_sha?.slice(0, 7)}.`
-            : `✓ ${last.branch} already has this release (${last.commit_sha?.slice(0, 7)}).`}
+            ? `Pushed to ${last.branch} as ${last.commit_sha?.slice(0, 7)}.`
+            : `${last.branch} already has this release (${last.commit_sha?.slice(0, 7)}).`}
         </p>
       )}
       {release.pushes.length > 0 && (

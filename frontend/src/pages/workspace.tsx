@@ -1,8 +1,10 @@
 import { AppearancePicker } from "@/components/AppearancePicker";
+import { Import, LayoutTemplate } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, Outlet, useNavigate, useOutletContext, useParams } from "react-router";
 
 import { AppShell } from "@/components/AppShell";
+import { Icon, PageIcon, TemplateIcon } from "@/components/icons";
 import { useCreatePage, useCreateWorkspace, useWorkspaces } from "@/lib/queries";
 import { atLeast, type Workspace } from "@/lib/types";
 import { useBuiltinTemplates } from "@/templates/api";
@@ -70,8 +72,8 @@ export function NewWorkspace() {
                 }`}
               >
                 <input type="radio" name="template" value={t.id} checked={template === t.id} onChange={() => setTemplate(t.id)} className="sr-only" />
-                <span aria-hidden className="text-xl leading-none">
-                  {t.icon}
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-lg text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  <TemplateIcon id={t.id} fallback={t.icon} size={18} />
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-medium">{t.name}</span>
@@ -85,7 +87,7 @@ export function NewWorkspace() {
           <button
             type="submit"
             disabled={create.isPending || !name.trim()}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
           >
             Create workspace
           </button>
@@ -141,24 +143,24 @@ export function WorkspaceHome() {
               }}
               className={
                 type === "document"
-                  ? "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700"
-                  : "rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                  ? "inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-700"
+                  : "inline-flex items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               }
             >
-              New {type}
+              <PageIcon type={type} /> New {type}
             </button>
           ))}
           <button
             onClick={() => setLibrary("templates")}
-            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="inline-flex items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            From a template
+            <Icon icon={LayoutTemplate} /> From a template
           </button>
           <button
             onClick={() => setLibrary("import")}
-            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="inline-flex items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            Import
+            <Icon icon={Import} /> Import
           </button>
         </div>
       )}
