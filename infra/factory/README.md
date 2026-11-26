@@ -4,6 +4,10 @@ Builds run the code the AI writes inside these images, one throwaway container p
 command, with no network (see `backend/ymer/factory/sandbox/docker.py`). Build them once
 with `make factory-images`, then set `YMER_FACTORY_SANDBOX=docker`.
 
+With `YMER_FACTORY_SANDBOX=modal` the same Dockerfiles are built by Modal instead, on
+the first run of each stack, so no local Docker is needed. Keep each file self-contained
+(no `COPY` from this folder), since Modal builds it without a build context.
+
 | Stack | Image | Test command |
 | --- | --- | --- |
 | static-web | `ymer-factory/static-web:1` | `node --test 'tests/**/*.test.mjs'` |

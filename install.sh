@@ -73,12 +73,15 @@ if [[ ! -x "$venv/bin/python" ]]; then "$python" -m venv "$venv"; fi
 "$venv/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 12))' ||
   fail "backend/.venv uses an older Python. Move it aside, then rerun with Python 3.12+."
 echo "Installing backend, collaboration and frontend dependencies..."
-if command -v uv >/dev/null; then
-  uv pip install --python "$venv/bin/python" -e './backend[dev]'
-else
-  "$venv/bin/python" -m pip --version >/dev/null 2>&1 || "$venv/bin/python" -m ensurepip
-  "$venv/bin/python" -m pip install -e './backend[dev]'
-fi
+backend_install() {
+  if command -v uv >/dev/null; then
+    uv pip install --python "$venv/bin/python" -e "./backend[$1]"
+  else
+    "$venv/bin/python" -m pip --version >/dev/null 2>&1 || "$venv/bin/python" -m ensurepip
+    "$venv/bin/python" -m pip install -e "./backend[$1]"
+  fi
+}
+backend_install dev
 (cd collab && npm ci --include=dev)
 (cd frontend && npm ci --include=dev)
 if [[ ${1:-} == --install-only ]]; then echo "Ymer dependencies installed."; exit 0; fi
@@ -99,8 +102,14 @@ if not s.factory_run_inline and s.factory_sandbox != "off":
     print("factory-worker")
 if s.factory_sandbox == "docker":
     print("factory-images")
+if s.factory_sandbox == "modal":
+    print("modal-sandbox")
 PY
 )
+if [[ $features == *modal-sandbox* ]]; then
+  echo "Installing the Modal client for the hosted build sandbox..."
+  backend_install dev,modal
+fi
 if [[ $features == *factory-images* ]]; then
   require make
   make factory-images

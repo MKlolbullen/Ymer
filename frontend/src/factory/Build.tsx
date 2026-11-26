@@ -212,8 +212,8 @@ export function Build({ page, factory: f }: { page: Page; factory: Factory }) {
           {sandbox === null && <p className="mb-3 text-sm text-zinc-500">Builds are turned off on this server.</p>}
           {sandbox === "fake" && (
             <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-              Demo sandbox: this server runs no code, so tests are only checked for syntax and counted. Set up Docker to
-              run them for real.
+              Demo sandbox: this server runs no code, so tests are only checked for syntax and counted. Set up Docker or
+              a hosted Modal sandbox to run them for real.
             </p>
           )}
 

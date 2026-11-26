@@ -125,11 +125,21 @@ class Settings(BaseSettings):
     # Where code the AI writes is run (tests, builds):
     #   fake    nothing runs: test files are only checked for syntax; for development/tests
     #   docker  one locked-down container per command (no network, CPU/memory/time limits)
+    #   modal   the same, hosted on Modal (modal.com): the server needs no Docker
     #   off     builds are turned off
-    factory_sandbox: Literal["fake", "docker", "off"] = "fake"
+    factory_sandbox: Literal["fake", "docker", "modal", "off"] = "fake"
     factory_docker_bin: str = "docker"
     factory_memory: str = "1g"
     factory_cpus: str = "1"
+    # Modal sandbox (factory_sandbox="modal"). Credentials default to Modal's own
+    # MODAL_TOKEN_ID / MODAL_TOKEN_SECRET environment variables.
+    factory_modal_app: str = "ymer-factory"
+    factory_modal_token_id: str | None = None
+    factory_modal_token_secret: str | None = None
+    # Images are built by Modal from infra/factory/<stack>.Dockerfile unless a registry
+    # holding the pushed images is set (e.g. ghcr.io/you, giving ghcr.io/you/python-cli:1).
+    factory_modal_dockerfiles: str | None = None
+    factory_modal_registry: str | None = None
     factory_command_timeout: int = 300
     # Run builds in the request that starts them (development) instead of in
     # `flask --app wsgi factory-worker`.

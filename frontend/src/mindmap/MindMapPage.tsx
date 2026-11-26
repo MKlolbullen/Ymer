@@ -7,6 +7,7 @@ import * as Y from "yjs";
 import { useColorMode } from "@/lib/appearance";
 import { PAGE_ICON } from "@/components/PageTree";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
+import { CollabNotice } from "@/editor/CollabNotice";
 import { colorFor, notify, useCollabSession, type CollabSession } from "@/editor/collab";
 import { Presence } from "@/editor/Presence";
 import { VersionsPanel } from "@/editor/VersionsPanel";
@@ -39,13 +40,6 @@ export type CanvasPanel = "history" | null;
 
 type Props = { page: Page; panel: CanvasPanel; onPanel: (panel: CanvasPanel) => void; onPresence: (node: ReactNode) => void };
 
-export const CANVAS_STATUS_TEXT = {
-  connecting: "Connecting…",
-  connected: "",
-  disconnected: "Offline. Changes will sync when you reconnect.",
-  denied: "You no longer have access to this page.",
-} as const;
-
 export function MindMapPage({ page, panel, onPanel, onPresence }: Props) {
   const qc = useQueryClient();
   const onNotice = useCallback(() => qc.invalidateQueries({ queryKey: keys.versions(page.workspace_id, page.id) }), [qc, page.workspace_id, page.id]);
@@ -59,11 +53,7 @@ export function MindMapPage({ page, panel, onPanel, onPresence }: Props) {
   if (!collab.session) return null;
   return (
     <>
-      {CANVAS_STATUS_TEXT[collab.status] && (
-        <div className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200" role="status">
-          {CANVAS_STATUS_TEXT[collab.status]}
-        </div>
-      )}
+      <CollabNotice collab={collab} />
       <MindMapEditor page={page} session={collab.session} synced={collab.synced} readOnly={collab.readOnly} panel={panel} onPanel={onPanel} />
     </>
   );
@@ -372,7 +362,7 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
           tabIndex={0}
           onKeyDown={onKeyDown}
           aria-label="Mind map. Select an idea, then use Tab, Enter, F2, Delete and the arrow keys."
-          className="h-[calc(100vh-14rem)] min-h-96 overflow-hidden rounded-lg border border-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-zinc-800"
+          className="h-[calc(100dvh-14rem)] min-h-96 overflow-hidden rounded-lg border border-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-zinc-800"
         >
           <MindMapCanvas
             nodes={nodes}
@@ -427,7 +417,7 @@ function MindMapEditor({ page, session, synced, readOnly, panel, onPanel }: { pa
         )}
       </div>
       {panel === "history" && (
-        <aside className="fixed inset-x-0 top-14 bottom-0 z-30 overflow-hidden bg-white lg:static lg:z-auto lg:h-[calc(100vh-11.5rem)] lg:w-80 lg:shrink-0 lg:rounded-lg lg:border lg:border-zinc-200 dark:bg-zinc-950 lg:dark:border-zinc-800">
+        <aside className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 z-30 overflow-hidden bg-white lg:static lg:z-auto lg:h-[calc(100dvh-11.5rem)] lg:w-80 lg:shrink-0 lg:rounded-lg lg:border lg:border-zinc-200 dark:bg-zinc-950 lg:dark:border-zinc-800">
           <VersionsPanel
             workspaceId={page.workspace_id}
             pageId={page.id}
