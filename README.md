@@ -178,7 +178,7 @@ same build and review into the next release.
 | **Change requests** | Once the plan is approved, anyone who can edit asks for changes on the factory page, with a title and details. When a source page is edited after the brief, the factory notices, shows which pages changed, and turns the edits into change requests for you. |
 | **Rebuild only what changed** | Planning turns open change requests into new tasks at the end of the Tasks database. Tasks already Done stay Done, so the next build works only on the new ones, starting from the files the last build left. The review then shows what changed, and the release lists the requests it includes, also in its `RELEASE.md`. |
 | **Budgets** | Every workspace has a monthly token budget for builds (20 million tokens unless the server sets another default). The build step shows how much is used. Workspace owners can raise, lower or remove the limit; when it runs out, builds stop and say why. |
-| **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway Docker container with no network, a read-only system, no privileges, and limits on memory, CPU, processes and time. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
+| **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway container with no network and limits on memory, CPU and time: Docker on your own server (also with a read-only system, no privileges and a process limit), or a hosted Modal sandbox when the server has no Docker. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
 
 <table>
   <tr>
@@ -251,8 +251,8 @@ same build and review into the next release.
 </table>
 
 > These screenshots use the demo model and the demo sandbox, so the code is placeholder and the tests were checked
-> rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` the agent writes real code
-> and the tests really run.
+> rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` (or `modal`) the agent
+> writes real code and the tests really run.
 
 ### Appearance
 
@@ -302,8 +302,9 @@ to every page type (documents, canvases, charts and the Factory), and this brows
   `YMER_AI_*` settings.
 - **Factory builds** (`backend/ymer/factory/`): queued in Postgres and run by `make factory-worker` (`flask
   factory-worker`), one build per worker. The agent talks to the model over tool use and runs code only through a
-  sandbox interface: Docker containers today (`YMER_FACTORY_SANDBOX=docker`, images from `make factory-images`),
-  with room for a hosted sandbox later.
+  sandbox interface with two real backends: local Docker containers (`YMER_FACTORY_SANDBOX=docker`, images from
+  `make factory-images`) or hosted [Modal](https://modal.com) sandboxes (`YMER_FACTORY_SANDBOX=modal`), so the
+  server needs no Docker at all.
 
 Deeper notes on each part (routes, settings, the permission rules, how collab storage works) are in
 [DEVELOPMENT.md](DEVELOPMENT.md).
@@ -329,8 +330,13 @@ OpenAI-compatible server (including local ones) set `YMER_AI_PROVIDER=openai`, `
 `YMER_AI_MODEL`. Claude has no embeddings API, so semantic search uses `YMER_AI_EMBEDDING_PROVIDER` (`fake` for a
 built-in hashing embedder, or `openai` for any OpenAI-compatible embeddings endpoint). After changing the embedding
 model, run `flask --app wsgi ai-reindex` (from `backend/`) to rebuild the index. Factory builds use the demo
-sandbox by default; to run the code they write, set
-`YMER_FACTORY_SANDBOX=docker` and rerun the installer. It calls `make factory-images` when this mode is enabled. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
+sandbox by default. To run the code they write, pick a real sandbox and rerun the installer:
+
+- **Docker on this machine:** `YMER_FACTORY_SANDBOX=docker`. The installer calls `make factory-images`.
+- **Hosted on Modal, no Docker needed:** `YMER_FACTORY_SANDBOX=modal` plus `MODAL_TOKEN_ID` and
+  `MODAL_TOKEN_SECRET` from a [Modal](https://modal.com) account (`modal token new` creates them). The installer adds
+  the Modal client. Modal builds the images from `infra/factory/` on the first run and caches them; you pay Modal
+  per second that a command runs. [DEVELOPMENT.md](DEVELOPMENT.md) lists every setting.
 
 `curl localhost:5000/api/health/ready` should report `database`, `redis` and `storage` as `ok`.
 `make test` runs all test suites and `make lint` the linters and type checks. `make help` lists every target.
@@ -364,8 +370,9 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
 | **F4. Factory: deliver** | Review and numbered releases, zip download with packaging files (Dockerfile where it fits), isolated preview of web apps, push to a git repository | ✅ Done |
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
+| **S. Hosted sandbox** | Factory builds on hosted Modal sandboxes, from the same images, so the server needs no Docker | ✅ Done |
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
-| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, templates and import, a hosted build sandbox | Planned |
+| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, templates and import | Planned |
 
 ### Data model
 

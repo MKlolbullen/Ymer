@@ -504,7 +504,8 @@ stage after a passing build is `built`.
   new container per command with `--network none`, `--read-only`, `--cap-drop ALL`,
   `no-new-privileges`, user `nobody`, and memory, CPU, process and time limits. The
   images (`infra/factory/`) carry each stack's test tools, because there is no network
-  to install anything. `fake` runs nothing: it parses Python with `ast` and counts tests.
+  to install anything. `modal` does the same on Modal's hosted sandboxes (see below).
+  `fake` runs nothing: it parses Python with `ast` and counts tests.
 - **Stopping and budgets**: `POST /runs/<id>/stop` stops a queued run at once and a
   running one after its current step. A run fails at the first blocked task, after
   `YMER_FACTORY_TASK_STEPS` steps on one task, or when it reaches
@@ -518,10 +519,14 @@ stage after a passing build is `built`.
 
   | Setting | Default | What it does |
   |---|---|---|
-  | `YMER_FACTORY_SANDBOX` | `fake` | `docker`, `fake` (runs nothing) or `off` |
+  | `YMER_FACTORY_SANDBOX` | `fake` | `docker`, `modal` (hosted), `fake` (runs nothing) or `off` |
   | `YMER_FACTORY_RUN_INLINE` | `false` | Run builds in a thread of the API process (`.env.example` sets `true`) |
   | `YMER_FACTORY_DOCKER_BIN` | `docker` | The Docker command |
-  | `YMER_FACTORY_MEMORY` / `YMER_FACTORY_CPUS` | `1g` / `1` | Container limits |
+  | `YMER_FACTORY_MEMORY` / `YMER_FACTORY_CPUS` | `1g` / `1` | Container limits (Docker and Modal) |
+  | `YMER_FACTORY_MODAL_APP` | `ymer-factory` | Modal app the sandboxes are grouped under |
+  | `YMER_FACTORY_MODAL_TOKEN_ID` / `_SECRET` | unset | Modal credentials; unset means Modal's own `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` |
+  | `YMER_FACTORY_MODAL_DOCKERFILES` | `infra/factory` | Where Modal builds the stack images from |
+  | `YMER_FACTORY_MODAL_REGISTRY` | unset | Pull `<registry>/<stack>:<tag>` instead of building |
   | `YMER_FACTORY_COMMAND_TIMEOUT` | `300` | Seconds per command |
   | `YMER_FACTORY_MAX_STEPS` | `300` | Model steps per build |
   | `YMER_FACTORY_TASK_STEPS` | `30` | Model steps per task |
@@ -529,15 +534,50 @@ stage after a passing build is `built`.
 
 Assumptions for F3, open to change:
 
-- Docker first, hosted later: a hosted sandbox only needs to implement `run`. The
-  Docker sandbox needs a Docker daemon next to the worker; giving a worker the Docker
-  socket gives it control of that host, so run workers on a machine meant for it.
+- Docker first, hosted later: a hosted sandbox only needs to implement `run` (the
+  Modal backend below does). The Docker sandbox needs a Docker daemon next to the
+  worker; giving a worker the Docker socket gives it control of that host, so run
+  workers on a machine meant for it, or use the Modal sandbox instead.
 - The flask-react stack builds and tests the backend; the front end is built when the
   app is delivered (F4), since installing npm packages needs network.
 - A worker that dies mid-run leaves that run marked running; there is no automatic
   recovery yet. Pressing Stop twice marks it stopped without waiting for the worker.
 - Builds start from the tasks as they were when the build started; edits to the Tasks
   database during a build apply to the next one.
+
+### Hosted build sandbox (Modal)
+
+`YMER_FACTORY_SANDBOX=modal` runs Factory commands on [Modal](https://modal.com)
+instead of a local Docker daemon, so the Ymer server and the Factory worker need no
+Docker. The backend is `ymer/factory/sandbox/modal.py` and implements the same
+`run(files, command, image, timeout)`; nothing else in the Factory changed.
+
+- **Per command**: a new Modal Sandbox (gVisor-isolated) with `block_network=True`,
+  `YMER_FACTORY_CPUS` and `YMER_FACTORY_MEMORY` as its limits, and a lifetime of the
+  command timeout plus two minutes. The files go in as one tar archive, unpacked in
+  `/work`; the command runs with stderr merged into stdout, and the sandbox is
+  terminated afterwards whatever happened. A command past its timeout comes back as
+  exit code 124 with `timed_out`, like the Docker backend.
+- **Images**: built by Modal from the same `infra/factory/<stack>.Dockerfile` files
+  the Docker backend uses (the stack's image tag `ymer-factory/<stack>:<n>` names the
+  file). Modal caches each built image, so only the first run per stack waits for the
+  build. To use images pushed to a registry instead, set `YMER_FACTORY_MODAL_REGISTRY`
+  (for example `ghcr.io/you` gives `ghcr.io/you/python-cli:1`).
+- **Credentials**: `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` in the worker's environment
+  (read by the Modal client), or `YMER_FACTORY_MODAL_TOKEN_ID` / `_SECRET`. Sandboxes
+  are grouped under the Modal app `YMER_FACTORY_MODAL_APP`, created on first use.
+- **Install**: the Modal client is an optional extra, `pip install -e 'backend[modal]'`;
+  `install.sh` adds it when the setting is `modal`. Without it, a build fails with a
+  message saying so.
+- **Differences from Docker**: Modal's isolation is gVisor rather than a read-only,
+  capability-free container, the command runs as the image's default user, and there
+  is no separate process-count limit. The network is off in both.
+- **Cost**: Modal bills per second of sandbox CPU and memory. A build runs the tests
+  once or more per task, so a typical build is a few minutes of sandbox time.
+- **Tests**: `tests/test_factory_modal.py` checks the backend against a stand-in for
+  the `modal` package (files, limits, no network, timeouts, clean-up, errors). Its live
+  test runs real pytest on Modal, checks the network is off and that timeouts work; it
+  runs only with `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` set (`pytest -m live`).
 
 ### Stage F4: review and delivery
 

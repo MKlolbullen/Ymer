@@ -23,6 +23,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Hosted build sandbox for the Factory (YMER_FACTORY_SANDBOX=modal).
+modal = ["modal>=1.6"]
 dev = [
   "pytest>=8.3",
   "ruff>=0.8",
