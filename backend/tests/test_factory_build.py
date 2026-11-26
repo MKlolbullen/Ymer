@@ -14,12 +14,35 @@ from tests.test_factory import _approved_brief, team  # noqa: F401 (fixture)
 from ymer.db import db_session
 from ymer.factory import build as build_mod
 from ymer.factory.agent import AgentTurn, ToolCall, validate_input
-from ymer.factory.build import read_tasks
+from ymer.factory.build import _next_task, read_tasks, split_depends
 from ymer.factory.runner import run_now, work_once
 from ymer.factory.sandbox import ExecResult, clip
 from ymer.factory.sandbox.docker import DockerSandbox, safe_path
 from ymer.factory.sandbox.fake import FakeSandbox
 from ymer.models import FactoryFile, FactoryRun, FactoryRunEvent
+
+# --- task dependencies ----------------------------------------------------------------
+
+
+def test_depends_on_keeps_titles_that_contain_semicolons():
+    titles = ["Set up skeleton; add CI", "Add login", "Add login page"]
+    cell = "set up skeleton; add CI; Add login page"
+    assert split_depends(cell, titles) == ["Set up skeleton; add CI", "Add login page"]
+    assert split_depends("Add login", titles) == ["Add login"]
+    assert split_depends("Unknown task; Add login", titles) == ["Unknown task", "Add login"]
+    assert split_depends("  ;  ", titles) == []
+
+
+def test_a_task_after_a_semicolon_title_becomes_ready():
+    first = {"title": "Set up skeleton; add CI", "status": "Done", "depends_on": []}
+    cell = "Set up skeleton; add CI"
+    second = {
+        "title": "Add login",
+        "status": "To do",
+        "depends_on": split_depends(cell, [first["title"], "Add login"]),
+    }
+    assert _next_task([first, second]) is second
+
 
 # --- sandbox ------------------------------------------------------------------------------
 

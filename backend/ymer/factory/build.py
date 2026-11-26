@@ -78,6 +78,39 @@ def _option_name(prop: DatabaseProperty | None, value: Any) -> str:
     return ""
 
 
+def split_depends(value: str, titles: list[str]) -> list[str]:
+    """Split a "Depends on" cell ("A; B") into task titles.
+
+    Titles are joined with "; ", so a title that itself contains ";" can't be found by a
+    plain split. Known titles are matched first (longest first, ignoring case) at each
+    position; anything else falls back to the text up to the next ";".
+    """
+    known = sorted({t.casefold(): t for t in titles}.values(), key=len, reverse=True)
+    out: list[str] = []
+    rest = value.strip()
+    while rest:
+        folded = rest.casefold()
+        match = next(
+            (
+                t
+                for t in known
+                if folded.startswith(t.casefold())
+                and (len(rest) == len(t) or rest[len(t) :].lstrip().startswith(";"))
+            ),
+            None,
+        )
+        if match is not None:
+            out.append(match)
+            rest = rest[len(match) :]
+        else:
+            part, _, _ = rest.partition(";")
+            if part.strip():
+                out.append(part.strip())
+            rest = rest[len(part) :]
+        rest = rest.lstrip().removeprefix(";").lstrip()
+    return out
+
+
 def read_tasks(session: Session, tasks_page_id: uuid.UUID) -> list[dict]:
     """The rows of the Tasks database, in order, as plain dicts."""
     props = _props(session, tasks_page_id)
@@ -97,9 +130,12 @@ def read_tasks(session: Session, tasks_page_id: uuid.UUID) -> list[dict]:
             return _option_name(prop, value)
         return str(value or "")
 
+    named = [
+        (row, str(row.values.get(str(title.id)) or "").strip() if title else "") for row in rows
+    ]
+    titles = [name for _, name in named if name]
     tasks = []
-    for row in rows:
-        name = str(row.values.get(str(title.id)) or "").strip() if title else ""
+    for row, name in named:
         if not name:
             continue
         depends = text(row, "Depends on")
@@ -112,7 +148,7 @@ def read_tasks(session: Session, tasks_page_id: uuid.UUID) -> list[dict]:
                 "priority": text(row, "Priority"),
                 "size": text(row, "Size"),
                 "detail": text(row, "Detail"),
-                "depends_on": [d.strip() for d in depends.split(";") if d.strip()],
+                "depends_on": split_depends(depends, titles),
             }
         )
     return tasks
