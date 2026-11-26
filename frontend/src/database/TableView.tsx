@@ -131,7 +131,7 @@ export function TableView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                     <button
                       type="button"
                       onClick={() => openRow(row.id)}
-                      className="invisible absolute top-1.5 right-1 rounded border border-zinc-200 bg-white px-1.5 text-xs text-zinc-600 group-hover:visible dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                      className="invisible absolute top-1.5 right-1 rounded border border-zinc-200 bg-white px-1.5 text-xs text-zinc-600 group-hover:visible pointer-coarse:visible dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
                     >
                       Open
                     </button>

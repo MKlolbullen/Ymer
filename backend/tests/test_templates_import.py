@@ -92,10 +92,11 @@ def test_links_resolve_to_mentions_images_and_file_cards():
         "See [the other page](Other.md).\n\n![A picture](pic.png) caption\n\n[pdf](doc.pdf)",
         resolve,
     )
-    assert blocks[0] == (
-        '<paragraph>See <pageMention id="1b4e28ba-2fa1-11d2-883f-0016d3cca427" '
-        'label="the other page"></pageMention>.</paragraph>'
-    )
+    # Attribute order in Yjs XML is not fixed, so check the mention's attributes one by one.
+    assert blocks[0].startswith("<paragraph>See <pageMention ")
+    assert blocks[0].endswith("></pageMention>.</paragraph>")
+    assert 'id="1b4e28ba-2fa1-11d2-883f-0016d3cca427"' in blocks[0]
+    assert 'label="the other page"' in blocks[0]
     # Attribute order in Yjs XML is not fixed, so compare tag and attributes.
     previews = blocks_preview(
         markdown_to_state("![A picture](pic.png)\n\n[pdf](doc.pdf)", resolve).state
