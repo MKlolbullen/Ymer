@@ -4,6 +4,9 @@ import { NavLink, useNavigate } from "react-router";
 import { useAiStatus } from "@/ai/api";
 import { logout, useSession } from "@/lib/auth";
 import { usePages } from "@/lib/queries";
+import { useOnline } from "@/offline/connectivity";
+import { usePendingPages } from "@/offline/store";
+import { useBackgroundSync } from "@/offline/sync";
 import { atLeast, type Workspace } from "@/lib/types";
 
 import { AppearancePicker } from "./AppearancePicker";
@@ -26,6 +29,20 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const ai = useAiStatus();
+  const online = useOnline();
+  const pending = usePendingPages(session?.user.id);
+  useBackgroundSync(session?.user.id);
+
+  const signOut = () => {
+    if (
+      pending.length &&
+      !window.confirm(
+        `${pending.length === 1 ? "1 page has" : `${pending.length} pages have`} offline edits that have not synced yet. Signing out deletes them. Sign out anyway?`,
+      )
+    )
+      return;
+    void logout();
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,7 +90,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           className={navClass({ isActive: false })}
         >
           <span aria-hidden>🔍</span> Search
-          <kbd className="ml-auto text-xs text-zinc-400">Ctrl K</kbd>
+          <kbd className="ml-auto text-xs text-zinc-400 pointer-coarse:hidden">Ctrl K</kbd>
         </button>
         {ai.data?.enabled && (
           <NavLink to={`/w/${workspace.id}/ask`} className={navClass} onClick={() => setMenuOpen(false)}>
@@ -111,7 +128,12 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           <span className="truncate text-sm" title={session?.user.email}>
             {session?.user.display_name}
           </span>
-          <button onClick={() => void logout()} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+          <button
+            onClick={signOut}
+            disabled={!online}
+            title={online ? undefined : "Reconnect to sign out"}
+            className="text-xs text-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:hover:text-white"
+          >
             Sign out
           </button>
         </div>
@@ -119,6 +141,11 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           <span aria-hidden>⚙</span> AI settings
         </NavLink>
         <AppearancePicker />
+        {pending.length > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-300" role="status">
+            {pending.length === 1 ? "1 page" : `${pending.length} pages`} with offline edits, waiting to sync
+          </p>
+        )}
         <ApiStatus />
       </div>
     </>
@@ -151,6 +178,15 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
             ☰
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-3">{header}</div>
+          {!online && (
+            <span
+              role="status"
+              title="Pages you have opened before still work. Edits sync when you reconnect."
+              className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+            >
+              Offline
+            </span>
+          )}
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">{children}</main>
       </div>

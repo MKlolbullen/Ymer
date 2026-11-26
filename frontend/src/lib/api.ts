@@ -5,7 +5,7 @@
  * when it changes something, the CSRF token in `X-CSRF-Token`. A 401 triggers one
  * refresh (the refresh cookie is only sent to /api/auth) and one retry.
  */
-import { getCsrfToken, getSession, setCsrfToken, setSession, type Session } from "./session";
+import { getCsrfToken, getSession, getStatus, rememberedUser, setCsrfToken, setSession, type Session } from "./session";
 import type { User } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -102,9 +102,21 @@ export async function loadSession(): Promise<Session | null> {
   if (response?.status === 401 && (await refreshSession())) {
     response = await send("/auth/me", { method: "GET" }).catch(() => null);
   }
-  if (!response?.ok) {
-    // An outage is not a sign-out; only a definite 401 is.
-    if (!response || response.status === 401) setSession(null, { broadcast: false });
+  if (!response) {
+    // No network (or no API): an outage is not a sign-out. Carry on as the user last
+    // signed in here, working from offline copies, and check again once back online.
+    const user = rememberedUser();
+    setSession(user ? { user } : null, { broadcast: false });
+    if (user) window.addEventListener("online", () => void loadSession(), { once: true });
+    return user ? { user } : null;
+  }
+  if (!response.ok) {
+    if (response.status === 401) setSession(null, { broadcast: false });
+    else if (getStatus() === "loading") {
+      // The API answered with an error (5xx): same as no network.
+      const user = rememberedUser();
+      setSession(user ? { user } : null, { broadcast: false });
+    }
     return null;
   }
   const body = (await response.json().catch(() => ({}))) as Partial<MeResponse>;

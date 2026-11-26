@@ -158,7 +158,7 @@ export function CommentsPanel(props: Props) {
                 <CommentBody comment={reply} />
                 {(reply.author?.id === myId || canModerate) && (
                   <button
-                    className="hidden text-xs text-zinc-400 group-hover:inline hover:text-rose-600"
+                    className="hidden text-xs text-zinc-400 group-hover:inline pointer-coarse:inline hover:text-rose-600"
                     onClick={() => remove.mutate(reply.id)}
                   >
                     Delete

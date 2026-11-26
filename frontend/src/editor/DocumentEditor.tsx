@@ -11,6 +11,7 @@ import { keys, uploadFile, useComments } from "@/lib/queries";
 import { atLeast, type Comment, type Page } from "@/lib/types";
 
 import { anchorFromSelection, CommentHighlights, refreshHighlights, resolveAnchor } from "./anchors";
+import { CollabNotice } from "./CollabNotice";
 import { colorFor, notify, useCollabSession, type CollabSession, type Notice } from "./collab";
 import { CommentsPanel, type Draft } from "./CommentsPanel";
 import { baseExtensions } from "./extensions";
@@ -21,13 +22,6 @@ import { versionContent, VersionsPanel } from "./VersionsPanel";
 export type Panel = "comments" | "history" | null;
 
 type Props = { page: Page; panel: Panel; onPanel: (panel: Panel) => void; onPresence: (node: React.ReactNode) => void };
-
-const STATUS_TEXT = {
-  connecting: "Connecting…",
-  connected: "",
-  disconnected: "Offline. Changes will sync when you reconnect.",
-  denied: "You no longer have access to this page.",
-} as const;
 
 /** A document page: live collaborative editor plus the comments and history panels. */
 export function DocumentEditor({ page, panel, onPanel, onPresence }: Props) {
@@ -49,11 +43,7 @@ export function DocumentEditor({ page, panel, onPanel, onPresence }: Props) {
   if (!collab.session) return null;
   return (
     <>
-      {STATUS_TEXT[collab.status] && (
-        <div className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200" role="status">
-          {STATUS_TEXT[collab.status]}
-        </div>
-      )}
+      <CollabNotice collab={collab} />
       <CollabEditor
         key={page.id}
         page={page}
@@ -221,7 +211,7 @@ function CollabEditor({
         </div>
       </div>
       {panel && (
-        <aside className="fixed inset-x-0 top-14 bottom-0 z-30 overflow-hidden bg-white lg:sticky lg:top-0 lg:z-auto lg:h-[calc(100vh-7.5rem)] lg:w-80 lg:shrink-0 lg:rounded-lg lg:border lg:border-zinc-200 dark:bg-zinc-950 lg:dark:border-zinc-800">
+        <aside className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 z-30 overflow-hidden bg-white lg:sticky lg:top-0 lg:z-auto lg:h-[calc(100dvh-7.5rem)] lg:w-80 lg:shrink-0 lg:rounded-lg lg:border lg:border-zinc-200 dark:bg-zinc-950 lg:dark:border-zinc-800">
           {panel === "comments" ? (
             <CommentsPanel
               workspaceId={page.workspace_id}

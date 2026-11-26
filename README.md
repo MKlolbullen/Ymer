@@ -265,6 +265,34 @@ to every page type (documents, canvases, charts and the Factory), and this brows
   <br><sub>The Midnight Blue/Teal theme, picked at the bottom of the sidebar.</sub>
 </p>
 
+### Phones and offline
+
+Ymer works on a phone and keeps working without a network. Install it from the browser ("Add to Home Screen" or
+"Install app") and it opens like an app, full screen with its own icon.
+
+| Feature | What you get |
+|---|---|
+| **Phone layout** | The sidebar becomes a slide-in menu, page actions shrink to icons, long titles wrap, and controls that only showed on hover are always visible on touch screens. Panels (comments, history) open full screen. |
+| **Installable app** | A web app manifest and a service worker. The app shell is cached on first visit, so Ymer starts offline; when a new version is out, a prompt offers to reload. |
+| **Offline editing** | Every document, mind map and drawing you open keeps a copy on the device (IndexedDB). Offline, those pages open and stay editable; when the connection comes back, Yjs merges your edits with everyone else's. Pages with edits that have not reached the server yet are pushed in the background, even if you closed them, and the sidebar counts them until they have. |
+| **Offline reading** | The sidebar's page list and other pages' details come from the last answer the server gave, so you can find your way around. A page never opened on this device says so instead of showing an empty copy. |
+| **Privacy** | Signing out deletes every offline copy and the cached responses (it warns first if edits have not synced). Signing in as someone else on the same browser deletes the previous user's copies. Sign-out needs a connection, so the server really ends the session. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/phone-offline-editing.png" alt="Ymer on a phone with no network: the Offline badge in the header and a note that edits are saved on the device, with a line typed offline"></td>
+    <td width="50%"><img src="docs/assets/screenshots/phone-offline-menu.png" alt="The phone menu while offline: the page list still shows, and the sidebar notes one page with offline edits waiting to sync"></td>
+  </tr>
+  <tr>
+    <td><sub>Editing on a phone with no network. The edit is saved on the device.</sub></td>
+    <td><sub>The page list still works offline, and the menu counts pages waiting to sync.</sub></td>
+  </tr>
+</table>
+
+Offline support needs the production build (the service worker is not registered by the dev server) and HTTPS, or
+localhost. Databases, comments, uploads, search and AI still need a connection; changes there wait until you are
+back online.
+
 ### Foundation
 
 | Area | What you get |
@@ -287,6 +315,8 @@ to every page type (documents, canvases, charts and the Factory), and this brows
 
 - **Frontend** (`frontend/`): Vite, React 18, TypeScript, Tailwind CSS 4, TipTap 3, React Flow 12, Excalidraw,
   Chart.js 4, React Query, react-router 7. Themes are CSS variables chosen per palette (`src/lib/appearance.ts`).
+  A Workbox service worker (vite-plugin-pwa) caches the app and recent API reads; y-indexeddb keeps each opened
+  page's Yjs document on the device (`src/offline/`).
 - **API** (`backend/`): Flask 3, SQLAlchemy 2, Alembic, pydantic. It is the only writer of the schema and the only place
   that decides permissions.
 - **Realtime** (`collab/`): a small Hocuspocus service on Node 22. One Yjs room per page, whether the page is a
@@ -372,7 +402,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
 | **S. Hosted sandbox** | Factory builds on hosted Modal sandboxes, from the same images, so the server needs no Docker | ✅ Done |
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
-| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), offline-friendly editing, templates and import | Planned |
+| **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
+| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), templates and import | Planned |
 
 ### Data model
 

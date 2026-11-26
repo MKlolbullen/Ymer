@@ -197,7 +197,7 @@ function TreeItem({ node, depth, drag }: { node: Node; depth: number; drag: Drag
             parentId={page.id}
             label={`Add a page inside ${page.title || "Untitled"}`}
             onCreated={() => setOpen(true)}
-            className="invisible flex size-6 items-center justify-center rounded text-zinc-500 group-hover:visible hover:bg-zinc-300/60 dark:hover:bg-zinc-700"
+            className="invisible flex size-6 items-center justify-center rounded text-zinc-500 group-hover:visible pointer-coarse:visible hover:bg-zinc-300/60 dark:hover:bg-zinc-700"
           />
         )}
       </div>

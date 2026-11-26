@@ -44,9 +44,10 @@ export function GenerateMenu({ page }: { page: Page }) {
           generate.reset();
         }}
         aria-expanded={open}
-        className="rounded-md px-2.5 py-1 text-sm text-brand-600 hover:bg-zinc-100 dark:text-brand-500 dark:hover:bg-zinc-800"
+        aria-label="Generate"
+        className="rounded-md px-2 py-1 text-sm whitespace-nowrap text-brand-600 hover:bg-zinc-100 sm:px-2.5 dark:text-brand-500 dark:hover:bg-zinc-800"
       >
-        ✨ Generate
+        ✨<span className="hidden sm:inline"> Generate</span>
       </button>
       {open && (
         <Popover anchor={button.current} onClose={() => setOpen(false)} width={340} label="Generate with AI">
