@@ -1,5 +1,7 @@
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Icon } from "@/components/icons";
 import { ChartSettings } from "@/charts/ChartSettings";
 import { normalizeChartConfig } from "@/charts/config";
 import { DatabaseChart } from "@/charts/DatabaseChart";
@@ -35,7 +37,7 @@ export function ChartView({ view }: { view: DatabaseView }) {
             className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-300"
           >
             Chart settings
-            <span aria-hidden>{editing ? "▴" : "▾"}</span>
+            <Icon icon={ChevronDown} className={`transition-transform ${editing ? "rotate-180" : ""}`} />
           </button>
           {editing && (
             <div className="border-t border-zinc-200 dark:border-zinc-800">

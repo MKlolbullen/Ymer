@@ -108,7 +108,7 @@ and rollups the blueprint describes and checks every benchmark number, plus the 
 | **Chart blocks** | Drop a chart of any database into a document (📊 in the toolbar). It redraws as the rows change, and readers without access to the database see a notice instead. Every chart has a "Show data" table. |
 
 <p align="center">
-  <img src="docs/assets/screenshots/mindmap.png" alt="A mind map with coloured branches; Bob's selected idea carries his name tag" width="900">
+  <img src="docs/assets/screenshots/mindmap.png" alt="A mind map with coloured branches; the idea Bob has selected carries Bob's name tag" width="900">
   <br><sub>A mind map edited by two people: Alice's selection is ringed, Bob's idea carries his name.</sub>
 </p>
 

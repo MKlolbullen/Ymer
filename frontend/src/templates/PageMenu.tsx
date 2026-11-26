@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
+import { Copy, Ellipsis, LayoutTemplate } from "lucide-react";
 import { useNavigate } from "react-router";
 
+import { Icon } from "@/components/icons";
 import { MenuItem, Popover } from "@/components/Popover";
 import { atLeast, type Page } from "@/lib/types";
 
 import { useDuplicatePage, useSetTemplate } from "./api";
 
-/** "⋯" on a page: duplicate it, or save it (with its sub-pages) as a template. */
+/** The "…" menu on a page: duplicate it, or save it (with its sub-pages) as a template. */
 export function PageMenu({ page }: { page: Page }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -33,9 +35,9 @@ export function PageMenu({ page }: { page: Page }) {
         aria-label="More actions"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className="inline-flex items-center rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
-        ⋯
+        <Icon icon={Ellipsis} />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={240} label="More actions">
@@ -48,10 +50,10 @@ export function PageMenu({ page }: { page: Page }) {
               })
             }
           >
-            <span aria-hidden>⧉</span> Duplicate
+            <Icon icon={Copy} className="text-zinc-500" /> Duplicate
           </MenuItem>
           <MenuItem disabled={setTemplate.isPending} onClick={() => void run(() => setTemplate.mutateAsync(!page.is_template).then(() => undefined))}>
-            <span aria-hidden>🧩</span> {page.is_template ? "Stop using as a template" : "Save as template"}
+            <Icon icon={LayoutTemplate} className="text-zinc-500" /> {page.is_template ? "Stop using as a template" : "Save as template"}
           </MenuItem>
           {error && <p className="px-2 py-1 text-xs text-rose-600">{error}</p>}
         </Popover>

@@ -1,11 +1,13 @@
+import { ArrowDown, ArrowUp, GripVertical, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { Icon, PropertyIcon } from "@/components/icons";
 import { Popover } from "@/components/Popover";
 import type { DatabaseView, Property, Row } from "@/lib/types";
 
 import { Cell } from "./cells";
 import { useDatabaseContext } from "./context";
-import { positionBetween, TYPE_ICON, visibleProperties } from "./logic";
+import { positionBetween, visibleProperties } from "./logic";
 import { AddPropertyForm, PropertyMenu } from "./PropertyMenu";
 
 function HeaderCell({ property, view }: { property: Property; view: DatabaseView }) {
@@ -20,11 +22,9 @@ function HeaderCell({ property, view }: { property: Property; view: DatabaseView
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
       >
-        <span aria-hidden className="w-4 text-center">
-          {TYPE_ICON[property.type]}
-        </span>
+        <PropertyIcon type={property.type} size={14} />
         <span className="truncate">{property.name}</span>
-        {sort && <span aria-label={`sorted ${sort.direction}`}>{sort.direction === "asc" ? "↑" : "↓"}</span>}
+        {sort && <Icon icon={sort.direction === "asc" ? ArrowUp : ArrowDown} size={14} aria-hidden={false} aria-label={`sorted ${sort.direction}`} />}
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={300} label={`${property.name} settings`}>
@@ -48,7 +48,7 @@ function AddColumn() {
         onClick={() => setOpen(true)}
         className="w-full px-3 py-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900"
       >
-        +
+        <Icon icon={Plus} size={14} />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={300} label="Add a property">
@@ -120,7 +120,7 @@ export function TableView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                     title="Drag to reorder"
                     className="invisible cursor-grab px-1 text-zinc-400 select-none group-hover:visible"
                   >
-                    ⋮⋮
+                    <Icon icon={GripVertical} size={14} />
                   </span>
                 </td>
               )}
@@ -149,7 +149,7 @@ export function TableView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
           onClick={() => mutations.createRow.mutate({})}
           className="w-full px-3 py-2 text-left text-sm text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
         >
-          + New
+          <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />New
         </button>
       )}
       {!rows.length && !canEdit && <p className="px-3 py-4 text-sm text-zinc-500">No rows.</p>}

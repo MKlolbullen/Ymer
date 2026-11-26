@@ -1,9 +1,10 @@
+import { ArrowRight, Check, CircleCheck, Plus, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link } from "react-router";
 
+import { Icon, PageIcon } from "@/components/icons";
 import { DemoNote } from "@/ai/AssistMenu";
 import { useAiStatus } from "@/ai/api";
-import { PAGE_ICON } from "@/components/PageTree";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { usePages } from "@/lib/queries";
@@ -54,7 +55,7 @@ function Stepper({ factory }: { factory: Factory }) {
                     : "border-zinc-200 text-zinc-400 dark:border-zinc-800"
               }`}
             >
-              <span aria-hidden>{complete ? "✓" : i + 1}</span>
+              {complete ? <Icon icon={Check} size={14} /> : <span aria-hidden>{i + 1}</span>}
               {step.label}
               {next && <span className="text-xs">(coming next)</span>}
             </span>
@@ -83,7 +84,7 @@ function Sources({ page, factory, locked }: { page: Page; factory: Factory; lock
           {factory.sources.map((s, i) =>
             s.visible ? (
               <li key={s.page_id} className="group flex items-center gap-2 px-3 py-2 text-sm">
-                <span aria-hidden>{PAGE_ICON[s.type]}</span>
+                <PageIcon type={s.type} className="text-zinc-500" />
                 <Link to={`/w/${page.workspace_id}/p/${s.page_id}`} className="min-w-0 flex-1 truncate hover:underline">
                   {s.title || "Untitled"}
                 </Link>
@@ -93,7 +94,7 @@ function Sources({ page, factory, locked }: { page: Page; factory: Factory; lock
                     onClick={() => save(visibleIds.filter((id) => id !== s.page_id))}
                     className="invisible px-1.5 text-zinc-400 group-hover:visible pointer-coarse:visible hover:text-rose-600 focus:visible"
                   >
-                    ×
+                    <Icon icon={X} size={14} />
                   </button>
                 )}
               </li>
@@ -110,7 +111,7 @@ function Sources({ page, factory, locked }: { page: Page; factory: Factory; lock
       {editable && (
         <div className="mt-3">
           <button ref={button} onClick={() => setOpen((v) => !v)} aria-expanded={open} className={secondary}>
-            + Add a page
+            <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />Add a page
           </button>
           {open && (
             <Popover anchor={button.current} onClose={() => setOpen(false)} width={340} label="Add a source page">
@@ -134,7 +135,7 @@ function Sources({ page, factory, locked }: { page: Page; factory: Factory; lock
                       setQuery("");
                     }}
                   >
-                    <span aria-hidden>{PAGE_ICON[p.type]}</span>
+                    <PageIcon type={p.type} className="text-zinc-500" />
                     <span className="truncate">{p.title || "Untitled"}</span>
                   </MenuItem>
                 ))}
@@ -263,8 +264,8 @@ export function FactoryPage({ page }: { page: Page }) {
             to={`/w/${page.workspace_id}/p/${f.brief.id}`}
             className="mb-3 flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-brand-500 dark:border-zinc-800"
           >
-            <span aria-hidden className="text-xl">
-              📄
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              <PageIcon type="document" size={18} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-medium">{f.brief.title}</span>
@@ -272,9 +273,7 @@ export function FactoryPage({ page }: { page: Page }) {
                 Written {f.brief_generated_at ? timeAgo(f.brief_generated_at) : ""}. Open it to read or edit.
               </span>
             </span>
-            <span aria-hidden className="text-zinc-400">
-              →
-            </span>
+            <Icon icon={ArrowRight} className="text-zinc-400" />
           </Link>
         ) : (
           <p className="mb-3 text-sm text-zinc-500">No brief yet.</p>
@@ -326,7 +325,7 @@ export function FactoryPage({ page }: { page: Page }) {
         {approved ? (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm dark:border-emerald-800 dark:bg-emerald-950">
             <p className="font-medium text-emerald-800 dark:text-emerald-300">
-              ✓ Brief approved by {f.approved_by?.display_name ?? "someone"}
+              <Icon icon={CircleCheck} className="mr-1 inline-block align-[-3px]" />Brief approved by {f.approved_by?.display_name ?? "someone"}
               {f.approved_at ? ` on ${formatDateTime(f.approved_at)}` : ""}.
             </p>
             <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">
@@ -371,9 +370,9 @@ export function FactoryPage({ page }: { page: Page }) {
 }
 
 const PLAN_PAGES = [
-  { key: "architecture", icon: "📄", label: "Architecture", note: "Stack, components, data model and interfaces" },
-  { key: "system_map", icon: "🧠", label: "System map", note: "The components and the tasks in each" },
-  { key: "tasks", icon: "🗃️", label: "Tasks", note: "Status, component, priority and size" },
+  { key: "architecture", icon: "document", label: "Architecture", note: "Stack, components, data model and interfaces" },
+  { key: "system_map", icon: "mindmap", label: "System map", note: "The components and the tasks in each" },
+  { key: "tasks", icon: "database", label: "Tasks", note: "Status, component, priority and size" },
 ] as const;
 
 function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: Factory; aiOff: boolean; demo: boolean }) {
@@ -468,7 +467,7 @@ function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: 
                       className="flex h-full flex-col gap-1 rounded-lg border border-zinc-200 p-3 hover:border-brand-500 dark:border-zinc-800"
                     >
                       <span className="flex items-center gap-2 font-medium">
-                        <span aria-hidden>{icon}</span>
+                        <PageIcon type={icon} className="text-zinc-500" />
                         {label}
                         {key === "tasks" && f.tasks && <span className="text-xs font-normal text-zinc-500">{f.tasks.count} tasks</span>}
                       </span>
@@ -483,7 +482,7 @@ function Architecture({ page, factory: f, aiOff, demo }: { page: Page; factory: 
           {planned ? (
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm dark:border-emerald-800 dark:bg-emerald-950">
               <p className="font-medium text-emerald-800 dark:text-emerald-300">
-                ✓ Plan approved by {f.plan_approved_by?.display_name ?? "someone"}
+                <Icon icon={CircleCheck} className="mr-1 inline-block align-[-3px]" />Plan approved by {f.plan_approved_by?.display_name ?? "someone"}
                 {f.plan_approved_at ? ` on ${formatDateTime(f.plan_approved_at)}` : ""}.
               </p>
               <p className="mt-1 text-emerald-800/80 dark:text-emerald-300/80">

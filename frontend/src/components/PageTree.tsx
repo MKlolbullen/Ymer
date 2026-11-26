@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
+import { ChevronRight, LayoutTemplate, Plus } from "lucide-react";
 import { NavLink, useNavigate } from "react-router";
 
 import { useCreatePage, useMovePage } from "@/lib/queries";
 import { atLeast, type Page, type PageType } from "@/lib/types";
 import { TemplatesDialog } from "@/templates/TemplatesDialog";
 
+import { Icon, PageIcon } from "./icons";
 import { MenuItem, Popover } from "./Popover";
 
 type Node = { page: Page; children: Node[] };
@@ -65,8 +67,6 @@ export function dropTarget(
   return { parent_id: target.parent_id, before_id: next?.id ?? null };
 }
 
-export const PAGE_ICON: Record<PageType, string> = { document: "📄", folder: "📁", database: "🗃️", mindmap: "🧠", drawing: "✏️", factory: "🏭" };
-
 export const NEW_PAGE_TYPES: { type: PageType; label: string }[] = [
   { type: "document", label: "Document" },
   { type: "database", label: "Database" },
@@ -104,13 +104,13 @@ export function NewPageButton({
   return (
     <>
       <button ref={ref} aria-label={label} title={label} onClick={() => setOpen(true)} disabled={create.isPending} className={className}>
-        +
+        <Icon icon={Plus} size={15} />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={180} label={label}>
           {NEW_PAGE_TYPES.map((t) => (
             <MenuItem key={t.type} onClick={() => void add(t.type)}>
-              <span aria-hidden>{PAGE_ICON[t.type]}</span> {t.label}
+              <PageIcon type={t.type} className="text-zinc-500" /> {t.label}
             </MenuItem>
           ))}
           <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
@@ -120,7 +120,7 @@ export function NewPageButton({
               setLibrary(true);
             }}
           >
-            <span aria-hidden>🧩</span> From a template or import…
+            <Icon icon={LayoutTemplate} className="text-zinc-500" /> From a template or import…
           </MenuItem>
         </Popover>
       )}
@@ -191,7 +191,7 @@ function TreeItem({ node, depth, drag }: { node: Node; depth: number; drag: Drag
           className={`flex size-6 shrink-0 items-center justify-center text-xs text-zinc-400 ${children.length ? "" : "invisible"}`}
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? "▾" : "▸"}
+          <Icon icon={ChevronRight} size={14} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         </button>
         <NavLink
           to={`/w/${drag.workspaceId}/p/${page.id}`}
@@ -200,7 +200,7 @@ function TreeItem({ node, depth, drag }: { node: Node; depth: number; drag: Drag
             `flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm ${isActive ? "font-semibold text-brand-700 dark:text-brand-500" : "text-zinc-600 dark:text-zinc-400"}`
           }
         >
-          <span aria-hidden>{PAGE_ICON[page.type]}</span>
+          <PageIcon type={page.type} className="opacity-75" />
           <span className="truncate">{page.title || "Untitled"}</span>
         </NavLink>
         {canEdit && (

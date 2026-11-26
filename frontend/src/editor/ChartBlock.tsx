@@ -6,10 +6,12 @@
  * is always drawn from live rows, so it updates as the database changes. Readers who
  * cannot see the database get a notice instead of the chart.
  */
+import { ChartColumn } from "lucide-react";
 import { mergeAttributes, Node } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import { useMemo, useState } from "react";
 
+import { Icon } from "@/components/icons";
 import { ChartSettings } from "@/charts/ChartSettings";
 import { normalizeChartConfig } from "@/charts/config";
 import { DatabaseChart } from "@/charts/DatabaseChart";
@@ -57,7 +59,7 @@ function ChartBlockView({ node, updateAttributes, deleteNode, editor, selected, 
       className={`my-4 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 ${selected ? "ring-2 ring-brand-500" : ""}`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="min-w-0 truncate text-sm font-medium">📊 {database ? database.title || "Untitled database" : "Chart"}</div>
+        <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium"><Icon icon={ChartColumn} className="text-zinc-500" /><span className="truncate">{database ? database.title || "Untitled database" : "Chart"}</span></div>
         {editable && (
           <div className="flex shrink-0 gap-1 text-xs">
             <button type="button" onClick={() => setEditing((v) => !v)} className="rounded px-2 py-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">

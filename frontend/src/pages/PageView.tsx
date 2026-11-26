@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { History, MessageSquare, Share2, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { GenerateMenu } from "@/ai/GenerateMenu";
 import { Backlinks } from "@/components/Backlinks";
-import { ancestorsOf, PAGE_ICON } from "@/components/PageTree";
+import { Icon, PageIcon, type LucideIcon } from "@/components/icons";
+import { ancestorsOf } from "@/components/PageTree";
 import { Popover } from "@/components/Popover";
 import { ShareDialog } from "@/components/ShareDialog";
 import { DatabasePage } from "@/database/DatabasePage";
@@ -89,9 +91,9 @@ function ShareButton({ page }: { page: Page }) {
         aria-expanded={open}
         aria-label="Share"
         title="Share"
-        className="rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
-        <Label icon="🔗" text="Share" />
+        <Label icon={Share2} text="Share" />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={380} label="Share">
@@ -119,7 +121,7 @@ function FolderView({ page }: { page: Page }) {
           {children.map((child) => (
             <li key={child.id}>
               <Link to={`/w/${page.workspace_id}/p/${child.id}`} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                <span aria-hidden>{PAGE_ICON[child.type]}</span>
+                <PageIcon type={child.type} className="text-zinc-500" />
                 {child.title || "Untitled"}
               </Link>
             </li>
@@ -130,17 +132,17 @@ function FolderView({ page }: { page: Page }) {
       )}
       {atLeast(page.my_role, "editor") && (
         <div className="flex gap-2">
-          <button onClick={() => void add("document")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-            + Document
+          <button onClick={() => void add("document")} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            <PageIcon type="document" className="text-zinc-500" /> Document
           </button>
-          <button onClick={() => void add("database")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-            + Database
+          <button onClick={() => void add("database")} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            <PageIcon type="database" className="text-zinc-500" /> Database
           </button>
-          <button onClick={() => void add("mindmap")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-            + Mind map
+          <button onClick={() => void add("mindmap")} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            <PageIcon type="mindmap" className="text-zinc-500" /> Mind map
           </button>
-          <button onClick={() => void add("drawing")} className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-            + Drawing
+          <button onClick={() => void add("drawing")} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            <PageIcon type="drawing" className="text-zinc-500" /> Drawing
           </button>
         </div>
       )}
@@ -148,26 +150,24 @@ function FolderView({ page }: { page: Page }) {
   );
 }
 
-/** A header action: an icon on phones, the word on wider screens. */
-function Label({ icon, text }: { icon: string; text: string }) {
+/** A header action: an icon, plus the word on wider screens. */
+function Label({ icon, text }: { icon: LucideIcon; text: string }) {
   return (
     <>
-      <span aria-hidden className="sm:hidden">
-        {icon}
-      </span>
+      <Icon icon={icon} />
       <span className="hidden sm:inline">{text}</span>
     </>
   );
 }
 
-function HeaderButton({ active, onClick, icon, label }: { active?: boolean; onClick: () => void; icon: string; label: string }) {
+function HeaderButton({ active, onClick, icon, label }: { active?: boolean; onClick: () => void; icon: LucideIcon; label: string }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
       aria-label={label}
       title={label}
-      className="rounded-md px-2 py-1 text-sm whitespace-nowrap text-zinc-600 hover:bg-zinc-100 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm whitespace-nowrap text-zinc-600 hover:bg-zinc-100 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900 sm:px-2.5 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:aria-pressed:bg-zinc-700 dark:aria-pressed:text-white"
     >
       <Label icon={icon} text={label} />
     </button>
@@ -197,17 +197,17 @@ export function PageView() {
         {presence}
         <div className="flex shrink-0 items-center sm:gap-1">
           {data.type === "document" && (
-            <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")} icon="💬" label="Comments" />
+            <HeaderButton active={panel === "comments"} onClick={() => toggle("comments")} icon={MessageSquare} label="Comments" />
           )}
           {LIVE_PAGE_TYPES.includes(data.type) && (
-            <HeaderButton active={panel === "history"} onClick={() => toggle("history")} icon="🕘" label="History" />
+            <HeaderButton active={panel === "history"} onClick={() => toggle("history")} icon={History} label="History" />
           )}
           <GenerateMenu page={data} />
           {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
           <PageMenu page={data} />
           {atLeast(data.my_role, "editor") && (
             <HeaderButton
-              icon="🗑"
+              icon={Trash2}
               label="Delete"
               onClick={async () => {
                 if (!window.confirm(`Delete “${data.title || "Untitled"}” and every page inside it?`)) return;

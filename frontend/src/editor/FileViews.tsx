@@ -1,5 +1,7 @@
+import { Paperclip } from "lucide-react";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 
+import { Icon } from "@/components/icons";
 import { useFile } from "@/lib/queries";
 
 import type { FileContext } from "./extensions";
@@ -47,7 +49,7 @@ export function FileAttachmentView(props: ReactNodeViewProps) {
         className={`flex items-center gap-3 rounded-md border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800 ${props.selected ? "ring-2 ring-brand-500" : ""}`}
         contentEditable={false}
       >
-        <span aria-hidden className="text-lg">📎</span>
+        <Icon icon={Paperclip} size={18} className="text-zinc-500" />
         <span className="min-w-0 flex-1 truncate font-medium">{filename}</span>
         <span className="text-xs text-zinc-500">{formatBytes(size)}</span>
       </a>

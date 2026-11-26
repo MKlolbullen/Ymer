@@ -1,5 +1,7 @@
+import { Plus, SquareCheck } from "lucide-react";
 import { useState } from "react";
 
+import { Icon } from "@/components/icons";
 import type { DatabaseView, Row } from "@/lib/types";
 
 import { CellValue, OptionChip } from "./cells";
@@ -97,7 +99,7 @@ export function BoardView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                 {shown.map((p) =>
                   row.values[p.id] === null || row.values[p.id] === undefined ? null : (
                     <div key={p.id} className="truncate text-xs text-zinc-600 dark:text-zinc-400" title={p.name}>
-                      {p.type === "checkbox" ? `✓ ${p.name}` : <CellValue property={p} value={row.values[p.id]} />}
+                      {p.type === "checkbox" ? <><Icon icon={SquareCheck} size={12} className="mr-1 inline-block align-[-2px]" />{p.name}</> : <CellValue property={p} value={row.values[p.id]} />}
                     </div>
                   ),
                 )}
@@ -113,7 +115,7 @@ export function BoardView({ view, rows }: { view: DatabaseView; rows: Row[] }) {
                 }
                 className="rounded-md px-2 py-1 text-left text-sm text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800"
               >
-                + New
+                <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />New
               </button>
             )}
           </section>

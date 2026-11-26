@@ -1,7 +1,9 @@
 /** Adding properties and editing one: name, type, options, relation and rollup settings. */
+import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState, type FormEvent } from "react";
 
+import { Icon, PropertyIcon } from "@/components/icons";
 import { inputClass, MenuItem } from "@/components/Popover";
 import { ApiError } from "@/lib/api";
 import { fetchDatabase, usePages } from "@/lib/queries";
@@ -18,7 +20,6 @@ import {
   rollupFunctionsFor,
   rollupOpsFor,
   rollupTargets,
-  TYPE_ICON,
 } from "./logic";
 
 const label = "mb-1 block text-xs font-medium text-zinc-500";
@@ -76,7 +77,7 @@ function RollupFilters({
                 ))}
               </select>
               <button type="button" aria-label="Remove filter" onClick={() => onChange(filters.filter((_, j) => j !== i))} className="px-1 text-zinc-400 hover:text-rose-600">
-                ×
+                <Icon icon={X} size={14} />
               </button>
             </div>
             <div className="flex gap-1">
@@ -160,7 +161,7 @@ function RollupFilters({
           onClick={() => onChange([...filters, { property_id: properties[0]!.id, op: rollupOpsFor(properties[0]!.type)[0]!.op }])}
           className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-500"
         >
-          + Add a filter
+          <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />Add a filter
         </button>
       )}
     </div>
@@ -373,7 +374,7 @@ export function AddPropertyForm({ onDone }: { onDone: () => void }) {
         >
           {PROPERTY_TYPES.map((t) => (
             <option key={t.type} value={t.type}>
-              {t.icon} {t.label}
+              {t.label}
             </option>
           ))}
         </select>
@@ -460,7 +461,7 @@ function OptionsEditor({ property }: { property: Property }) {
             onClick={() => save(options.filter((_, j) => j !== i))}
             className="px-1 text-zinc-400 hover:text-rose-600"
           >
-            ×
+            <Icon icon={X} size={14} />
           </button>
         </div>
       ))}
@@ -544,7 +545,7 @@ export function PropertyMenu({
           >
             {PROPERTY_TYPES.filter((t) => CONVERTIBLE.includes(t.type)).map((t) => (
               <option key={t.type} value={t.type}>
-                {t.icon} {t.label}
+                {t.label}
               </option>
             ))}
           </select>
@@ -552,7 +553,7 @@ export function PropertyMenu({
       )}
       {!CONVERTIBLE.includes(property.type) && (
         <p className="px-2 py-1 text-xs text-zinc-500">
-          {TYPE_ICON[property.type]} {property.type === "title" ? "Title (every row has one)" : PROPERTY_TYPES.find((t) => t.type === property.type)?.label}
+          <PropertyIcon type={property.type} size={14} className="mr-1 inline-block align-[-2px]" />{property.type === "title" ? "Title (every row has one)" : PROPERTY_TYPES.find((t) => t.type === property.type)?.label}
           {property.type === "relation" && (
             <>
               {" "}to <strong>{target ? target.title || "Untitled" : "a database you cannot see"}</strong>
@@ -611,8 +612,8 @@ export function PropertyMenu({
       {update.error && <p className="px-2 text-xs text-rose-600">{errorText(update.error)}</p>}
       {view && canEdit && (
         <div className="border-t border-zinc-200 pt-1 dark:border-zinc-800">
-          <MenuItem onClick={() => sortBy("asc")}>↑ Sort ascending</MenuItem>
-          <MenuItem onClick={() => sortBy("desc")}>↓ Sort descending</MenuItem>
+          <MenuItem onClick={() => sortBy("asc")}><Icon icon={ArrowUp} className="text-zinc-500" /> Sort ascending</MenuItem>
+          <MenuItem onClick={() => sortBy("desc")}><Icon icon={ArrowDown} className="text-zinc-500" /> Sort descending</MenuItem>
           {property.type !== "title" && <MenuItem onClick={hide}>Hide in this view</MenuItem>}
         </div>
       )}

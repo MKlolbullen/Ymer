@@ -1,13 +1,15 @@
 /** A database page: view tabs, the view's toolbar, and the table or board itself. */
+import { ChartColumn, Plus, SquareKanban, Table2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 
+import { Icon, type LucideIcon } from "@/components/icons";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { useDatabase, useDatabaseMutations, useRows } from "@/lib/queries";
 import { atLeast, type DatabaseView, type Page, type Property, type Row, type SelectOption, type ViewType } from "@/lib/types";
 
-const VIEW_ICON: Record<ViewType, string> = { table: "▤", board: "▥", chart: "📊" };
+const VIEW_ICON: Record<ViewType, LucideIcon> = { table: Table2, board: SquareKanban, chart: ChartColumn };
 const VIEW_LABEL: Record<ViewType, string> = { table: "Table", board: "Board", chart: "Chart" };
 
 import { BoardView } from "./BoardView";
@@ -34,9 +36,9 @@ function ViewTab({ view, active, onSelect, canDelete }: { view: DatabaseView; ac
         role="tab"
         aria-selected={active}
         onClick={() => (active && canEdit ? setMenu(true) : onSelect())}
-        className={`border-b-2 px-2 py-1.5 text-sm ${active ? "border-zinc-900 font-medium dark:border-white" : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white"}`}
+        className={`inline-flex items-center gap-1.5 border-b-2 px-2 py-1.5 text-sm ${active ? "border-zinc-900 font-medium dark:border-white" : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white"}`}
       >
-        {VIEW_ICON[view.type]} {view.name}
+        <Icon icon={VIEW_ICON[view.type]} /> {view.name}
       </button>
       {menu && (
         <Popover anchor={ref.current} onClose={() => setMenu(false)} label="View settings">
@@ -97,13 +99,13 @@ function AddView({ onCreated, properties }: { onCreated: (id: string) => void; p
   return (
     <>
       <button ref={ref} type="button" aria-label="Add a view" title="Add a view" onClick={() => setOpen(true)} className="px-2 py-1.5 text-sm text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-        +
+        <Icon icon={Plus} />
       </button>
       {open && (
         <Popover anchor={ref.current} onClose={() => setOpen(false)} width={180} label="Add a view">
-          <MenuItem onClick={() => void create("table")}>▤ Table</MenuItem>
-          <MenuItem onClick={() => void create("board")}>▥ Board</MenuItem>
-          <MenuItem onClick={() => void create("chart")}>📊 Chart</MenuItem>
+          <MenuItem onClick={() => void create("table")}><Icon icon={Table2} className="text-zinc-500" /> Table</MenuItem>
+          <MenuItem onClick={() => void create("board")}><Icon icon={SquareKanban} className="text-zinc-500" /> Board</MenuItem>
+          <MenuItem onClick={() => void create("chart")}><Icon icon={ChartColumn} className="text-zinc-500" /> Chart</MenuItem>
         </Popover>
       )}
     </>

@@ -1,13 +1,15 @@
 /** View settings: filters, sorts, visible properties and (for boards) the grouping. */
+import { Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 
+import { Icon, PropertyIcon } from "@/components/icons";
 import { inputClass, Popover } from "@/components/Popover";
 import { fetchDatabase, fetchRows, useMembers } from "@/lib/queries";
 import type { DatabaseView, FilterOp, Property, ViewConfig, ViewFilter } from "@/lib/types";
 
 import { useDatabaseContext } from "./context";
-import { needsValue, opsFor, optionsOf, rowTitle, TYPE_ICON } from "./logic";
+import { needsValue, opsFor, optionsOf, rowTitle } from "./logic";
 
 function ToolbarButton({ label, count, children }: { label: string; count?: number; children: (close: () => void) => ReactNode }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -154,7 +156,7 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                     >
                       {properties.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {TYPE_ICON[p.type]} {p.name}
+                          {p.name}
                         </option>
                       ))}
                     </select>
@@ -173,7 +175,7 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                     </select>
                     {canEdit && (
                       <button type="button" aria-label="Remove filter" onClick={() => save({ filters: filters.filter((_, j) => j !== i) })} className="px-1 text-zinc-400 hover:text-rose-600">
-                        ×
+                        <Icon icon={X} size={14} />
                       </button>
                     )}
                   </div>
@@ -190,7 +192,7 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                   save({ filters: [...filters, { property_id: first.id, op: opsFor(first.type)[0]!.op, value: null }] });
                 }}
               >
-                + Add a filter
+                <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />Add a filter
               </button>
             )}
           </div>
@@ -232,7 +234,7 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                 </select>
                 {canEdit && (
                   <button type="button" aria-label="Remove sort" onClick={() => save({ sorts: sorts.filter((_, j) => j !== i) })} className="px-1 text-zinc-400 hover:text-rose-600">
-                    ×
+                    <Icon icon={X} size={14} />
                   </button>
                 )}
               </div>
@@ -243,7 +245,7 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                 className="text-sm text-brand-600"
                 onClick={() => save({ sorts: [...sorts, { property_id: properties[0]!.id, direction: "asc" }] })}
               >
-                + Add a sort
+                <Icon icon={Plus} size={14} className="mr-1 inline-block align-[-2px]" />Add a sort
               </button>
             )}
           </div>
@@ -265,9 +267,8 @@ export function ViewToolbar({ view, search, onSearch }: { view: DatabaseView; se
                       save({ hidden: e.target.checked ? config.hidden.filter((h) => h !== p.id) : [...config.hidden, p.id] })
                     }
                   />
-                  <span className="truncate">
-                    {TYPE_ICON[p.type]} {p.name}
-                  </span>
+                  <PropertyIcon type={p.type} size={14} className="text-zinc-500" />
+                  <span className="truncate">{p.name}</span>
                 </label>
               ))}
             {properties.length <= 1 && <p className="px-2 py-1 text-xs text-zinc-500">Only the title so far.</p>}

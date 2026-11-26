@@ -2,6 +2,7 @@
  * Draws a mind map with React Flow. Stateless about storage: the live editor
  * (MindMapPage) and the version preview both feed it plain nodes.
  */
+import { ArrowUpRight } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -21,6 +22,7 @@ import {
 } from "@xyflow/react";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { Icon } from "@/components/icons";
 import type { Theme } from "@/charts/palette";
 import { useColorMode } from "@/lib/appearance";
 
@@ -143,7 +145,7 @@ const IdeaNodeView = memo(function IdeaNodeView({ data, selected }: NodeProps<Id
           }}
           className={`nodrag mt-0.5 block w-full truncate text-xs underline-offset-2 hover:underline ${data.isRoot ? "text-white/90" : "text-brand-600"}`}
         >
-          ↗ {data.link.title}
+          <Icon icon={ArrowUpRight} size={12} className="mr-0.5 inline-block align-[-2px]" />{data.link.title}
         </button>
       )}
       {data.remote.length > 0 && (

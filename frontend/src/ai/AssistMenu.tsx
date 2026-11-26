@@ -1,6 +1,8 @@
 import type { Editor } from "@tiptap/react";
+import { AlignLeft, Expand, List, Shrink, Sparkles, SpellCheck, WandSparkles } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { Icon, type LucideIcon } from "@/components/icons";
 import { inputClass, MenuItem, Popover } from "@/components/Popover";
 import { ApiError } from "@/lib/api";
 
@@ -9,13 +11,13 @@ import { assist, textToContent, useAiStatus, type AssistAction } from "./api";
 type Range = { from: number; to: number; text: string };
 type Request = { action: AssistAction; instruction?: string };
 
-const ACTIONS: { action: AssistAction; label: string; icon: string }[] = [
-  { action: "improve", label: "Improve writing", icon: "✨" },
-  { action: "fix", label: "Fix spelling and grammar", icon: "✓" },
-  { action: "shorten", label: "Make shorter", icon: "↘" },
-  { action: "expand", label: "Make longer", icon: "↗" },
-  { action: "summarize", label: "Summarize", icon: "≡" },
-  { action: "bullets", label: "Turn into a bulleted list", icon: "•" },
+const ACTIONS: { action: AssistAction; label: string; icon: LucideIcon }[] = [
+  { action: "improve", label: "Improve writing", icon: WandSparkles },
+  { action: "fix", label: "Fix spelling and grammar", icon: SpellCheck },
+  { action: "shorten", label: "Make shorter", icon: Shrink },
+  { action: "expand", label: "Make longer", icon: Expand },
+  { action: "summarize", label: "Summarize", icon: AlignLeft },
+  { action: "bullets", label: "Turn into a bulleted list", icon: List },
 ];
 
 export function DemoNote({ className = "" }: { className?: string }) {
@@ -115,7 +117,7 @@ export function AssistMenu({
         onClick={() => (open ? setOpen(false) : openMenu())}
         className="inline-flex h-8 items-center gap-1 rounded px-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-500 dark:hover:bg-zinc-800"
       >
-        ✨<span className="hidden sm:inline">AI</span>
+        <Icon icon={Sparkles} /><span className="hidden sm:inline">AI</span>
       </button>
       <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-700" aria-hidden />
       {open && (
@@ -133,7 +135,7 @@ export function AssistMenu({
                 <>
                   {ACTIONS.map((a) => (
                     <MenuItem key={a.action} onClick={() => void run({ action: a.action })}>
-                      <span aria-hidden className="w-4 text-center">{a.icon}</span>
+                      <Icon icon={a.icon} className="text-zinc-500" />
                       {a.label}
                     </MenuItem>
                   ))}
@@ -163,7 +165,7 @@ export function AssistMenu({
                 </>
               ) : (
                 <MenuItem onClick={() => void run({ action: "summarize" })}>
-                  <span aria-hidden className="w-4 text-center">≡</span>
+                  <Icon icon={AlignLeft} className="text-zinc-500" />
                   {range ? "Summarize the selection" : "Summarize this page"}
                 </MenuItem>
               )}

@@ -2,8 +2,10 @@
  * Stage F3: build the approved plan. Start (or continue) a build, follow its log while
  * the agent works task by task, stop it, and browse the files it wrote.
  */
+import { CircleCheck, Dot, FilePen, Flag, FlaskConical, ListTodo, MessageSquare, OctagonX, Play, Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { Icon, type LucideIcon } from "@/components/icons";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Page } from "@/lib/types";
 
@@ -49,17 +51,19 @@ const STATUS: Record<FactoryRun["status"], { label: string; tone: string }> = {
   },
 };
 
-const EVENT_ICON: Record<string, string> = {
-  start: "▶",
-  task: "📌",
-  note: "💬",
-  file: "📝",
-  tests: "🧪",
-  command: "⌨",
-  done: "✅",
-  blocked: "⛔",
-  finish: "🏁",
+const EVENT_ICON: Record<string, LucideIcon> = {
+  start: Play,
+  task: ListTodo,
+  note: MessageSquare,
+  file: FilePen,
+  tests: FlaskConical,
+  command: Terminal,
+  done: CircleCheck,
+  blocked: OctagonX,
+  finish: Flag,
 };
+
+const EventIcon = ({ kind }: { kind: string }) => <Icon icon={EVENT_ICON[kind] ?? Dot} size={14} className="mr-1.5 inline-block align-[-2px]" />;
 
 function eventTone(e: RunEvent) {
   if (e.kind === "tests")
@@ -101,9 +105,7 @@ function RunLog({ events, active }: { events: RunEvent[]; active: boolean }) {
             e.kind === "start") ? (
             <details>
               <summary className={`cursor-pointer ${eventTone(e)}`}>
-                <span aria-hidden className="mr-1.5">
-                  {EVENT_ICON[e.kind] ?? "•"}
-                </span>
+                <EventIcon kind={e.kind} />
                 {e.title}
               </summary>
               <pre className="mt-1 ml-5 whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
@@ -112,9 +114,7 @@ function RunLog({ events, active }: { events: RunEvent[]; active: boolean }) {
             </details>
           ) : (
             <span className={eventTone(e)}>
-              <span aria-hidden className="mr-1.5">
-                {EVENT_ICON[e.kind] ?? "•"}
-              </span>
+              <EventIcon kind={e.kind} />
               {e.title}
             </span>
           )}
@@ -269,7 +269,7 @@ export function Build({ page, factory: f }: { page: Page; factory: Factory }) {
               <RunCard run={run} />
               {run.status === "passed" && run.summary && (
                 <p className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  ✓ {run.summary} Review it below and approve it as a release.
+                  <Icon icon={CircleCheck} className="mr-1 inline-block align-[-3px]" />{run.summary} Review it below and approve it as a release.
                 </p>
               )}
               {run.error && (

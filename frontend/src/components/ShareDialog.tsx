@@ -1,5 +1,7 @@
+import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useGrantMutations, useGrants } from "@/lib/queries";
 import { atLeast, type Page, type Role } from "@/lib/types";
@@ -78,7 +80,7 @@ export function ShareDialog({ page }: { page: Page }) {
               ))}
             </select>
             <button type="button" aria-label={`Remove ${g.display_name}`} onClick={() => remove.mutate(g.user_id)} className="px-1 text-zinc-400 hover:text-rose-600">
-              ×
+              <Icon icon={X} size={14} />
             </button>
           </li>
         ))}
