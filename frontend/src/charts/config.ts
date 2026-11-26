@@ -26,8 +26,23 @@ export const DATE_BUCKETS: { value: DateBucket; label: string }[] = [
 ];
 
 /** Properties a chart can group by (everything but rollups of rollups, which the server refuses anyway). */
-const GROUPABLE: PropertyType[] = ["title", "text", "number", "select", "multi_select", "date", "checkbox", "url", "person", "relation", "rollup"];
-const NUMERIC: PropertyType[] = ["number", "rollup"];
+const GROUPABLE: PropertyType[] = [
+  "title",
+  "text",
+  "number",
+  "select",
+  "multi_select",
+  "date",
+  "date_range",
+  "checkbox",
+  "url",
+  "person",
+  "relation",
+  "rollup",
+  "formula",
+  "file",
+];
+const NUMERIC: PropertyType[] = ["number", "rollup", "formula"];
 
 export const groupable = (properties: Property[]) => properties.filter((p) => GROUPABLE.includes(p.type));
 export const numeric = (properties: Property[]) => properties.filter((p) => NUMERIC.includes(p.type));

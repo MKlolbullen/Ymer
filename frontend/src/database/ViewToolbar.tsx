@@ -61,6 +61,7 @@ function FilterValue({ property, filter, onChange }: { property: Property; filte
     case "relation":
       return <RelatedRowChoice property={property} value={String(value)} onChange={onChange} />;
     case "date":
+    case "date_range":
       return <input type="date" className={inputClass} value={String(value).slice(0, 10)} onChange={(e) => onChange(e.target.value || null)} />;
     case "number":
     case "rollup":

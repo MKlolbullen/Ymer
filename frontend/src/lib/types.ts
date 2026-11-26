@@ -5,7 +5,8 @@ export type PageType = "document" | "database" | "mindmap" | "drawing" | "folder
 export const LIVE_PAGE_TYPES: PageType[] = ["document", "mindmap", "drawing"];
 
 export type User = { id: string; email: string; display_name: string };
-export type Person = { id: string; display_name: string };
+/** A person value: a member (id), or a name that no member has (id null). */
+export type Person = { id: string | null; display_name: string };
 
 export type Workspace = { id: string; name: string; role: Role | null; created_at: string };
 
@@ -79,7 +80,16 @@ export type PropertyType =
   | "url"
   | "person"
   | "relation"
-  | "rollup";
+  | "rollup"
+  | "formula"
+  | "date_range"
+  | "file";
+
+export type DateRange = { start: string; end: string | null };
+/** A file value: a link (s3://, https://…) or a file uploaded to the database page. */
+export type FileRef = { name: string; url?: string; file_id?: string };
+/** A rollup filter compares with a value, or with a property of the row being computed. */
+export type RollupFilter = { property_id: string; op: FilterOp; value?: unknown };
 
 export type SelectOption = { id: string; name: string; color: string };
 
@@ -92,6 +102,11 @@ export type PropertyConfig = {
   relation_property_id?: string;
   target_property_id?: string;
   function?: RollupFunction;
+  filters?: RollupFilter[];
+  through_property_id?: string;
+  through_filters?: RollupFilter[];
+  weight_property_id?: string;
+  expression?: string;
 };
 
 export type RollupFunction =
@@ -103,7 +118,10 @@ export type RollupFunction =
   | "average"
   | "min"
   | "max"
-  | "percent_checked";
+  | "percent_checked"
+  | "median"
+  | "weighted_average"
+  | "top_option";
 
 export type Property = { id: string; name: string; type: PropertyType; config: PropertyConfig; position: number };
 
@@ -117,7 +135,9 @@ export type FilterOp =
   | "lt"
   | "lte"
   | "is_empty"
-  | "is_not_empty";
+  | "is_not_empty"
+  | "in"
+  | "not_in";
 
 export type ViewFilter = { property_id: string; op: FilterOp; value?: unknown };
 export type ViewSort = { property_id: string; direction: "asc" | "desc" };
