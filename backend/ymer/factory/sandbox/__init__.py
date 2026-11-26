@@ -8,11 +8,13 @@ runs, and is thrown away, so nothing leaks between commands, runs or factories.
 Backends (``YMER_FACTORY_SANDBOX``):
 
 - ``docker``: a fresh, locked-down container per command (``ymer.factory.sandbox.docker``).
+- ``modal``: the same on Modal's hosted sandboxes, so the server needs no Docker
+  (``ymer.factory.sandbox.modal``).
 - ``fake``: runs nothing; checks test files for syntax and reports what would run. For
   development and tests on machines without Docker.
 - ``off``: builds are turned off.
 
-A hosted backend (for example a managed agent sandbox) only has to implement ``run``.
+Another backend only has to implement ``run``.
 """
 
 from dataclasses import dataclass
@@ -64,6 +66,18 @@ def build_sandbox(settings: Settings) -> Sandbox | None:
             docker_bin=settings.factory_docker_bin,
             memory=settings.factory_memory,
             cpus=settings.factory_cpus,
+        )
+    if settings.factory_sandbox == "modal":
+        from ymer.factory.sandbox.modal import ModalSandbox
+
+        return ModalSandbox(
+            app_name=settings.factory_modal_app,
+            memory=settings.factory_memory,
+            cpus=settings.factory_cpus,
+            dockerfiles=settings.factory_modal_dockerfiles,
+            registry=settings.factory_modal_registry,
+            token_id=settings.factory_modal_token_id,
+            token_secret=settings.factory_modal_token_secret,
         )
     if settings.factory_sandbox == "fake":
         from ymer.factory.sandbox.fake import FakeSandbox
