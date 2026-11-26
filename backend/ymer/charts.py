@@ -40,7 +40,7 @@ DateBucket = Literal["day", "week", "month", "quarter", "year"]
 NO_VALUE = "No value"
 MAX_GROUPS = 100
 # Types whose values can be summed or averaged.
-NUMERIC_TYPES = {T.NUMBER, T.ROLLUP}
+NUMERIC_TYPES = {T.NUMBER, T.ROLLUP, T.FORMULA}
 
 
 class ChartConfig(BaseModel):
@@ -126,7 +126,7 @@ def _groups_of(prop: DatabaseProperty | None, value: Any, bucket: DateBucket) ->
     if t is T.PERSON:
         return [
             _Group(
-                key=p["id"],
+                key=p["id"] or p.get("display_name"),
                 label=p.get("display_name") or "Someone",
                 order=(0, p.get("display_name") or ""),
             )
@@ -141,7 +141,16 @@ def _groups_of(prop: DatabaseProperty | None, value: Any, bucket: DateBucket) ->
             )
             for r in value
         ] or empty
-    if t is T.DATE:
+    if t is T.FILE:
+        return [
+            _Group(key=f.get("name"), label=f.get("name") or "File", order=(0, f.get("name") or ""))
+            for f in value
+        ] or empty
+    if t is T.DATE_RANGE:
+        value = value.get("start") if isinstance(value, dict) else None
+        if not value:
+            return empty
+    if t in {T.DATE, T.DATE_RANGE}:
         try:
             key, label = _date_key(value, bucket)
         except ValueError:

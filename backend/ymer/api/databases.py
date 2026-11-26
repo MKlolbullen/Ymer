@@ -18,7 +18,10 @@ viewer role on the database page, changing anything needs editor.
 
 Values are keyed by property id. A relation value is written as a list of row ids and
 read back as ``[{id, title}]``; ``title`` is null when the related database is hidden
-from the reader. Rollups are read-only. See :mod:`ymer.databases` for the rules.
+from the reader. People are written as member ids or ``{"name"}`` and read back as
+``[{id, display_name}]`` (``id`` null for a name no member has). Files are
+``[{name, url}]`` links or ``[{file_id}]`` files uploaded to the database page. Date ranges
+are ``{start, end}``. Rollups and formulas are read-only. See :mod:`ymer.databases`.
 """
 
 import uuid
@@ -46,18 +49,21 @@ from ymer.databases import (
     clean_options,
     clean_value,
     convert_value,
+    names_to_members,
     next_row_position,
     properties_of,
     relation_target_id,
     search_text_for,
     set_links,
-    workspace_member_ids,
+    workspace_members,
 )
 from ymer.db import db_session
+from ymer.formulas import FormulaError, compile_formula, references, rename_property
 from ymer.models import (
     DatabaseProperty,
     DatabaseRow,
     DatabaseView,
+    File,
     Page,
     PageType,
     PropertyType,
@@ -172,7 +178,8 @@ def _write_values(
     values: dict[str, Any],
 ) -> None:
     by_id = {str(p.id): p for p in props}
-    members: set[str] | None = None
+    members: dict[str, str] | None = None
+    files: dict[str, str] | None = None
     stored = dict(row.values)
     for key, raw in values.items():
         prop = by_id.get(key)
@@ -187,10 +194,18 @@ def _write_values(
                 set_links(db_session, prop, row, raw)
                 continue
             if prop.type not in STORED_TYPES:
-                raise InvalidValue("Rollups are computed and cannot be set.")
+                raise InvalidValue("Rollups and formulas are computed and cannot be set.")
             if prop.type is T.PERSON and members is None:
-                members = workspace_member_ids(db_session, page.workspace_id)
-            value = clean_value(prop, raw, member_ids=members or set())
+                members = workspace_members(db_session, page.workspace_id)
+            if prop.type is T.FILE and files is None:
+                files = _page_files(page)
+            value = clean_value(
+                prop,
+                raw,
+                member_ids=set(members or {}),
+                member_names=names_to_members(members or {}),
+                page_files=files,
+            )
         except InvalidValue as exc:
             raise _invalid(f"values.{key}", str(exc)) from exc
         if value is None:
@@ -200,6 +215,15 @@ def _write_values(
     row.values = stored
     row.search_text = search_text_for(props, stored)
     row.updated_by_id = current_user().id
+
+
+def _page_files(page: Page) -> dict[str, str]:
+    return {
+        str(fid): name
+        for fid, name in db_session.execute(
+            select(File.id, File.filename).where(File.page_id == page.id)
+        )
+    }
 
 
 def _get_row(page: Page, row_id: uuid.UUID) -> DatabaseRow:
@@ -319,44 +343,120 @@ def _clean_config(
             return {"format": fmt}
         if prop_type is T.ROLLUP:
             return _clean_rollup_config(page, config)
+        if prop_type is T.FORMULA:
+            return _clean_formula_config(page, config)
     except InvalidValue as exc:
         raise _invalid("config", str(exc)) from exc
     return {}
+
+
+def _property_in(database_id: uuid.UUID | None, raw: Any, what: str) -> DatabaseProperty:
+    try:
+        prop_id = uuid.UUID(str(raw))
+    except ValueError as exc:
+        raise InvalidValue(f"{what} is missing.") from exc
+    prop = db_session.scalar(
+        select(DatabaseProperty).where(
+            DatabaseProperty.id == prop_id, DatabaseProperty.database_id == database_id
+        )
+    )
+    if prop is None:
+        raise InvalidValue(f"{what} must be a property of the related database.")
+    return prop
+
+
+def _clean_rollup_filters(
+    raw: Any, there: uuid.UUID | None, here: uuid.UUID, what: str
+) -> list[dict]:
+    """Filters on the rows a rollup reaches; a value can be ``{"this": <property id>}``,
+    a property of the row being computed."""
+    if raw in (None, []):
+        return []
+    if not isinstance(raw, list) or len(raw) > 10:
+        raise InvalidValue(f"{what} must be a list of at most 10 filters.")
+    out = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise InvalidValue(f"Each of {what} is {{property_id, op, value}}.")
+        prop = _property_in(there, item.get("property_id"), f"A filter's property in {what}")
+        op = item.get("op")
+        if op not in FILTER_OPS:
+            raise InvalidValue(f"op must be one of {', '.join(sorted(FILTER_OPS))}.")
+        value = item.get("value")
+        if isinstance(value, dict):
+            mine = db_session.scalar(
+                select(DatabaseProperty).where(
+                    DatabaseProperty.id == _uuid_or_none(value.get("this")),
+                    DatabaseProperty.database_id == here,
+                )
+            )
+            if mine is None:
+                raise InvalidValue(
+                    'A {"this": …} filter value must be a property of this database.'
+                )
+            value = {"this": str(mine.id)}
+        out.append({"property_id": str(prop.id), "op": op, "value": value})
+    return out
+
+
+def _uuid_or_none(raw: Any) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(raw))
+    except ValueError:
+        return None
 
 
 def _clean_rollup_config(page: Page, config: dict[str, Any]) -> dict[str, Any]:
     function = config.get("function", "count")
     if function not in ROLLUP_FUNCTIONS:
         raise InvalidValue(f"function must be one of {', '.join(sorted(ROLLUP_FUNCTIONS))}.")
-    try:
-        relation_id = uuid.UUID(str(config.get("relation_property_id")))
-        target_id = uuid.UUID(str(config.get("target_property_id")))
-    except ValueError as exc:
-        raise InvalidValue("A rollup needs relation_property_id and target_property_id.") from exc
     relation = db_session.scalar(
         select(DatabaseProperty).where(
-            DatabaseProperty.id == relation_id,
+            DatabaseProperty.id == _uuid_or_none(config.get("relation_property_id")),
             DatabaseProperty.database_id == page.id,
             DatabaseProperty.type == T.RELATION,
         )
     )
     if relation is None:
         raise InvalidValue("relation_property_id must be a relation in this database.")
-    target = db_session.scalar(
-        select(DatabaseProperty).where(
-            DatabaseProperty.id == target_id,
-            DatabaseProperty.database_id == relation_target_id(relation),
-        )
-    )
-    if target is None:
-        raise InvalidValue("target_property_id must be a property of the related database.")
-    if target.type is T.ROLLUP:
-        raise InvalidValue("A rollup cannot roll up another rollup.")
-    return {
-        "relation_property_id": str(relation_id),
-        "target_property_id": str(target_id),
-        "function": function,
-    }
+    first_db = relation_target_id(relation)
+    cleaned: dict[str, Any] = {"relation_property_id": str(relation.id)}
+    last_db = first_db
+    if filters := _clean_rollup_filters(config.get("filters"), first_db, page.id, "filters"):
+        cleaned["filters"] = filters
+    if config.get("through_property_id"):
+        through = _property_in(first_db, config["through_property_id"], "through_property_id")
+        if through.type is not T.RELATION:
+            raise InvalidValue("through_property_id must be a relation in the related database.")
+        last_db = relation_target_id(through)
+        cleaned["through_property_id"] = str(through.id)
+        if through_filters := _clean_rollup_filters(
+            config.get("through_filters"), last_db, page.id, "through_filters"
+        ):
+            cleaned["through_filters"] = through_filters
+    target = _property_in(last_db, config.get("target_property_id"), "target_property_id")
+    cleaned["target_property_id"] = str(target.id)
+    cleaned["function"] = function
+    if function == "weighted_average":
+        weight = _property_in(last_db, config.get("weight_property_id"), "weight_property_id")
+        cleaned["weight_property_id"] = str(weight.id)
+    if function == "top_option" and target.type not in {T.SELECT, T.MULTI_SELECT}:
+        raise InvalidValue("Highest option works on select and multi-select properties.")
+    return cleaned
+
+
+def _clean_formula_config(page: Page, config: dict[str, Any]) -> dict[str, Any]:
+    expression = config.get("expression")
+    if not isinstance(expression, str):
+        raise InvalidValue("A formula needs an expression.")
+    try:
+        tree = compile_formula(expression)
+    except FormulaError as exc:
+        raise InvalidValue(str(exc)) from exc
+    names = {p.name.lower() for p in properties_of(db_session, page.id)}
+    if missing := sorted(n for n in references(tree) if n.lower() not in names):
+        raise InvalidValue(f"There is no property called {missing[0]!r}.")
+    return {"expression": expression.strip()}
 
 
 def _next_property_position(database_id: uuid.UUID) -> int:
@@ -451,6 +551,8 @@ def update_property(workspace_id: uuid.UUID, database_id: uuid.UUID, prop_id: uu
     if body.name is not None:
         if not body.name.strip():
             raise _invalid("name", "Name cannot be blank.")
+        if body.name.strip() != prop.name:
+            _rename_in_formulas(page, prop.name, body.name.strip())
         prop.name = body.name.strip()
     if body.position is not None:
         prop.position = body.position
@@ -460,7 +562,8 @@ def update_property(workspace_id: uuid.UUID, database_id: uuid.UUID, prop_id: uu
         if prop.type not in CONVERTIBLE_TYPES or new_type not in CONVERTIBLE_TYPES:
             raise _invalid(
                 "type",
-                "Only plain properties can change type; title, relation and rollup cannot.",
+                "Only plain properties can change type; title, relation, rollup and "
+                "formula cannot.",
             )
         config = body.config if body.config is not None else {}
         _change_type(scope, page, prop, new_type, config)
@@ -471,6 +574,19 @@ def update_property(workspace_id: uuid.UUID, database_id: uuid.UUID, prop_id: uu
     mark_dirty(db_session, [page.id])
     db_session.commit()
     return jsonify(property=property_json(prop))
+
+
+def _rename_in_formulas(page: Page, old: str, new: str) -> None:
+    """Formulas refer to properties by name: keep them pointing at the renamed one."""
+    for formula in db_session.scalars(
+        select(DatabaseProperty).where(
+            DatabaseProperty.database_id == page.id, DatabaseProperty.type == T.FORMULA
+        )
+    ):
+        expression = str(formula.config.get("expression") or "")
+        updated = rename_property(expression, old, new)
+        if updated != expression:
+            formula.config = {**formula.config, "expression": updated}
 
 
 def _change_type(
@@ -509,9 +625,13 @@ def _change_type(
             row.values = values
         prop.config = {"options": options}
     else:
+        members = workspace_members(db_session, page.workspace_id)
+        by_name = names_to_members(members)
         for row in rows:
             values = dict(row.values)
-            value = convert_value(values.get(key), prop, new_type)
+            value = convert_value(
+                values.get(key), prop, new_type, people=members, member_names=by_name
+            )
             if value is None or value is False:
                 values.pop(key, None)
             else:

@@ -228,9 +228,9 @@ class _Copier:
             if prop.type is PropertyType.RELATION and str(target) not in self.ids:
                 dropped.add(str(prop.id))
         for prop in props:
-            if (
-                prop.type is PropertyType.ROLLUP
-                and str(prop.config.get("relation_property_id")) in dropped
+            if prop.type is PropertyType.ROLLUP and (
+                str(prop.config.get("relation_property_id")) in dropped
+                or str(prop.config.get("through_property_id")) in dropped
             ):
                 dropped.add(str(prop.id))
         kept = [p for p in props if str(p.id) not in dropped]
@@ -257,7 +257,10 @@ class _Copier:
             self.ids[str(row.id)] = str(uuid.uuid4())
         for row in rows:
             new_db = uuid.UUID(self.ids[str(row.database_id)])
-            values = {self.ids[k]: v for k, v in row.values.items() if k in self.ids}
+            # Values can point at files of the page (file properties): those are copies now.
+            values = _remap_json(
+                {self.ids[k]: v for k, v in row.values.items() if k in self.ids}, self.ids
+            )
             self.session.add(
                 DatabaseRow(
                     id=uuid.UUID(self.ids[str(row.id)]),

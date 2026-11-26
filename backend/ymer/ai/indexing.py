@@ -92,7 +92,12 @@ def row_text(props: list[DatabaseProperty], values: dict) -> str:
         elif prop.type is PropertyType.CHECKBOX:
             value = "yes" if value else "no"
         elif prop.type is PropertyType.PERSON:
-            continue  # user ids say nothing useful
+            # Member ids say nothing useful; names of people who are not members do.
+            value = ", ".join(p["name"] for p in value if isinstance(p, dict) and p.get("name"))
+        elif prop.type is PropertyType.DATE_RANGE:
+            value = " to ".join(v for v in (value.get("start"), value.get("end")) if v)
+        elif prop.type is PropertyType.FILE:
+            value = ", ".join(f.get("name") or "" for f in value)
         if value not in (None, ""):
             lines.append(f"{prop.name}: {value}")
     return "\n".join(lines)

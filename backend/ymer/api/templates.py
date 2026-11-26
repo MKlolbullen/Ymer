@@ -212,7 +212,7 @@ def import_files(workspace_id: uuid.UUID):
             )
         raw.append((upload.filename or "import", data))
     try:
-        plan = build_plan(read_uploads(raw))
+        plan = build_plan(read_uploads(raw), source_name=raw[0][0] if len(raw) == 1 else None)
     except ImportProblem as exc:
         raise UnprocessableEntity(str(exc)) from exc
 
