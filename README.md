@@ -434,8 +434,8 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
 | **S. Hosted sandbox** | Factory builds on hosted Modal sandboxes, from the same images, so the server needs no Docker | ✅ Done |
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
-| **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
 | **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
+| **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
 | **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG) | Planned |
 
 ### Data model
