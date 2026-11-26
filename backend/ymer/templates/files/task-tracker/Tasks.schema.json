@@ -1,0 +1,7 @@
+{"properties": [
+  {"name": "Task", "type": "title"},
+  {"name": "Status", "type": "select", "options": ["To do", "Doing", "Done"]},
+  {"name": "Priority", "type": "select", "options": ["High", "Medium", "Low"]},
+  {"name": "Due", "type": "date"},
+  {"name": "Notes", "type": "text"}
+]}

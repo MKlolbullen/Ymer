@@ -3,7 +3,8 @@
 - ``GET    /api/workspaces/<ws>/pages[?parent_id=<id>|?roots=1]``  pages I can see
 - ``POST   /api/workspaces/<ws>/pages``           editor on the workspace (root) or on parent
 - ``GET    /api/workspaces/<ws>/pages/<id>``      viewer
-- ``PATCH  /api/workspaces/<ws>/pages/<id>``      editor (moving also needs editor on target)
+- ``PATCH  /api/workspaces/<ws>/pages/<id>``      editor (moving also needs editor on target);
+  ``is_template`` saves the page (and its sub-pages) as a template for the workspace
 - ``DELETE /api/workspaces/<ws>/pages/<id>``      editor; deletes the subtree
 - ``POST   /api/workspaces/<ws>/pages/<id>/move``  editor; {parent_id, before_id?} places the
   page among its new siblings (at the end without ``before_id``) and renumbers them
@@ -55,6 +56,7 @@ class CreatePageBody(BaseModel):
 
 class UpdatePageBody(BaseModel):
     title: str | None = Field(default=None, max_length=500)
+    is_template: bool | None = None
     parent_id: uuid.UUID | None = None
     position: int | None = None
 
@@ -81,6 +83,7 @@ def page_json(page: Page, role: Role) -> dict:
         "type": page.type.value,
         "title": page.title,
         "position": page.position,
+        "is_template": page.is_template,
         "my_role": role.value,
         "created_at": page.created_at.isoformat() if page.created_at else None,
         "updated_at": page.updated_at.isoformat() if page.updated_at else None,
@@ -153,6 +156,15 @@ def update_page(workspace_id: uuid.UUID, page_id: uuid.UUID):
         mark_dirty(db_session, [page.id])
     if body.position is not None:
         page.position = body.position
+    if body.is_template is not None and body.is_template != page.is_template:
+        page.is_template = body.is_template
+        audit.record(
+            "page.template" if body.is_template else "page.untemplate",
+            actor=current_user(),
+            workspace_id=workspace_id,
+            target=("page", page.id),
+            details={"title": page.title},
+        )
     if "parent_id" in body.model_fields_set and body.parent_id != page.parent_id:
         new_parent = body.parent_id
         if new_parent is not None and scope.is_descendant(new_parent, page.id):

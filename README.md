@@ -106,6 +106,37 @@ what is planned.
   </tr>
 </table>
 
+### Templates and import
+
+New workspaces do not have to start empty, and neither do new pages.
+
+| Feature | What you get |
+|---|---|
+| **Starter sets** | Creating a workspace offers *Getting started* (a short tour, a task list and a mind map), *Team wiki*, *Personal notes*, *Product team*, or blank. They can also be added to an existing workspace later. |
+| **Page templates** | Meeting notes, project brief, weekly plan, decision record, retrospective, task tracker, reading list, bug tracker and brainstorm, from *Templates* in the sidebar or *From a template or import…* in any **+** menu. Dates in titles are filled in. |
+| **Your own templates** | *Save as template* in a page's **⋯** menu offers that page, with everything inside it, to the whole workspace. Using one makes a full copy, as does *Duplicate*: documents, mind maps, drawings, databases with their rows and views, and attached files, with links inside the copy pointing at the copied pages. |
+| **Notion import** | Drop a Notion *Markdown & CSV* export zip as it is. Pages keep their tree and their order, databases become Ymer databases with typed columns (select, multi-select, date, number, checkbox, URL), links between pages become page mentions with backlinks, and linked images and files are attached. Database row pages with their own content come along as sub-pages. |
+| **Markdown import** | Single `.md` files, CSV files, or a zip of a folder of notes (an Obsidian vault works, `[[wiki links]]` included). Folders become the page tree, front matter titles are used, and everything is searchable straight away. |
+
+Imports map onto what Ymer documents can hold: tables become text blocks for now, and anything that could not be
+brought over is listed when the import finishes.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/templates-new-workspace.png" alt="Creating a workspace, with starter sets to pick from"></td>
+    <td width="50%"><img src="docs/assets/screenshots/templates-gallery.png" alt="The template gallery with page templates and starter sets"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A new workspace starts from a starter set.</sub></td>
+    <td align="center"><sub>Page templates and starter sets, from the sidebar or any + menu.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/assets/screenshots/notion-import.png" alt="A page imported from Notion: the callout, page links, a database link and an image came across" width="900">
+  <br><sub>A Notion export after import: callout, links to sub-pages and a database, and the image, with the page tree on the left.</sub>
+</p>
+
 ### AI layer
 
 Open **AI settings** beside your account name in the workspace sidebar. Choose Anthropic,
@@ -381,7 +412,8 @@ sandbox by default. To run the code they write, pick a real sandbox and rerun th
 backend/     Flask API (Python package `ymer`), models, Alembic migrations, pytest suite
 collab/      Hocuspocus realtime service (TypeScript, run directly by Node 22)
 frontend/    React app: app shell and page tree, editor (src/editor), databases (src/database),
-             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai), Factory (src/factory)
+             mind maps (src/mindmap), drawings (src/drawing), charts (src/charts), AI (src/ai), Factory (src/factory),
+             templates and import (src/templates)
 infra/       Init scripts for the Compose services, and the Factory's sandbox images (infra/factory)
 docs/assets/ Logo, architecture diagram and screenshots used in this README
 ```
@@ -402,13 +434,14 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
 | **S. Hosted sandbox** | Factory builds on hosted Modal sandboxes, from the same images, so the server needs no Docker | ✅ Done |
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
+| **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
 | **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
-| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG), templates and import | Planned |
+| **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG) | Planned |
 
 ### Data model
 
 Today's schema: `users`, `workspaces`, `workspace_members`, `pages` (document, database, mindmap, drawing, folder,
-factory), `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live
+factory; `is_template` marks pages saved as templates), `page_permissions`, `page_links`, `document_content` and `document_versions` (Yjs state for every live
 page type), `comments`, `files`, `database_properties`, `database_rows`, `database_relations` and `database_views`
 (table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,

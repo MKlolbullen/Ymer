@@ -1,0 +1,6 @@
+{"properties": [
+  {"name": "Project", "type": "title"},
+  {"name": "Status", "type": "select", "options": ["Planned", "In progress", "Done", "Paused"]},
+  {"name": "Lead", "type": "text"},
+  {"name": "Target date", "type": "date"}
+]}

@@ -20,6 +20,7 @@ dependencies = [
   "email-validator>=2.2",
   "pycrdt>=0.12",
   "anthropic>=2.13",
+  "markdown-it-py>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["ymer*"]
+
+[tool.setuptools.package-data]
+"ymer.templates" = ["files/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

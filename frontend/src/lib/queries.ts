@@ -55,8 +55,8 @@ export function useWorkspaces() {
 export function useCreateWorkspace() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
-      api<{ workspace: Workspace }>("/workspaces", { method: "POST", json: { name } }).then(
+    mutationFn: ({ name, template = "blank" }: { name: string; template?: string }) =>
+      api<{ workspace: Workspace }>("/workspaces", { method: "POST", json: { name, template } }).then(
         (r) => r.workspace,
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.workspaces }),

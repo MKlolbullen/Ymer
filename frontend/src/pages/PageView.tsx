@@ -12,6 +12,7 @@ import { FactoryPage } from "@/factory/FactoryPage";
 import { DocumentEditor, type Panel } from "@/editor/DocumentEditor";
 import { ApiError } from "@/lib/api";
 import { MindMapPage } from "@/mindmap/MindMapPage";
+import { PageMenu } from "@/templates/PageMenu";
 import { useCreatePage, useDeletePage, usePage, usePages, useUpdatePage } from "@/lib/queries";
 import { atLeast, LIVE_PAGE_TYPES, type Page, type PageType } from "@/lib/types";
 
@@ -203,6 +204,7 @@ export function PageView() {
           )}
           <GenerateMenu page={data} />
           {atLeast(data.my_role, "editor") && <ShareButton page={data} />}
+          <PageMenu page={data} />
           {atLeast(data.my_role, "editor") && (
             <HeaderButton
               icon="🗑"

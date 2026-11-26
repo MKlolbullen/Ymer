@@ -229,15 +229,23 @@ def add_rows(
 
 
 def create_database(
-    session: Session, page: Page, spec: dict, *, user_id: uuid.UUID
+    session: Session,
+    page: Page,
+    spec: dict,
+    *,
+    user_id: uuid.UUID,
+    max_properties: int = MAX_PROPERTIES,
+    max_rows: int = MAX_ROWS,
 ) -> tuple[int, int]:
-    """Fill a new, empty database page from ``spec``. Returns (properties, rows)."""
+    """Fill a new, empty database page from ``spec``. Returns (properties, rows).
+
+    Also used by imports and templates (``ymer.importing``), with higher limits."""
     seen: set[str] = set()
     props: list[DatabaseProperty] = []
     raw_props = spec.get("properties") if isinstance(spec.get("properties"), list) else []
     has_title = False
     for item in raw_props:
-        if len(props) >= MAX_PROPERTIES or not isinstance(item, dict):
+        if len(props) >= max_properties or not isinstance(item, dict):
             continue
         name = _label(item.get("name"))[:200]
         kind = TYPES.get(str(item.get("type")), PropertyType.TEXT)
@@ -284,7 +292,7 @@ def create_database(
     session.flush()
 
     rows = spec.get("rows") if isinstance(spec.get("rows"), list) else []
-    count = len(add_rows(session, page, props, rows[:MAX_ROWS], user_id=user_id))
+    count = len(add_rows(session, page, props, rows[:max_rows], user_id=user_id))
 
     session.add(
         DatabaseView(

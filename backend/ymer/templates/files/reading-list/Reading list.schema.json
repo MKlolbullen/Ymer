@@ -1,0 +1,8 @@
+{"properties": [
+  {"name": "Title", "type": "title"},
+  {"name": "Author", "type": "text"},
+  {"name": "Status", "type": "select", "options": ["Want to read", "Reading", "Finished"]},
+  {"name": "Rating", "type": "number"},
+  {"name": "Tags", "type": "multi_select"},
+  {"name": "Link", "type": "url"}
+]}

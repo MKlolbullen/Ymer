@@ -1,7 +1,8 @@
 """Workspaces and their members.
 
 - ``GET    /api/workspaces``                         workspaces I can access
-- ``POST   /api/workspaces``                         create one; I become its owner
+- ``POST   /api/workspaces``                         create one; I become its owner;
+  ``template`` fills it with a workspace template (``GET /api/templates``)
 - ``GET    /api/workspaces/<id>``                    any member or guest
 - ``PATCH  /api/workspaces/<id>``                    owner
 - ``DELETE /api/workspaces/<id>``                    owner
@@ -44,6 +45,12 @@ workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/workspaces")
 
 class WorkspaceBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+
+
+class CreateWorkspaceBody(WorkspaceBody):
+    # Starter content: a workspace template id from ymer.templates, or "blank". The app
+    # offers "getting-started" first; the API default stays empty for scripts.
+    template: str = Field(default="blank", max_length=100)
 
 
 class AddMemberBody(BaseModel):
@@ -111,13 +118,25 @@ def list_workspaces():
 @workspaces_bp.post("")
 @login_required
 def create_workspace():
-    body = parse_body(WorkspaceBody)
+    from ymer.api.templates import apply_builtin  # the templates API imports this module
+    from ymer.templates import WORKSPACE_TEMPLATES
+
+    body = parse_body(CreateWorkspaceBody)
+    if body.template != "blank" and body.template not in {t.id for t in WORKSPACE_TEMPLATES}:
+        raise BadRequest("Unknown workspace template.")
     user = current_user()
     workspace = Workspace(name=body.name.strip(), created_by_id=user.id)
     workspace.members.append(WorkspaceMember(user_id=user.id, role=Role.OWNER))
     db_session.add(workspace)
     db_session.flush()
-    audit.record("workspace.create", actor=user, workspace_id=workspace.id)
+    if body.template != "blank":
+        apply_builtin(workspace.id, body.template, None, user_id=user.id)
+    audit.record(
+        "workspace.create",
+        actor=user,
+        workspace_id=workspace.id,
+        details={"template": body.template},
+    )
     db_session.commit()
     return jsonify(workspace=workspace_json(workspace, Role.OWNER)), 201
 

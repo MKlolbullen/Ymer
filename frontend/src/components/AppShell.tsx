@@ -8,6 +8,7 @@ import { useOnline } from "@/offline/connectivity";
 import { usePendingPages } from "@/offline/store";
 import { useBackgroundSync } from "@/offline/sync";
 import { atLeast, type Workspace } from "@/lib/types";
+import { TemplatesDialog, type TemplatesTab } from "@/templates/TemplatesDialog";
 
 import { AppearancePicker } from "./AppearancePicker";
 import { ApiStatus } from "./ApiStatus";
@@ -28,6 +29,7 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
   const pages = usePages(workspace.id);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [library, setLibrary] = useState<TemplatesTab | null>(null);
   const ai = useAiStatus();
   const online = useOnline();
   const pending = usePendingPages(session?.user.id);
@@ -96,6 +98,28 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
           <NavLink to={`/w/${workspace.id}/ask`} className={navClass} onClick={() => setMenuOpen(false)}>
             <span aria-hidden>✨</span> Ask AI
           </NavLink>
+        )}
+        {atLeast(workspace.role, "editor") && (
+          <>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                setLibrary("templates");
+              }}
+              className={navClass({ isActive: false })}
+            >
+              <span aria-hidden>🧩</span> Templates
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                setLibrary("import");
+              }}
+              className={navClass({ isActive: false })}
+            >
+              <span aria-hidden>📥</span> Import
+            </button>
+          </>
         )}
         {workspace.role !== null && (
           <NavLink to={`/w/${workspace.id}/members`} className={navClass} onClick={() => setMenuOpen(false)}>
@@ -191,6 +215,9 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">{children}</main>
       </div>
       {searchOpen && <SearchDialog workspaceId={workspace.id} onClose={() => setSearchOpen(false)} />}
+      {library && (
+        <TemplatesDialog workspaceId={workspace.id} parentId={null} initialTab={library} onClose={() => setLibrary(null)} />
+      )}
     </div>
   );
 }

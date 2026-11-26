@@ -5,6 +5,8 @@ import { Navigate, Outlet, useNavigate, useOutletContext, useParams } from "reac
 import { AppShell } from "@/components/AppShell";
 import { useCreatePage, useCreateWorkspace, useWorkspaces } from "@/lib/queries";
 import { atLeast, type Workspace } from "@/lib/types";
+import { useBuiltinTemplates } from "@/templates/api";
+import { TemplatesDialog, type TemplatesTab } from "@/templates/TemplatesDialog";
 
 type LayoutContext = { workspace: Workspace; setHeader: (node: ReactNode) => void };
 
@@ -29,17 +31,23 @@ export function NewWorkspace() {
   const navigate = useNavigate();
   const create = useCreateWorkspace();
   const workspaces = useWorkspaces();
+  const templates = useBuiltinTemplates();
   const [name, setName] = useState("");
+  const [template, setTemplate] = useState("getting-started");
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const workspace = await create.mutateAsync(name.trim());
+    const workspace = await create.mutateAsync({ name: name.trim(), template });
     navigate(`/w/${workspace.id}`);
   };
+  const choices = [
+    ...(templates.data?.workspace ?? []),
+    { id: "blank", name: "Blank", description: "Start with an empty workspace.", icon: "⬜" },
+  ];
 
   return (
-    <div className="flex min-h-full items-center justify-center px-4">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4">
+    <div className="flex min-h-full items-center justify-center px-4 py-8">
+      <form onSubmit={submit} className="w-full max-w-lg space-y-4">
         <h1 className="text-lg font-semibold">Create a workspace</h1>
         <p className="text-sm text-zinc-500">A workspace holds your pages and the people you work with.</p>
         <input
@@ -51,6 +59,28 @@ export function NewWorkspace() {
           required
           className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-medium">Start with</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {choices.map((t) => (
+              <label
+                key={t.id}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-left ${
+                  template === t.id ? "border-brand-500 bg-brand-50/50 dark:bg-zinc-800" : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800"
+                }`}
+              >
+                <input type="radio" name="template" value={t.id} checked={template === t.id} onChange={() => setTemplate(t.id)} className="sr-only" />
+                <span aria-hidden className="text-xl leading-none">
+                  {t.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{t.name}</span>
+                  <span className="block text-xs text-zinc-500">{t.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div className="flex gap-2">
           <button
             type="submit"
@@ -92,6 +122,7 @@ export function WorkspaceHome() {
   const navigate = useNavigate();
   const create = useCreatePage(workspace.id);
   const canCreate = atLeast(workspace.role, "editor");
+  const [library, setLibrary] = useState<TemplatesTab | null>(null);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -100,7 +131,7 @@ export function WorkspaceHome() {
         Pick a page in the sidebar{canCreate ? ", or start something new." : "."} Press Ctrl K (⌘K on a Mac) to search.
       </p>
       {canCreate && (
-        <div className="mt-6 flex gap-2">
+        <div className="mt-6 flex flex-wrap gap-2">
           {(["document", "database"] as const).map((type) => (
             <button
               key={type}
@@ -117,8 +148,21 @@ export function WorkspaceHome() {
               New {type}
             </button>
           ))}
+          <button
+            onClick={() => setLibrary("templates")}
+            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            From a template
+          </button>
+          <button
+            onClick={() => setLibrary("import")}
+            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            Import
+          </button>
         </div>
       )}
+      {library && <TemplatesDialog workspaceId={workspace.id} parentId={null} initialTab={library} onClose={() => setLibrary(null)} />}
     </div>
   );
 }

@@ -17,6 +17,7 @@ from ymer.api.files import files_bp
 from ymer.api.health import health_bp
 from ymer.api.pages import pages_bp
 from ymer.api.search import search_bp
+from ymer.api.templates import templates_bp
 from ymer.api.workspaces import workspaces_bp
 from ymer.app import settings_for
 from ymer.auth.cookies import ACCESS_COOKIE
@@ -58,6 +59,7 @@ api_bp.register_blueprint(search_bp)
 api_bp.register_blueprint(ai_status_bp)
 api_bp.register_blueprint(ai_settings_bp)
 api_bp.register_blueprint(ai_bp)
+api_bp.register_blueprint(templates_bp)
 api_bp.register_blueprint(factory_bp)
 api_bp.register_blueprint(deliver_bp)
 api_bp.register_blueprint(preview_bp)

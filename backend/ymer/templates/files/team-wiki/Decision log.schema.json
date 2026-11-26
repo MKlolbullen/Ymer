@@ -1,0 +1,6 @@
+{"properties": [
+  {"name": "Decision", "type": "title"},
+  {"name": "Status", "type": "select", "options": ["Proposed", "Decided", "Replaced"]},
+  {"name": "Date", "type": "date"},
+  {"name": "Why", "type": "text"}
+]}
