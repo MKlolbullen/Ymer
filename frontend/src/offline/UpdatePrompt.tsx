@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 
+import { IN_APP } from "@/lib/app";
+
 /**
  * Registers the service worker (production builds only) and offers a reload when a new
  * version of the app has been downloaded. The worker caches the app shell and recent
- * API reads so Ymer opens without a network; see vite.config.ts.
+ * API reads so Ymer opens without a network; see vite.config.ts. The phone apps ship
+ * the app and cache API reads themselves, so they skip it (src/lib/app.ts).
  */
 export function UpdatePrompt() {
   const [update, setUpdate] = useState<((reload?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
-    if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+    if (!import.meta.env.PROD || IN_APP || !("serviceWorker" in navigator)) return;
     let cancelled = false;
     void import("virtual:pwa-register").then(({ registerSW }) => {
       if (cancelled) return;

@@ -1,0 +1,26 @@
+[package]
+name = "ymer-relay"
+version = "0.1.0"
+description = "Local relay for the Ymer phone apps: serves the bundled web app and forwards server traffic"
+edition = "2021"
+rust-version = "1.90"
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws", "query", "json"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "stream", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+getrandom = "0.3"
+tokio = { version = "1", features = ["net", "rt", "sync", "time", "macros"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }

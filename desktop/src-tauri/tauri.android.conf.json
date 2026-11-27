@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ymer",
+  "identifier": "app.ymer.mobile",
+  "build": {
+    "beforeBuildCommand": "node scripts/build-web.mjs",
+    "frontendDist": "../mobile-web"
+  },
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "android": {
+      "minSdkVersion": 26,
+      "versionCode": 100203
+    }
+  }
+}

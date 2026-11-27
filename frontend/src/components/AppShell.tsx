@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Import, LayoutTemplate, Menu, Search, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Import, LayoutTemplate, Menu, Search, Server, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { NavLink, useNavigate } from "react-router";
 
 import { useAiStatus } from "@/ai/api";
+import { CHANGE_SERVER_URL, IN_APP } from "@/lib/app";
 import { logout, useSession } from "@/lib/auth";
 import { usePages } from "@/lib/queries";
 import { useOnline } from "@/offline/connectivity";
@@ -166,6 +167,11 @@ export function AppShell({ workspace, workspaces, header, children }: Props) {
         <NavLink to={`/w/${workspace.id}/settings`} className={navClass} onClick={() => setMenuOpen(false)}>
           <Icon icon={Settings} /> AI settings
         </NavLink>
+        {IN_APP && (
+          <a href={CHANGE_SERVER_URL} className={navClass({ isActive: false })}>
+            <Icon icon={Server} /> Change server
+          </a>
+        )}
         <AppearancePicker />
         {pending.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-300" role="status">

@@ -418,6 +418,8 @@ Ymer on port 8080. The first start downloads about 1 GB of images.
 | Windows PC | `Ymer-Setup-<version>.exe` | Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2). Use **Start Ymer**, **Stop Ymer** and **Ymer settings** in the Start menu. |
 | Any machine with Docker | `ymer-server-<version>.tar.gz` (or `.zip`) | Unpack it and run `./ymerctl start` (`ymerctl.ps1 start` on Windows). |
 | A Ymer server already | `Ymer-Desktop-*` (`.msi`/`-setup.exe`, `.dmg`, `.AppImage`/`.deb`) | The desktop client opens your server in its own window; pick the server on first launch. |
+| A Ymer server and an Android phone | `Ymer-Android-<version>.apk` | Install it (allow installs from your browser or file manager), enter the server's address on first launch. Works offline once you've opened your pages. |
+| A Ymer server and an iPhone | `Ymer-iOS-<version>.ipa` (when the release has one) | Needs an Apple Developer account to sign it, or TestFlight. See [Phone apps](DEVELOPMENT.md#phone-apps-ios-and-android). |
 
 Open http://localhost:8080 (or the server's address) and create an account. To reach Ymer from other machines, set
 `YMER_PUBLIC_URL` to the address people use and `YMER_HTTP_BIND=0.0.0.0` in the settings file, then restart (the
@@ -473,7 +475,7 @@ frontend/    React app: app shell and page tree, editor (src/editor), databases 
 infra/       Init scripts for the Compose services, and the Factory's sandbox images (infra/factory)
 docs/assets/ Logo, architecture diagram and screenshots used in this README
 packaging/   Release images (packaging/docker), the Compose bundle and ymerctl, the .deb and the Windows installer
-desktop/     Desktop client (Tauri) that opens a Ymer server in its own window
+desktop/     Desktop client and phone apps (Tauri); the phone apps bundle the web app with a local relay
 scripts/     Release helpers: scripts/version.py keeps every package on the version in VERSION
 .github/     Release workflow: a v<version> tag builds and drafts a GitHub release (see CHANGELOG.md)
 ```
@@ -499,6 +501,7 @@ scripts/     Release helpers: scripts/version.py keeps every package on the vers
 | **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
 | **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
 | **R. Beta release** | One version for every package, Docker images on GHCR, a Compose bundle with `ymerctl`, a `.deb` with a systemd service, a Windows installer, a desktop client for Windows, macOS and Linux, all built and drafted as a GitHub release from a version tag | ✅ Done |
+| **N. Native phone apps** | iOS and Android apps (Tauri) that bundle the web app and reach the server through a local relay, so they start and edit offline; Android built and signed in CI, iOS opt-in on macOS | ✅ Done |
 | **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG) | Planned |
 
 ### Data model

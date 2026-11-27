@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 
 import { apiGet, ApiError } from "@/lib/api";
+import { CHANGE_SERVER_URL, IN_APP } from "@/lib/app";
 import { login, register, useSession } from "@/lib/auth";
 
 const input =
@@ -118,6 +119,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             </>
           )}
         </p>}
+        {IN_APP && (
+          <p className="mt-4 text-center text-sm">
+            <a className="text-zinc-500 hover:underline" href={CHANGE_SERVER_URL}>Change server</a>
+          </p>
+        )}
         <div className="mt-5 flex justify-center"><AppearancePicker /></div>
       </div>
     </div>

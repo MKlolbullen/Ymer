@@ -62,6 +62,16 @@ def test_msi_rejects_versions_that_do_not_fit():
         version.msi("1.0.66-beta.1")
 
 
+def test_android_version_codes_grow_with_each_release():
+    order = ["0.1.0-alpha.1", "0.1.0-beta.3", "0.1.0-rc.1", "0.1.0", "0.1.1-beta.1", "0.2.0", "1.0.0", "2.3.4"]
+    codes = [version.android_code(v) for v in order]
+    assert codes == sorted(codes) and len(set(codes)) == len(codes)
+    assert version.android_code("0.1.0-beta.3") == 100203
+    assert version.android_code("2.3.4") == 20304900
+    with pytest.raises(SystemExit):
+        version.android_code("1.100.0")
+
+
 @pytest.mark.parametrize("bad", ["1.2", "v1.2.3", "1.2.3-beta", "1.2.3-dev.1"])
 def test_rejects_unsupported_versions(bad):
     with pytest.raises(SystemExit):

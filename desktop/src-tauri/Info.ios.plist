@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the generated iOS app's Info.plist by the Tauri CLI. -->
+<plist version="1.0">
+<dict>
+  <!-- The web view loads the bundled app from the app's own relay on 127.0.0.1. -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
+  <!-- Asked the first time the app reaches a Ymer server on the local network. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Ymer connects to your Ymer server on the local network.</string>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+</dict>
+</plist>

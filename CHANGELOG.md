@@ -8,6 +8,8 @@ before tagging. If the section is missing or empty, GitHub generates the notes.
 
 ## [0.1.0-beta.3] - unreleased
 
+- **Phone apps:** Ymer for Android (`.apk`, `.aab`) and iOS (`.ipa`, opt-in build on macOS). They bundle the web app and reach your server through a small relay inside the app, so they start and edit offline, even after a restart. Pick the server on first launch; **Change server** is in the sidebar.
+
 - Private installations can disable public sign-ups with `YMER_REGISTRATION_ENABLED=false` and create individual accounts with `flask --app wsgi create-user`. Registration stays open by default.
 - The [installation guide](INSTALLATION.MD) covers private Vultr hosting and setting up two owners with equal workspace permissions.
 - Release checks exercise both registration modes against the packaged server bundle. The private check verifies that a third sign-up is rejected and both provisioned owners can independently rename their shared workspace.
