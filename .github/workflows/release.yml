@@ -221,6 +221,9 @@ jobs:
     name: Smoke-test the bundle
     needs: [version, server-packages]
     runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      YMER_IMAGE_PREFIX: ymer-ci
     steps:
       - uses: actions/checkout@v7
         with:
@@ -228,26 +231,43 @@ jobs:
       - name: Build the images locally
         run: |
           for image in api collab web; do
-            docker build -q -t "ymer-ci-$image:ci" -f "packaging/docker/$image.Dockerfile" .
+            docker build -q -t "$YMER_IMAGE_PREFIX-$image:$VERSION" -f "packaging/docker/$image.Dockerfile" .
           done
       - uses: actions/download-artifact@v8
         with:
           name: dist-server
           path: dist
-      - name: Start the bundle
-        env:
-          YMER_IMAGE_PREFIX: ymer-ci
-          YMER_VERSION: ci
+      - name: Start bundle with default registration
         run: |
-          mkdir run && tar -C run -xzf dist/ymer-server-*.tar.gz
-          cd run/ymer-server-* && ./ymerctl start && ./ymerctl status
+          mkdir run
+          tar -C run -xzf "dist/ymer-server-$VERSION.tar.gz"
+          cd "run/ymer-server-$VERSION"
+          ./ymerctl start
+          ./ymerctl status
       - run: python3 packaging/smoke.py http://localhost:8080
+      - run: ./run/ymer-server-"$VERSION"/ymerctl stop
+      - name: Start fresh private bundle and verify both owners
+        env:
+          COMPOSE_PROJECT_NAME: ymer-private-smoke
+          YMER_HTTP_PORT: "8081"
+        run: |
+          mkdir private
+          tar -C private -xzf "dist/ymer-server-$VERSION.tar.gz"
+          bundle="private/ymer-server-$VERSION"
+          "$bundle/ymerctl" init
+          echo 'YMER_REGISTRATION_ENABLED=false' >> "$bundle/ymer.env"
+          "$bundle/ymerctl" start
+          python3 packaging/smoke.py http://localhost:8081 --private-bundle "$bundle"
       - name: Logs
         if: failure()
-        env:
-          YMER_IMAGE_PREFIX: ymer-ci
-          YMER_VERSION: ci
-        run: cd run/ymer-server-* && ./ymerctl compose logs --no-color
+        run: |
+          for dir in run private; do
+            bundle="$dir/ymer-server-$VERSION"
+            if [ -f "$bundle/ymer.env" ]; then
+              if [ "$dir" = private ]; then export COMPOSE_PROJECT_NAME=ymer-private-smoke; fi
+              "$bundle/ymerctl" compose logs --no-color
+            fi
+          done
 
   windows-setup:
     name: Windows Setup.exe
