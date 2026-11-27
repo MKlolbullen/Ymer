@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: Phases 0 to 4 done, Factory 5 of 5" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%205%2F5-6366f1">
+  <img alt="Status: Phases 0 to 4 done, Factory 5 of 5 with CI" src="https://img.shields.io/badge/status-phases%200%E2%80%934%20done%20%C2%B7%20Factory%205%2F5%20%2B%20CI-6366f1">
   <img alt="Flask 3" src="https://img.shields.io/badge/backend-Flask%203-3f3f46">
   <img alt="React 18" src="https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind%204-3f3f46">
   <img alt="Yjs" src="https://img.shields.io/badge/realtime-Yjs%20%2B%20Hocuspocus-3f3f46">
@@ -230,6 +230,7 @@ same build and review into the next release.
 | **Deliver** | Download a release as a zip, with a `RELEASE.md` on how to run it, a `.gitignore` and, for apps that run in a container, a `Dockerfile`. Preview a web app right on the page. Push a release to a GitHub, GitLab, Bitbucket or Codeberg repository: Ymer adds one commit on top of the branch, never force-pushes, and uses your token for that push only. |
 | **Change requests** | Once the plan is approved, anyone who can edit asks for changes on the factory page, with a title and details. When a source page is edited after the brief, the factory notices, shows which pages changed, and turns the edits into change requests for you. |
 | **Rebuild only what changed** | Planning turns open change requests into new tasks at the end of the Tasks database. Tasks already Done stay Done, so the next build works only on the new ones, starting from the files the last build left. The review then shows what changed, and the release lists the requests it includes, also in its `RELEASE.md`. |
+| **Checks (CI)** | After every passed build, the app's checks run in the sandbox: lint (ruff, or Node's syntax check), build (the package or site is complete), tests, and a smoke run that starts the app or command. Each step's output is on the factory page, and every run is a row in a **Checks** database under the factory, with a chart of passes and failures per day. A release needs the checks to have passed on exactly the files it ships. When they fail, a fix task with the failing output is added to the Tasks database, so the next build repairs it; turn on auto-fix and that build starts by itself, up to three times in a row. Delivered apps get the same check scripts (`.ymer-ci/`) and a GitHub Actions or GitLab CI workflow that runs them. |
 | **Budgets** | Every workspace has a monthly token budget for builds (20 million tokens unless the server sets another default). The build step shows how much is used. Workspace owners can raise, lower or remove the limit; when it runs out, builds stop and say why. |
 | **Sandbox** | Code the AI writes never runs inside Ymer. Each command runs in a throwaway container with no network and limits on memory, CPU and time: Docker on your own server (also with a read-only system, no privileges and a process limit), or a hosted Modal sandbox when the server has no Docker. Builds also have budgets for steps and tokens. In development a demo sandbox checks the files without running anything. |
 
@@ -303,8 +304,19 @@ same build and review into the next release.
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/factory-checks-failed.png" alt="Checks #3 failed: ruff finds an undefined name, a test fails and the smoke run crashes; a fix task is planned"></td>
+    <td width="50%"><img src="docs/assets/screenshots/factory-checks-history.png" alt="The Checks database under the factory: one row per run with status, trigger, date and each step"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Checks that failed, with each step's output and the fix task they planned.</sub></td>
+    <td align="center"><sub>Every run in the Checks database, with a chart view of passes per day.</sub></td>
+  </tr>
+</table>
+
 > These screenshots use the demo model and the demo sandbox, so the code is placeholder and the tests were checked
-> rather than run. With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` (or `modal`) the agent
+> rather than run (the checks screenshots ran in the real Docker sandbox). With `YMER_AI_PROVIDER=anthropic` and `YMER_FACTORY_SANDBOX=docker` (or `modal`) the agent
 > writes real code and the tests really run.
 
 ### Appearance
@@ -455,6 +467,7 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **F3. Factory: build** | Locked-down sandboxes, an agent loop that writes code and runs tests, a live run log and file browser | ✅ Done |
 | **F4. Factory: deliver** | Review and numbered releases, zip download with packaging files (Dockerfile where it fits), isolated preview of web apps, push to a git repository | ✅ Done |
 | **F5. Factory: iterate** | Change requests from reviews and from spec edits, rebuilding only the new tasks, Node.js CLI and FastAPI stacks, monthly budgets per workspace | ✅ Done |
+| **C. Factory: checks (CI)** | Lint, build, tests and a smoke run on every passed build, releases gated on them, failures turned into fix tasks (optionally built automatically), a Checks history database with a chart, and GitHub Actions / GitLab CI workflows delivered with each app | ✅ Done |
 | **S. Hosted sandbox** | Factory builds on hosted Modal sandboxes, from the same images, so the server needs no Docker | ✅ Done |
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
 | **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
@@ -469,7 +482,7 @@ page type), `comments`, `files`, `database_properties`, `database_rows`, `databa
 (table, board, chart), and for the AI layer `ai_chunks` (text chunks with pgvector embeddings), `ai_index_queue` (pages waiting to be
 re-embedded), `ai_conversations` and `ai_messages`, and for the Factory `factory_projects`, `factory_sources`,
 `factory_questions`, `factory_runs`, `factory_run_events`, `factory_files`, `factory_releases`,
-`factory_pushes` and `factory_changes`, and `audit_events` for the audit log. Mind maps and drawings need no
+`factory_pushes`, `factory_changes` and `factory_ci_runs`, and `audit_events` for the audit log. Mind maps and drawings need no
 tables of their own: they are Yjs documents like the rest ([DEVELOPMENT.md](DEVELOPMENT.md) describes their format).
 
 Phase 5 will add, roughly, tables for public links. This is a sketch and will change when the phase is designed.

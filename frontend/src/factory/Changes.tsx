@@ -53,7 +53,11 @@ function ChangeItem({ page, change: c, editable }: { page: Page; change: ChangeR
         <span className="font-medium">{c.title}</span>
         <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{statusText(c)}</span>
         <span className="text-xs text-zinc-500" title={formatDateTime(c.created_at)}>
-          {c.origin === "spec" ? "From edits to the spec" : `Asked by ${c.created_by?.display_name ?? "someone"}`},{" "}
+          {c.origin === "spec"
+            ? "From edits to the spec"
+            : c.origin === "ci"
+              ? "From failing checks"
+              : `Asked by ${c.created_by?.display_name ?? "someone"}`},{" "}
           {timeAgo(c.created_at)}
         </span>
         {editable && (c.status === "open" || c.status === "dismissed") && (

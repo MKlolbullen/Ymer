@@ -74,7 +74,7 @@ export type ChangeRequest = {
   number: number;
   title: string;
   detail: string;
-  origin: "review" | "spec";
+  origin: "review" | "spec" | "ci";
   status: ChangeStatus;
   /** Titles of the tasks planning added for it. */
   tasks: string[];
@@ -105,6 +105,62 @@ export type Delivery = {
   git_branch: string | null;
   git_hosts: string[];
 };
+
+export type CiStatus = "queued" | "running" | "passed" | "failed" | "error";
+
+export type CiStep = {
+  key: "lint" | "build" | "test" | "smoke" | string;
+  name: string;
+  command: string;
+  status: "passed" | "failed";
+  exit_code: number | null;
+  timed_out: boolean;
+  seconds: number | null;
+  /** Present on a single run and on the latest run in the factory. */
+  output?: string | null;
+};
+
+export type CiRun = {
+  id: string;
+  number: number;
+  status: CiStatus;
+  trigger: "build" | "manual";
+  run_id: string | null;
+  stack: string;
+  sandbox: string | null;
+  simulated: boolean;
+  summary: string | null;
+  file_count: number;
+  steps: CiStep[];
+  /** The fix request a failure opened. */
+  change: { number: number; title: string; status: ChangeStatus } | null;
+  fix_run_id: string | null;
+  started_by: Person | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type Checks = {
+  latest: CiRun | null;
+  recent: { number: number; status: CiStatus; created_at: string }[];
+  /** Share of the recent finished runs that passed, 0..1. */
+  pass_rate: number | null;
+  /** The "Checks" history database under the factory. */
+  page_id: string | null;
+  auto_fix: boolean;
+  fix_streak: number;
+  max_auto_fixes: number;
+  gate: boolean;
+  /** Why the current files cannot be released yet (null: the checks passed on them). */
+  release_blocker: string | null;
+};
+
+export const checksActive = (c: Checks | null | undefined) =>
+  !!c?.latest && (c.latest.status === "queued" || c.latest.status === "running");
+
+/** The release button waits for the checks when the server gates releases on them. */
+export const releaseBlocked = (f: Factory) => f.checks.gate && !!f.checks.release_blocker;
 
 export type Stack = {
   key: string;
@@ -157,6 +213,7 @@ export type Factory = {
   changes: ChangeRequest[];
   spec_changes: SpecChange[];
   budget: FactoryBudget;
+  checks: Checks;
 };
 
 /** Brief approved, so the architecture step is open (or already done). */
@@ -201,6 +258,8 @@ export function tokens(n: number): string {
 export const runActive = (run: FactoryRun | null | undefined) =>
   !!run && (run.status === "queued" || run.status === "running" || run.status === "stopping");
 
+const POLL_MS = 1500;
+
 const base = (w: string, p: string) => `/workspaces/${w}/factories/${p}`;
 export const factoryKey = (w: string, p: string) => ["factory", w, p] as const;
 
@@ -208,6 +267,8 @@ export function useFactory(workspaceId: string, pageId: string) {
   return useQuery({
     queryKey: factoryKey(workspaceId, pageId),
     queryFn: () => api<{ factory: Factory }>(base(workspaceId, pageId)).then((r) => r.factory),
+    // Checks run after a build in the background: follow them until they finish.
+    refetchInterval: (q) => (checksActive(q.state.data?.checks) ? POLL_MS : false),
   });
 }
 
@@ -327,6 +388,15 @@ export function useFactoryMutations(workspaceId: string, pageId: string) {
         }),
       onSuccess: () => void qc.invalidateQueries({ queryKey: factoryKey(workspaceId, pageId) }),
     }),
+    runChecks: useMutation({
+      mutationFn: () => api<{ run: CiRun }>(`${url}/checks`, { method: "POST" }),
+      onSuccess: () => void qc.invalidateQueries({ queryKey: factoryKey(workspaceId, pageId) }),
+    }),
+    setAutoFix: useMutation({
+      mutationFn: (autoFix: boolean) =>
+        api<{ factory: Factory }>(`${url}/checks/settings`, { method: "PUT", json: { auto_fix: autoFix } }),
+      ...opts,
+    }),
     stopRun: useMutation({
       mutationFn: (runId: string) =>
         api<{ run: FactoryRun }>(`${url}/runs/${runId}/stop`, {
@@ -346,8 +416,6 @@ export function mergeEvents(previous: RunEvent[], next: RunEvent[]): RunEvent[] 
   const fresh = next.filter((e) => e.seq > last);
   return fresh.length ? [...previous, ...fresh] : previous;
 }
-
-const POLL_MS = 1500;
 
 /**
  * Follow one build: its status and its log. While the build is active the log is

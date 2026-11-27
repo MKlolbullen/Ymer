@@ -16,6 +16,9 @@ the bookkeeping:
 - ``factory_pushes``: each push of a release to a git repository.
 - ``factory_changes``: change requests on a built app, from a review or from a changed
   spec; planning one adds tasks, and a passed build and a release close it.
+- ``factory_ci_runs``: the app's checks (lint, tests, build, smoke) run on its files after
+  every passed build or on request; a release needs them to pass, and a failure turns
+  into a fix task.
 """
 
 import enum
@@ -23,6 +26,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -92,6 +96,17 @@ class FactoryProject(TimestampMixin, Base):
     # Stage F4: where releases were last pushed, offered again next time.
     git_remote: Mapped[str | None] = mapped_column(String(500))
     git_branch: Mapped[str | None] = mapped_column(String(200))
+    # Checks (CI): the database page that keeps their history, whether a failure starts a
+    # fix build by itself, and how many fix builds in a row have run since checks last passed.
+    checks_page_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pages.id", ondelete="SET NULL")
+    )
+    ci_auto_fix: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    ci_fix_streak: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
 
 class FactorySource(Base):
@@ -309,6 +324,7 @@ class ChangeStatus(enum.StrEnum):
 class ChangeOrigin(enum.StrEnum):
     REVIEW = "review"  # a person asked for it
     SPEC = "spec"  # found in edits to the source pages
+    CI = "ci"  # the checks failed; the request carries what failed and its log
 
 
 class FactoryChange(Base):
@@ -348,3 +364,75 @@ class FactoryChange(Base):
         default=lambda: datetime.now(UTC),
     )
     planned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CiStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    PASSED = "passed"  # every step passed
+    FAILED = "failed"  # a step failed: the app has a problem
+    ERROR = "error"  # the checks could not run (sandbox down, files missing)
+
+
+class CiTrigger(enum.StrEnum):
+    BUILD = "build"  # after a passed build
+    MANUAL = "manual"  # someone pressed Run checks
+
+
+class FactoryCiRun(Base):
+    """One run of an app's checks over a snapshot of its files.
+
+    ``steps`` holds each step's outcome: ``{key, name, command, status, exit_code,
+    seconds, output}`` with status ``passed``, ``failed`` or ``skipped`` (after a failure).
+    ``files_hash`` identifies the files checked, so a release can tell whether the files it
+    would ship are the ones that passed.
+    """
+
+    __tablename__ = "factory_ci_runs"
+    __table_args__ = (
+        UniqueConstraint("factory_id", "number", name="uq_factory_ci_runs_factory_number"),
+        Index("ix_factory_ci_runs_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    factory_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("factory_projects.page_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=CiStatus.QUEUED.value)
+    trigger: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The build it checked, when it ran after one.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_runs.id", ondelete="SET NULL")
+    )
+    stack: Mapped[str] = mapped_column(String(40), nullable=False)
+    sandbox: Mapped[str | None] = mapped_column(String(20))
+    files_hash: Mapped[str | None] = mapped_column(String(64))
+    file_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    steps: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # True when the demo sandbox only checked the files and nothing really ran.
+    simulated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    summary: Mapped[str | None] = mapped_column(Text)
+    # The fix request a failure opened (or updated).
+    change_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_changes.id", ondelete="SET NULL")
+    )
+    # The build a failure started by itself (auto-fix).
+    fix_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("factory_runs.id", ondelete="SET NULL")
+    )
+    started_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

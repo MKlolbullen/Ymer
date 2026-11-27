@@ -17,8 +17,9 @@ Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 - ``GET    /files``                the files the builds wrote
 - ``GET    /files/content?path=``  one file's text
 
-Delivery (F4) lives in ``factory_deliver.py`` and iterating (F5: change requests, spec
-changes, change plans and the workspace budget) in ``factory_changes.py``.
+Delivery (F4) lives in ``factory_deliver.py``, iterating (F5: change requests, spec
+changes, change plans and the workspace budget) in ``factory_changes.py``, and the checks
+(CI) in ``factory_ci.py``.
 
 Reading the factory needs viewer access; everything else needs editor. Sources are read
 with the caller's own access, so a source they cannot open is left out of the brief they
@@ -76,6 +77,7 @@ from ymer.factory.brief import (
 from ymer.factory.budget import budget_json, remaining
 from ymer.factory.build import queue_run
 from ymer.factory.changes import MAX_SEEN_CHARS, change_json, changes_of, text_hash
+from ymer.factory.ci import checks_json
 from ymer.factory.document import document_state
 from ymer.factory.releases import delivery_json
 from ymer.factory.runner import sandbox_for, start_inline
@@ -242,6 +244,7 @@ def factory_json(scope: WorkspaceScope, page: Page, project: FactoryProject) -> 
         "budget": budget_json(
             db_session, scope.workspace, settings_for(current_app), can_edit=scope.is_owner
         ),
+        "checks": checks_json(db_session, project, settings_for(current_app)),
     }
 
 

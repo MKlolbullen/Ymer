@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     factory_git_timeout: int = 120
     # How long a preview link works.
     factory_preview_minutes: int = 60
+    # Checks (CI) on built apps: lint, tests, build and a smoke run in the sandbox after
+    # every passed build. With the gate on, a release needs the checks to have passed on
+    # exactly the files it ships.
+    factory_ci_gate: bool = True
+    # Fix builds a factory with auto-fix on may start in a row before a person steps in.
+    factory_ci_max_auto_fixes: int = 3
 
     @field_validator("cors_origins", mode="before")
     @classmethod

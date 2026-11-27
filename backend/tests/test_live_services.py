@@ -271,6 +271,10 @@ def test_build_in_docker_then_push_over_https(app, client, team, docker_images, 
     # Real output from the container, not the demo sandbox's "checked, not run".
     assert all("nothing was run" not in (e["detail"] or "") for e in tests)
     assert "checked, not run" not in (data["run"]["summary"] or "")
+    # The checks ran for real after the build: lint, build, tests and smoke all pass.
+    checks = client.get(team.url, headers=h).get_json()["factory"]["checks"]["latest"]
+    assert checks["status"] == "passed", [(s["key"], s["output"]) for s in checks["steps"]]
+    assert checks["simulated"] is False and len(checks["steps"]) == 4
 
     assert client.post(f"{team.url}/releases", json={}, headers=h).status_code == 201
 
@@ -304,6 +308,11 @@ def test_build_in_docker_then_push_over_https(app, client, team, docker_images, 
     )
     assert head.stdout.strip() == push["commit_sha"]
     assert (checkout / "RELEASE.md").exists() and (checkout / ".gitignore").exists()
+    # The team's CI gets the same check scripts, and a workflow for each CI system
+    # (this test server is neither GitHub nor GitLab).
+    assert (checkout / ".ymer-ci" / "smoke.sh").exists()
+    assert (checkout / ".github/workflows/ymer-checks.yml").exists()
+    assert (checkout / ".gitlab-ci.yml").exists()
 
 
 def test_push_without_the_ca_bundle_is_refused(git_server):
