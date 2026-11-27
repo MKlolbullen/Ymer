@@ -832,6 +832,10 @@ To cut a release, add a `## [<version>]` section to `CHANGELOG.md`, commit, then
 git tag v0.1.0-beta.2 && git push origin v0.1.0-beta.2
 ```
 
+To rerun a release manually, start **Release** from the current `main` branch in
+Actions and enter the existing version tag. The workflow checks out and builds
+that tag, then creates the draft release.
+
 `.github/workflows/release.yml` then checks that the tag matches `VERSION`, runs `make lint` and `make test`, and
 builds everything in parallel:
 

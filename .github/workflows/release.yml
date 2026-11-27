@@ -17,8 +17,8 @@
 #   - SHA256SUMS for all of them
 #
 # Pull requests that touch packaging run every build (images are built but not
-# pushed) plus a smoke test of the bundle. Running the workflow by hand from the
-# Actions tab does the same without making a release.
+# pushed) plus a smoke test of the bundle. To run manually, start from the current
+# branch and enter the existing version tag to build it and create the draft.
 
 name: Release
 
@@ -33,16 +33,23 @@ on:
       - "scripts/version.py"
       - "VERSION"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and draft (for example, v0.1.0-beta.2)
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  IS_RELEASE: ${{ github.ref_type == 'tag' }}
+  SOURCE_REF: ${{ inputs.tag || github.ref }}
+  RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+  IS_RELEASE: ${{ github.ref_type == 'tag' || inputs.tag != '' }}
 
 jobs:
   version:
@@ -52,15 +59,18 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       prerelease: ${{ steps.v.outputs.prerelease }}
       image_prefix: ${{ steps.v.outputs.image_prefix }}
+      release_tag: ${{ steps.v.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Manifests match VERSION (and the tag, on a tag push)
+      - name: Manifests match VERSION and the release tag
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            python scripts/version.py check --tag "$GITHUB_REF_NAME"
+          if [ -n "$RELEASE_TAG" ]; then
+            python scripts/version.py check --tag "$RELEASE_TAG"
           else
             python scripts/version.py check
           fi
@@ -69,6 +79,7 @@ jobs:
           echo "version=$(python scripts/version.py)" >> "$GITHUB_OUTPUT"
           echo "prerelease=$(python scripts/version.py prerelease)" >> "$GITHUB_OUTPUT"
           echo "image_prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ymer" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   test:
     name: Lint and test
@@ -91,6 +102,8 @@ jobs:
         ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: astral-sh/setup-uv@v10.4.0
       - uses: actions/setup-node@v7
         with:
@@ -118,6 +131,8 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: astral-sh/setup-uv@v10.4.0
       - uses: actions/setup-node@v7
         with:
@@ -146,6 +161,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - run: packaging/build.sh bundle && packaging/build.sh deb
       - name: Check the .deb
         run: |
@@ -172,6 +189,8 @@ jobs:
       TAG: ${{ needs.version.outputs.image_prefix }}-${{ matrix.image }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to the GitHub container registry
@@ -204,6 +223,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - name: Build the images locally
         run: |
           for image in api collab web; do
@@ -236,6 +257,8 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: actions/download-artifact@v8
         with:
           name: dist-server
@@ -296,6 +319,8 @@ jobs:
             args: --target universal-apple-darwin
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -337,21 +362,24 @@ jobs:
     # The desktop builds may be cancelled without failing (macOS runners are not
     # available on every account); the release then ships without those files.
     if: >-
-      always() && github.ref_type == 'tag'
-      && needs.version.result == 'success' && needs.test.result == 'success'
+      always() && needs.version.result == 'success' && needs.test.result == 'success'
       && needs.build.result == 'success' && needs.server-packages.result == 'success'
       && needs.images.result == 'success' && needs.smoke.result == 'success'
       && needs.windows-setup.result == 'success'
       && (needs.desktop.result == 'success' || needs.desktop.result == 'cancelled')
+      && needs.version.outputs.release_tag != ''
     needs: [version, test, build, server-packages, images, smoke, windows-setup, desktop]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
       - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
@@ -372,5 +400,5 @@ jobs:
           [ "${{ needs.version.outputs.prerelease }}" = true ] && pre="--prerelease"
           notes=(--generate-notes)
           grep -q '[^[:space:]]' notes.md && notes=(--notes-file notes.md)
-          gh release create "$GITHUB_REF_NAME" dist/* --draft $pre \
+          gh release create "$RELEASE_TAG" dist/* --draft $pre \
             --title "Ymer $VERSION" "${notes[@]}"
