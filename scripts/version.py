@@ -180,6 +180,8 @@ def _write_json(path: Path, data: dict) -> None:
 
 def set_version(version: str) -> int:
     parse(version)
+    # Check every derived form before writing anything, so a bad version changes nothing.
+    msi_version, android = msi(version), android_code(version)
     py = pep440(version)
     VERSION_FILE.write_text(version + "\n")
     _replace(PYPROJECT, PYPROJECT_RE, f'version = "{py}"')
@@ -205,10 +207,10 @@ def set_version(version: str) -> int:
     conf["bundle"]["windows"]["wix"]["version"] = msi(version)
     _write_json(TAURI_CONF, conf)
     android = json.loads(ANDROID_CONF.read_text())
-    android["bundle"]["android"]["versionCode"] = android_code(version)
+    android["bundle"]["android"]["versionCode"] = android
     _write_json(ANDROID_CONF, android)
     ios = json.loads(IOS_CONF.read_text())
-    ios["bundle"]["iOS"]["bundleVersion"] = msi(version)
+    ios["bundle"]["iOS"]["bundleVersion"] = msi_version
     _write_json(IOS_CONF, ios)
     print(
         f"version: set {version} (Python {py}, MSI {msi(version)}, Android {android_code(version)})"
