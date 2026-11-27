@@ -4,7 +4,7 @@ Ymer's version lives in `VERSION` and is copied into every package by
 `python scripts/version.py set <version>`. Pushing a `v<version>` tag builds the
 release (see [Releasing](DEVELOPMENT.md#releasing)). The release workflow takes
 its notes from the section below whose heading names that version, so add one
-before tagging.
+before tagging. If the section is missing or empty, GitHub generates the notes.
 
 ## [0.1.0-beta.1] - unreleased
 

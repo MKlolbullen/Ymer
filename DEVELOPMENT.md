@@ -845,7 +845,7 @@ builds everything in parallel:
 | Source artifacts | backend wheel and sdist, frontend static files, collab and source tarballs |
 
 If a desktop build is cancelled rather than failed (GitHub cancels macOS jobs straight away on accounts without
-macOS runner minutes), the release goes ahead without those files. Last, it creates a **draft** GitHub release with all files, a `SHA256SUMS` file and the changelog section as notes.
+macOS runner minutes), the release goes ahead without those files. Last, it creates a **draft** GitHub release with all files, a `SHA256SUMS` file and the changelog section as notes. If that section is missing or empty, GitHub generates the release notes instead.
 Alpha, beta and rc versions are marked as pre-releases. Publish the draft once it looks right. Pull requests that
 touch `packaging/`, `desktop/` or the workflow run every job except the push and the release.
 
