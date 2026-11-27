@@ -108,6 +108,41 @@ Docker named volumes store the database, uploaded files and Redis data. Before a
 
 The **Update Ymer** shortcut and `ymerctl update` pull the images selected by the installed bundle. Install a newer package or bundle to change release versions.
 
+## Private Vultr VM for two workspace owners
+
+Use a fresh VM and the portable server bundle from a release containing `flask --app wsgi create-user`. Older images ignore the registration setting. Complete the registration check below before granting access to either client device.
+
+1. Attach a Vultr firewall group. Keep Ymer’s web ports closed on public IPv4 and IPv6. During setup, restrict any temporary SSH rule to the administrator’s address. Verify private SSH and Vultr console recovery before removing that rule. [Vultr firewall groups](https://docs.vultr.com/products/network/firewall-groups)
+2. Install Tailscale on the VM and both users’ devices. Give the VM a dedicated tag and grant exactly the two individual identities TCP 443 to that tag. Remove any overlapping grants or ACLs that already allow broader access. Give each identity the same application access. Decide separately who administers the VM. If both people maintain it, use two named Linux accounts, individual SSH keys, and identical private SSH grants. Docker and sudo access permit reading server secrets. [Tailscale grants](https://tailscale.com/docs/features/access-control/grants)
+3. On the VM, unpack the portable bundle and run `./ymerctl init`. Configure private HTTPS with `sudo tailscale serve --bg http://127.0.0.1:8080` and record the HTTPS origin from `tailscale serve status`. Keep Funnel off for this service. [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
+4. Edit the existing `ymer.env` before the first start. Preserve the generated secrets. Set the values below, replacing the example hostname with the exact HTTPS origin from Serve. The public URL setting is the address clients use for signed downloads, even for a private server.
+
+   ```dotenv
+   YMER_HTTP_BIND=127.0.0.1
+   YMER_HTTP_PORT=8080
+   YMER_PUBLIC_URL=https://ymer.example-tailnet.ts.net
+   YMER_COOKIE_SECURE=true
+   YMER_TRUSTED_PROXIES=2
+   YMER_REGISTRATION_ENABLED=false
+   ```
+
+5. From the bundle directory run the following commands. The registration endpoint must return `{"enabled":false}` and the POST must return **403**. A 404, 422 or any other result means the expected private configuration has not been verified. Each invocation of `create-user` prompts for a display name, email and hidden password. Run it once per person. Existing accounts keep their access when registration is closed.
+
+   ```bash
+   ./ymerctl start
+   curl -fsS http://127.0.0.1:8080/api/auth/registration
+   curl -sS -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' \
+     -d '{}' http://127.0.0.1:8080/api/auth/register
+   ./ymerctl compose exec api flask --app wsgi create-user
+   ./ymerctl compose exec api flask --app wsgi create-user
+   ```
+
+6. Either person can create the shared workspace. Its creator opens **Members**, enters the other person’s account email, selects **owner**, and clicks **Add member**. Confirm that both rows show **owner**. Either owner can manage members, change the other owner’s role, or delete the workspace. At least one owner must remain.
+
+**Acceptance checks.** Sign in separately over private HTTPS, open **Members** from both accounts, edit the same page together, and upload an attachment from one device and download it on the other. From a device outside the private network, verify that Ymer cannot be reached at the VM’s public addresses. Verify an unrelated tailnet identity cannot reach the private HTTPS service either.
+
+**Recovery.** Schedule encrypted off-VM backups of PostgreSQL, the MinIO file data, and the matching private configuration and encryption secrets. Take a consistent backup by pausing writes across both stores. On a separate private test VM restore the matching data and secrets, then verify that both owners can sign in and retrieve an attachment. Keep backup recovery available to both people if both will operate the service.
+
 ## Development from source
 
 Use a Linux shell, either on Linux itself or inside a WSL 2 distribution. For WSL, enable your distribution under **Docker Desktop → Settings → Resources → WSL Integration** and clone into your Linux home directory. Install the development prerequisites **inside that distribution**.
