@@ -53,8 +53,8 @@ jobs:
       prerelease: ${{ steps.v.outputs.prerelease }}
       image_prefix: ${{ steps.v.outputs.image_prefix }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Manifests match VERSION (and the tag, on a tag push)
@@ -90,9 +90,9 @@ jobs:
         image: redis:7-alpine
         ports: ["6379:6379"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Create the test database and extensions
@@ -117,9 +117,9 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Backend wheel and source distribution
@@ -134,7 +134,7 @@ jobs:
             -o "dist/ymer-collab-$VERSION.tar.gz" HEAD collab
       - name: Full source
         run: git archive --format=tar.gz --prefix="ymer-$VERSION/" -o "dist/ymer-$VERSION-source.tar.gz" HEAD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-core
           path: dist/
@@ -145,13 +145,13 @@ jobs:
     needs: version
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: packaging/build.sh bundle && packaging/build.sh deb
       - name: Check the .deb
         run: |
           dpkg-deb --info dist/*.deb
           dpkg-deb --contents dist/*.deb
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-server
           path: dist/
@@ -171,12 +171,12 @@ jobs:
     env:
       TAG: ${{ needs.version.outputs.image_prefix }}-${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to the GitHub container registry
         if: env.IS_RELEASE == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -187,7 +187,7 @@ jobs:
           tags="$TAG:${{ needs.version.outputs.version }}"
           if [ "${{ needs.version.outputs.prerelease }}" = false ]; then tags="$tags,$TAG:latest"; fi
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: packaging/docker/${{ matrix.image }}.Dockerfile
@@ -203,13 +203,13 @@ jobs:
     needs: [version, server-packages]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the images locally
         run: |
           for image in api collab web; do
             docker build -q -t "ymer-ci-$image:ci" -f "packaging/docker/$image.Dockerfile" .
           done
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-server
           path: dist
@@ -235,8 +235,8 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dist-server
           path: server
@@ -271,7 +271,7 @@ jobs:
             if (-not (Test-Path "$app\$f")) { throw "missing $f after install" }
           }
           if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Ymer\Start Ymer.lnk")) { throw "no Start menu shortcut" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-windows
           path: dist/
@@ -295,8 +295,8 @@ jobs:
             os: macos-14
             args: --target universal-apple-darwin
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
@@ -326,7 +326,7 @@ jobs:
             -exec cp {} dist/ \;
           # "Ymer Desktop_0.1.0-beta.1_x64-setup.exe" -> "Ymer-Desktop-0.1.0-beta.1_x64-setup.exe"
           cd dist && for f in *; do mv "$f" "Ymer-Desktop-${f#*_}"; done && ls -l
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-desktop-${{ matrix.name }}
           path: dist/
@@ -351,8 +351,8 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           path: dist
