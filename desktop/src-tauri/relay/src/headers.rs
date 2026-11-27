@@ -140,8 +140,10 @@ pub fn from_upstream(upstream: &HeaderMap, server: &Url) -> HeaderMap {
             let loc = value.to_str().unwrap_or("");
             let local = match loc.strip_prefix(&server_origin) {
                 Some("") => "/".to_string(),
-                // "//x" would name another host; keep such redirects pointing at the server.
-                Some(rest) if rest.starts_with('/') && !rest.starts_with("//") => rest.to_string(),
+                // "//x" alone would name host x; "/.//x" stays on the relay and the
+                // browser drops the "." segment, giving the path "//x".
+                Some(rest) if rest.starts_with("//") => format!("/.{rest}"),
+                Some(rest) if rest.starts_with('/') => rest.to_string(),
                 _ => loc.to_string(),
             };
             if let Ok(v) = HeaderValue::from_str(&local) {
@@ -224,7 +226,9 @@ mod tests {
 
         let mut double = HeaderMap::new();
         double.insert(header::LOCATION, "https://ymer.example.com//help".parse().unwrap());
-        assert_eq!(from_upstream(&double, &server())[header::LOCATION], "https://ymer.example.com//help");
+        assert_eq!(from_upstream(&double, &server())[header::LOCATION], "/.//help");
+        let relay = Url::parse("http://127.0.0.1:47130/w/1").unwrap();
+        assert_eq!(relay.join("/.//help").unwrap().as_str(), "http://127.0.0.1:47130//help");
     }
 
     #[test]
