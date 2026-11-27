@@ -77,10 +77,11 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg16
+        # A throwaway database for the tests: no password needed.
         env:
           POSTGRES_USER: ymer
-          POSTGRES_PASSWORD: ymer
           POSTGRES_DB: ymer
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U ymer -d ymer"
@@ -97,7 +98,6 @@ jobs:
       - name: Create the test database and extensions
         env:
           PGHOST: localhost
-          PGPASSWORD: ymer
           POSTGRES_USER: ymer
           POSTGRES_DB: ymer
         run: sh infra/postgres/init/01-init.sh
