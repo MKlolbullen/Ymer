@@ -40,7 +40,7 @@ pub struct ApiCache {
     /// Bumped by every [`ApiCache::clear`]. A response fetched before a clear (an
     /// earlier server or account) carries an older generation and is not stored.
     generation: AtomicU64,
-    /// Serializes reads, writes and clears, so a body and its metadata stay paired.
+    /// Serializes reads, writes, clears and pruning.
     lock: Mutex<()>,
 }
 
@@ -54,17 +54,22 @@ impl ApiCache {
         self.generation.load(Ordering::SeqCst)
     }
 
-    fn paths(&self, key: &str) -> (PathBuf, PathBuf) {
+    /// One file per response: a 4-byte little-endian metadata length, the metadata
+    /// as JSON, then the body. Written with one rename, so a body never pairs with
+    /// another response's metadata.
+    fn path(&self, key: &str) -> PathBuf {
         let name = hex::encode(Sha256::digest(key.as_bytes()));
-        (self.dir.join(format!("{name}.json")), self.dir.join(format!("{name}.body")))
+        self.dir.join(format!("{name}.entry"))
     }
 
     /// `key` is the request's path and query.
     pub fn get(&self, key: &str) -> Option<Entry> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let (meta, body) = self.paths(key);
-        let mut entry: Entry = serde_json::from_slice(&fs::read(meta).ok()?).ok()?;
-        entry.body = fs::read(body).ok()?;
+        let bytes = fs::read(self.path(key)).ok()?;
+        let len = u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?) as usize;
+        let meta = bytes.get(4..4 + len)?;
+        let mut entry: Entry = serde_json::from_slice(meta).ok()?;
+        entry.body = bytes[4 + len..].to_vec();
         Some(entry)
     }
 
@@ -75,9 +80,13 @@ impl ApiCache {
             return Ok(());
         }
         fs::create_dir_all(&self.dir)?;
-        let (meta, body) = self.paths(key);
-        write_atomic(&body, &entry.body)?;
-        write_atomic(&meta, &serde_json::to_vec(entry)?)?;
+        let meta = serde_json::to_vec(entry)?;
+        let len = u32::try_from(meta.len()).map_err(|_| io::Error::other("metadata too large"))?;
+        let mut bytes = Vec::with_capacity(4 + meta.len() + entry.body.len());
+        bytes.extend_from_slice(&len.to_le_bytes());
+        bytes.extend_from_slice(&meta);
+        bytes.extend_from_slice(&entry.body);
+        write_atomic(&self.path(key), &bytes)?;
         if self.writes.fetch_add(1, Ordering::Relaxed) % 50 == 49 {
             self.prune()?;
         }
@@ -97,7 +106,7 @@ impl ApiCache {
     fn prune(&self) -> io::Result<()> {
         let mut metas: Vec<_> = fs::read_dir(&self.dir)?
             .filter_map(Result::ok)
-            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .filter(|e| e.path().extension().is_some_and(|x| x == "entry"))
             .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
             .collect();
         if metas.len() <= self.max_entries {
@@ -105,16 +114,14 @@ impl ApiCache {
         }
         metas.sort();
         let excess = metas.len() - self.max_entries;
-        for (_, meta) in metas.into_iter().take(excess) {
-            let _ = fs::remove_file(meta.with_extension("body"));
-            let _ = fs::remove_file(meta);
+        for (_, path) in metas.into_iter().take(excess) {
+            let _ = fs::remove_file(path);
         }
         Ok(())
     }
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    // Distinct per file: x.json -> x.json.tmp, x.body -> x.body.tmp.
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
@@ -165,6 +172,10 @@ mod tests {
         drop(_guard);
         assert_eq!(cache.get("/api/a"), None, "oldest entry pruned");
         assert!(cache.get("/api/c").is_some());
+
+        // A damaged file reads as a miss, not as a wrong response.
+        fs::write(cache.path("/api/c"), [9, 0, 0, 0, b'{']).unwrap();
+        assert_eq!(cache.get("/api/c"), None);
 
         cache.clear().unwrap();
         assert_eq!(cache.get("/api/c"), None);
