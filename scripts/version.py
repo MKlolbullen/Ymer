@@ -41,7 +41,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "VERSION"
-SEMVER = re.compile(r"^(?P<core>\d+\.\d+\.\d+)(?:-(?P<label>alpha|beta|rc)\.(?P<num>\d+))?$")
+SEMVER = re.compile(
+    r"^(?P<core>\d+\.\d+\.\d+)(?:-(?P<label>alpha|beta|rc)\.(?P<num>\d+))?$"
+)
 PEP440_LABELS = {"alpha": "a", "beta": "b", "rc": "rc"}
 NPM_PACKAGES = ("collab", "frontend", "desktop")
 PYPROJECT = ROOT / "backend" / "pyproject.toml"
@@ -63,7 +65,9 @@ MSI_OFFSETS = {"alpha": 100, "beta": 200, "rc": 300}
 def parse(version: str) -> re.Match[str]:
     match = SEMVER.match(version)
     if not match:
-        raise SystemExit(f"version: {version!r} is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N")
+        raise SystemExit(
+            f"version: {version!r} is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N"
+        )
     return match
 
 
@@ -80,7 +84,12 @@ def msi(version: str) -> str:
     build = patch * 1000 + (
         MSI_OFFSETS[match["label"]] + int(match["num"]) if match["label"] else 900
     )
-    if major > 255 or minor > 255 or build > 65535 or (match["num"] and int(match["num"]) > 99):
+    if (
+        major > 255
+        or minor > 255
+        or build > 65535
+        or (match["num"] and int(match["num"]) > 99)
+    ):
         raise SystemExit(f"version: {version} does not fit a Windows Installer version")
     return f"{major}.{minor}.{build}"
 
@@ -117,19 +126,25 @@ def found_versions() -> dict[str, str]:
         found[str(path.relative_to(ROOT))] = _single(pattern, path.read_text(), path)[1]
     for package in NPM_PACKAGES:
         manifest = ROOT / package / "package.json"
-        found[str(manifest.relative_to(ROOT))] = json.loads(manifest.read_text())["version"]
+        found[str(manifest.relative_to(ROOT))] = json.loads(manifest.read_text())[
+            "version"
+        ]
         lock_path = ROOT / package / "package-lock.json"
         lock = json.loads(lock_path.read_text())
         rel = str(lock_path.relative_to(ROOT))
         found[rel] = lock["version"]
         found[f"{rel} (root package)"] = lock["packages"][""]["version"]
-    found["desktop/src-tauri/Cargo.toml"] = CARGO_TOML_RE.search(CARGO_TOML.read_text())[1]
+    found["desktop/src-tauri/Cargo.toml"] = CARGO_TOML_RE.search(
+        CARGO_TOML.read_text()
+    )[1]
     found["desktop/src-tauri/Cargo.lock"] = _single(
         CARGO_LOCK_RE, CARGO_LOCK.read_text(), CARGO_LOCK
     )[1]
     conf = json.loads(TAURI_CONF.read_text())
     found["desktop/src-tauri/tauri.conf.json"] = conf["version"]
-    found["desktop/src-tauri/tauri.conf.json (MSI)"] = conf["bundle"]["windows"]["wix"]["version"]
+    found["desktop/src-tauri/tauri.conf.json (MSI)"] = conf["bundle"]["windows"]["wix"][
+        "version"
+    ]
     android = json.loads(ANDROID_CONF.read_text())
     found["desktop/src-tauri/tauri.android.conf.json (versionCode)"] = str(
         android["bundle"]["android"].get("versionCode")
@@ -143,9 +158,13 @@ def found_versions() -> dict[str, str]:
 
 def expected_versions(version: str) -> dict[str, str]:
     py = pep440(version)
-    expected = {key: py if key.startswith("backend/") else version for key in found_versions()}
+    expected = {
+        key: py if key.startswith("backend/") else version for key in found_versions()
+    }
     expected["desktop/src-tauri/tauri.conf.json (MSI)"] = msi(version)
-    expected["desktop/src-tauri/tauri.android.conf.json (versionCode)"] = str(android_code(version))
+    expected["desktop/src-tauri/tauri.android.conf.json (versionCode)"] = str(
+        android_code(version)
+    )
     expected["desktop/src-tauri/tauri.ios.conf.json (bundleVersion)"] = msi(version)
     return expected
 
@@ -181,7 +200,7 @@ def _write_json(path: Path, data: dict) -> None:
 def set_version(version: str) -> int:
     parse(version)
     # Check every derived form before writing anything, so a bad version changes nothing.
-    msi_version, android = msi(version), android_code(version)
+    msi_version, version_code = msi(version), android_code(version)
     py = pep440(version)
     VERSION_FILE.write_text(version + "\n")
     _replace(PYPROJECT, PYPROJECT_RE, f'version = "{py}"')
@@ -198,22 +217,24 @@ def set_version(version: str) -> int:
         _write_json(lock_path, lock)
     cargo = CARGO_TOML.read_text()
     first = CARGO_TOML_RE.search(cargo)
-    CARGO_TOML.write_text(cargo[: first.start()] + f'version = "{version}"' + cargo[first.end() :])
+    CARGO_TOML.write_text(
+        cargo[: first.start()] + f'version = "{version}"' + cargo[first.end() :]
+    )
     lock = CARGO_LOCK.read_text()
     entry = _single(CARGO_LOCK_RE, lock, CARGO_LOCK)
     CARGO_LOCK.write_text(lock[: entry.start(1)] + version + lock[entry.end(1) :])
     conf = json.loads(TAURI_CONF.read_text())
     conf["version"] = version
-    conf["bundle"]["windows"]["wix"]["version"] = msi(version)
+    conf["bundle"]["windows"]["wix"]["version"] = msi_version
     _write_json(TAURI_CONF, conf)
     android = json.loads(ANDROID_CONF.read_text())
-    android["bundle"]["android"]["versionCode"] = android
+    android["bundle"]["android"]["versionCode"] = version_code
     _write_json(ANDROID_CONF, android)
     ios = json.loads(IOS_CONF.read_text())
     ios["bundle"]["iOS"]["bundleVersion"] = msi_version
     _write_json(IOS_CONF, ios)
     print(
-        f"version: set {version} (Python {py}, MSI {msi(version)}, Android {android_code(version)})"
+        f"version: set {version} (Python {py}, MSI {msi_version}, Android {version_code})"
     )
     return 0
 

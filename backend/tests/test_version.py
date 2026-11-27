@@ -85,3 +85,47 @@ def test_android_version_codes_grow_with_each_release():
 def test_rejects_unsupported_versions(bad):
     with pytest.raises(SystemExit):
         version.parse(bad)
+
+
+def _copy_tree(tmp_path, monkeypatch):
+    """Point version.py at a copy of every file it reads or writes."""
+    paths = {
+        "VERSION_FILE": "VERSION",
+        "PYPROJECT": "backend/pyproject.toml",
+        "PY_INIT": "backend/ymer/__init__.py",
+        "CARGO_TOML": "desktop/src-tauri/Cargo.toml",
+        "CARGO_LOCK": "desktop/src-tauri/Cargo.lock",
+        "TAURI_CONF": "desktop/src-tauri/tauri.conf.json",
+        "ANDROID_CONF": "desktop/src-tauri/tauri.android.conf.json",
+        "IOS_CONF": "desktop/src-tauri/tauri.ios.conf.json",
+    }
+    rel = list(paths.values())
+    for package in version.NPM_PACKAGES:
+        rel += [f"{package}/package.json", f"{package}/package-lock.json"]
+    for r in rel:
+        dest = tmp_path / r
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes((ROOT / r).read_bytes())
+    monkeypatch.setattr(version, "ROOT", tmp_path)
+    for name, r in paths.items():
+        monkeypatch.setattr(version, name, tmp_path / r)
+
+
+def test_set_writes_every_manifest(tmp_path, monkeypatch):
+    import json
+
+    _copy_tree(tmp_path, monkeypatch)
+    assert version.set_version("0.2.0-rc.1") == 0
+    assert version.check(None) == 0
+    android = json.loads(version.ANDROID_CONF.read_text())
+    assert android["bundle"]["android"]["versionCode"] == version.android_code("0.2.0-rc.1")
+    ios = json.loads(version.IOS_CONF.read_text())
+    assert ios["bundle"]["iOS"]["bundleVersion"] == version.msi("0.2.0-rc.1")
+
+
+def test_set_with_an_unsupported_version_changes_nothing(tmp_path, monkeypatch):
+    _copy_tree(tmp_path, monkeypatch)
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises(SystemExit):
+        version.set_version("1.100.0")
+    assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
