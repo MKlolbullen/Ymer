@@ -406,6 +406,8 @@ Deeper notes on each part (routes, settings, the permission rules, how collab st
 
 ## Install a release
 
+For Windows and Linux setup, Docker commands, upgrades and troubleshooting, see the [installation guide](INSTALLATION.MD).
+
 Releases are on the [Releases page](https://github.com/MKlolbullen/Ymer/releases). All server options run the same
 Docker images (`ghcr.io/mklolbullen/ymer-api`, `-collab`, `-web`) together with PostgreSQL, Redis and MinIO, and serve
 Ymer on port 8080. The first start downloads about 1 GB of images.
