@@ -816,8 +816,10 @@ Assumptions for checks, open to change:
 ## Releasing
 
 The version lives in `VERSION` as SemVer (`0.1.0-beta.1`). `scripts/version.py` copies it into
-`backend/pyproject.toml` and `ymer.__version__` (in the Python form, `0.1.0b1`) and into the `collab` and
-`frontend` package manifests and lockfiles. A backend test (`tests/test_version.py`) fails when they drift.
+`backend/pyproject.toml` and `ymer.__version__` (in the Python form, `0.1.0b1`), the `collab`, `frontend` and
+`desktop` package manifests and lockfiles, and the desktop client's `Cargo.toml`, `Cargo.lock` and
+`tauri.conf.json` (which also carries a numeric Windows Installer version, `0.1.201`). A backend test
+(`tests/test_version.py`) fails when they drift.
 
 ```sh
 python scripts/version.py set 0.1.0-beta.2   # bump everywhere
@@ -830,9 +832,48 @@ To cut a release, add a `## [<version>]` section to `CHANGELOG.md`, commit, then
 git tag v0.1.0-beta.2 && git push origin v0.1.0-beta.2
 ```
 
-`.github/workflows/release.yml` then checks that the tag matches `VERSION`, runs `make lint` and `make test`
-against Postgres and Redis service containers, builds the backend wheel and sdist, the frontend's static files, a
-collaboration server tarball and a source tarball, and creates a **draft** GitHub release with those files, a
-`SHA256SUMS` file and the changelog section as notes. Alpha, beta and rc versions are marked as pre-releases.
-Publish the draft on GitHub once it looks right. Running the workflow by hand from the Actions tab builds the
-same files as a workflow artifact without making a release.
+`.github/workflows/release.yml` then checks that the tag matches `VERSION`, runs `make lint` and `make test`, and
+builds everything in parallel:
+
+| Job | Builds |
+|---|---|
+| Images | `packaging/docker/{api,collab,web}.Dockerfile` for amd64 and arm64, pushed to `ghcr.io/<owner>/ymer-*:<version>` (and `:latest` for final releases) |
+| Server bundle and .deb | `packaging/build.sh bundle` and `packaging/build.sh deb` |
+| Smoke test | the three images built locally, the bundle started with `ymerctl start`, then `packaging/smoke.py` (sign-up, workspace, page, file upload and download) |
+| Windows Setup.exe | `packaging/windows/ymer.iss` with Inno Setup, then a silent install to check the files and shortcuts |
+| Desktop client | `desktop/` with Tauri on Linux, Windows and macOS (universal) |
+| Source artifacts | backend wheel and sdist, frontend static files, collab and source tarballs |
+
+Last, it creates a **draft** GitHub release with all files, a `SHA256SUMS` file and the changelog section as notes.
+Alpha, beta and rc versions are marked as pre-releases. Publish the draft once it looks right. Pull requests that
+touch `packaging/`, `desktop/` or the workflow run every job except the push and the release.
+
+After the first release, open the three `ymer-*` packages under your GitHub profile's **Packages** tab and set
+their visibility to public, so the bundle can pull them without signing in to ghcr.io.
+
+### Building the server packages locally
+
+```sh
+for image in api collab web; do
+  docker build -t ghcr.io/mklolbullen/ymer-$image:local -f packaging/docker/$image.Dockerfile .
+done
+packaging/build.sh bundle && packaging/build.sh deb      # into dist/
+tar -C /tmp -xzf dist/ymer-server-*.tar.gz && cd /tmp/ymer-server-* && YMER_VERSION=local ./ymerctl start
+python3 packaging/smoke.py                               # from the repository root
+```
+
+The images share one origin on port 8080: nginx in `ymer-web` serves the app and proxies `/api` to the API,
+`/collab` to the collaboration server and `/ymer-files/` to MinIO, so presigned download links work without
+exposing MinIO. The bundle runs migrations and creates the bucket in a one-shot `setup` service before the API
+starts, and runs the AI and Factory workers as their own services.
+
+### Desktop client
+
+`desktop/` is a Tauri 2 app: one window that shows a small page asking for the server address
+(`desktop/src/index.html`), remembers it, and from then on opens the server directly. **Server > Change Server**
+goes back to the page. The server's pages get no access to Tauri commands. To build it you need Rust and
+[Tauri's system dependencies](https://v2.tauri.app/start/prerequisites/):
+
+```sh
+cd desktop && npm ci && npm run icons && npx tauri build
+```

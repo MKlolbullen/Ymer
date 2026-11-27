@@ -1,0 +1,127 @@
+#!/bin/sh
+# Manage a Ymer server bundle (Docker Compose). Run `ymerctl help`.
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+compose_file="$here/compose.yaml"
+env_file=${YMER_ENV_FILE:-$here/ymer.env}
+export YMER_ENV_FILE="$env_file"
+
+usage() {
+  cat <<'HELP'
+Usage: ymerctl <command>
+
+  init      Create the settings file with fresh secrets (kept if it exists)
+  start     Start Ymer (pulls images the first time) and wait until it is ready
+  stop      Stop Ymer; data is kept
+  restart   Stop, then start
+  status    Show the services and their health
+  logs      Follow the logs (ymerctl logs api, for one service)
+  update    Pull the images for this version, then restart
+  url       Print the address Ymer is served on
+  help      Show this help
+
+Settings: $YMER_ENV_FILE, default ymer.env next to compose.yaml
+(the .deb package uses /etc/ymer/ymer.env). Edit it, then run ymerctl restart.
+HELP
+}
+
+fail() { printf 'ymerctl: %s\n' "$*" >&2; exit 1; }
+
+compose() {
+  docker compose --project-directory "$here" -f "$compose_file" --env-file "$env_file" "$@"
+}
+
+need_docker() {
+  command -v docker >/dev/null || fail "Docker is not installed. See https://docs.docker.com/engine/install/"
+  docker compose version >/dev/null 2>&1 || fail "The Docker Compose v2 plugin is missing."
+  docker info >/dev/null 2>&1 || fail "Docker is not running, or this user may not use it (try sudo)."
+}
+
+secret() { head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+
+setting() {
+  [ -f "$env_file" ] || return 0
+  sed -n "s/^$1=//p" "$env_file" | tail -n 1
+}
+
+init() {
+  if [ -f "$env_file" ]; then
+    echo "Settings already exist: $env_file"
+    return 0
+  fi
+  mkdir -p "$(dirname -- "$env_file")"
+  umask 077
+  bind=${YMER_HTTP_BIND:-127.0.0.1}
+  port=${YMER_HTTP_PORT:-8080}
+  url=${YMER_PUBLIC_URL:-http://localhost:$port}
+  case $url in https://*) secure=true ;; *) secure=false ;; esac
+  tmp="$env_file.tmp.$$"
+  cat >"$tmp" <<ENV
+# Ymer server settings. Restart after changing them: ymerctl restart
+# Keep this file private: it holds the secrets below.
+
+# Where people open Ymer. File downloads are signed for this address, so set it to the
+# name or IP they use (for example http://ymer.lan:8080 or https://ymer.example.com).
+YMER_PUBLIC_URL=$url
+# Network interface and port to serve on. 0.0.0.0 makes Ymer reachable from other machines.
+YMER_HTTP_BIND=$bind
+YMER_HTTP_PORT=$port
+# true when people reach Ymer over HTTPS (through your own reverse proxy).
+YMER_COOKIE_SECURE=$secure
+# When behind your own reverse proxy, count it too: 2 = your proxy + the bundled one.
+# YMER_TRUSTED_PROXIES=2
+
+# Generated secrets. Changing the database or storage password after the first start
+# needs the same change inside those services, so leave them as they are.
+POSTGRES_PASSWORD=$(secret)
+MINIO_ROOT_PASSWORD=$(secret)
+YMER_SECRET_KEY=$(secret)
+YMER_COLLAB_SECRET=$(secret)
+
+# AI: fake = offline demo, anthropic = Claude, openai = any OpenAI-compatible server, off.
+YMER_AI_PROVIDER=fake
+# ANTHROPIC_API_KEY=
+# YMER_AI_MODEL=claude-opus-5-5
+# YMER_AI_BASE_URL=http://host.docker.internal:11434/v1
+YMER_AI_EMBEDDING_PROVIDER=fake
+
+# Factory builds: fake = files are only checked, modal = run on Modal (set MODAL_TOKEN_ID
+# and MODAL_TOKEN_SECRET), off. The Docker sandbox is not available in this bundle.
+YMER_FACTORY_SANDBOX=fake
+# MODAL_TOKEN_ID=
+# MODAL_TOKEN_SECRET=
+ENV
+  mv "$tmp" "$env_file"
+  echo "Created $env_file"
+}
+
+url() {
+  u=$(setting YMER_PUBLIC_URL)
+  echo "${u:-http://localhost:8080}"
+}
+
+start() {
+  need_docker
+  init >/dev/null
+  echo "Starting Ymer (the first start downloads about 1 GB of images)..."
+  compose up -d --wait --wait-timeout 600 web
+  compose up -d ai-worker factory-worker
+  echo "Ymer is running at $(url)"
+}
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case $cmd in
+  init) init ;;
+  start|up) start ;;
+  stop|down) need_docker; compose stop ;;
+  restart) need_docker; compose stop; start ;;
+  status|ps) need_docker; compose ps --all ;;
+  logs) need_docker; compose logs --follow --tail 200 "$@" ;;
+  update) need_docker; init >/dev/null; compose pull; start ;;
+  url) url ;;
+  compose) need_docker; compose "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

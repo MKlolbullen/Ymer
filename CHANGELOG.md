@@ -19,5 +19,15 @@ The first beta. Everything in the README's "What works today" is in it:
 - **Phones and offline:** installable PWA that keeps editing offline and resyncs.
 - **Hardening:** httpOnly cookie sessions with CSRF, rate limits and an activity log.
 
-Known gaps for this beta: no installers yet (run from source with `./install.sh`),
-and pushes to GitHub/GitLab and a real Claude key are untested in automated runs.
+Installers, new in this beta:
+
+- **Docker images** `ghcr.io/mklolbullen/ymer-api`, `-collab` and `-web` for amd64 and arm64.
+- **Server bundle** (`ymer-server-<version>.tar.gz`/`.zip`): Docker Compose with PostgreSQL, Redis and MinIO,
+  a single port (8080), generated secrets and `ymerctl` (start, stop, status, logs, update).
+- **Debian/Ubuntu package** (`ymer_<version>_all.deb`): the bundle as the `ymer` systemd service.
+- **Windows installer** (`Ymer-Setup-<version>.exe`): the bundle with Start menu shortcuts, on Docker Desktop.
+- **Desktop client** (`Ymer-Desktop-*`): a Tauri app for Windows, macOS and Linux that opens a Ymer server.
+
+Known gaps: the installers and the desktop client are not code-signed yet, so Windows SmartScreen and macOS
+Gatekeeper warn on first launch (on macOS, right-click the app and choose Open). The bundle's Factory cannot use
+the Docker sandbox. Pushes to GitHub/GitLab and a real Claude key are untested in automated runs.

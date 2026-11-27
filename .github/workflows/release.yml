@@ -5,19 +5,33 @@
 #
 # The tag must equal v<VERSION>. Pre-release versions (alpha, beta, rc) become
 # GitHub pre-releases. Every release starts as a draft, so you can read the
-# notes and the assets before publishing it.
+# notes and try the files before publishing it.
 #
-# Run it by hand (workflow_dispatch) to build the artifacts without making a
-# release: they are kept as workflow artifacts for a week.
+# What a release contains:
+#   - Docker images ghcr.io/<owner>/ymer-{api,collab,web}:<version> (amd64 + arm64)
+#   - ymer-server-<version>.tar.gz/.zip: the Compose bundle with ymerctl
+#   - ymer_<version>_all.deb: the bundle as a systemd service (Debian, Ubuntu)
+#   - Ymer-Setup-<version>.exe: the bundle for Windows with Docker Desktop
+#   - Ymer desktop client: .msi and -setup.exe (Windows), .dmg (macOS), .AppImage/.deb/.rpm (Linux)
+#   - the backend wheel and sdist, frontend static files, collab and source tarballs
+#   - SHA256SUMS for all of them
 #
-# Installer jobs (Docker images, .deb, desktop client) go between "build" and
-# "release" and add their files to the "dist-*" artifacts the release collects.
+# Pull requests that touch packaging run every build (images are built but not
+# pushed) plus a smoke test of the bundle. Running the workflow by hand from the
+# Actions tab does the same without making a release.
 
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "packaging/**"
+      - "desktop/**"
+      - "scripts/version.py"
+      - "VERSION"
   workflow_dispatch:
 
 permissions:
@@ -25,7 +39,10 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IS_RELEASE: ${{ github.ref_type == 'tag' }}
 
 jobs:
   version:
@@ -33,8 +50,8 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
-      pep440: ${{ steps.v.outputs.pep440 }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      image_prefix: ${{ steps.v.outputs.image_prefix }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,8 +67,8 @@ jobs:
       - id: v
         run: |
           echo "version=$(python scripts/version.py)" >> "$GITHUB_OUTPUT"
-          echo "pep440=$(python scripts/version.py pep440)" >> "$GITHUB_OUTPUT"
           echo "prerelease=$(python scripts/version.py prerelease)" >> "$GITHUB_OUTPUT"
+          echo "image_prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ymer" >> "$GITHUB_OUTPUT"
 
   test:
     name: Lint and test
@@ -94,8 +111,8 @@ jobs:
       - run: make test
 
   build:
-    name: Build artifacts
-    needs: [version, test]
+    name: Build source artifacts
+    needs: version
     runs-on: ubuntu-24.04
     env:
       VERSION: ${{ needs.version.outputs.version }}
@@ -123,10 +140,202 @@ jobs:
           path: dist/
           retention-days: 7
 
+  server-packages:
+    name: Server bundle and .deb
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: packaging/build.sh bundle && packaging/build.sh deb
+      - name: Check the .deb
+        run: |
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-server
+          path: dist/
+          retention-days: 7
+
+  images:
+    name: Image ${{ matrix.image }}
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, collab, web]
+    env:
+      TAG: ${{ needs.version.outputs.image_prefix }}-${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to the GitHub container registry
+        if: env.IS_RELEASE == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Tags
+        id: tags
+        run: |
+          tags="$TAG:${{ needs.version.outputs.version }}"
+          if [ "${{ needs.version.outputs.prerelease }}" = false ]; then tags="$tags,$TAG:latest"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/${{ matrix.image }}.Dockerfile
+          # Pull requests build for amd64 only, to keep them quick.
+          platforms: ${{ env.IS_RELEASE == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ env.IS_RELEASE == 'true' }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  smoke:
+    name: Smoke-test the bundle
+    needs: [version, server-packages]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the images locally
+        run: |
+          for image in api collab web; do
+            docker build -q -t "ymer-ci-$image:ci" -f "packaging/docker/$image.Dockerfile" .
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-server
+          path: dist
+      - name: Start the bundle
+        env:
+          YMER_IMAGE_PREFIX: ymer-ci
+          YMER_VERSION: ci
+        run: |
+          mkdir run && tar -C run -xzf dist/ymer-server-*.tar.gz
+          cd run/ymer-server-* && ./ymerctl start && ./ymerctl status
+      - run: python3 packaging/smoke.py http://localhost:8080
+      - name: Logs
+        if: failure()
+        env:
+          YMER_IMAGE_PREFIX: ymer-ci
+          YMER_VERSION: ci
+        run: cd run/ymer-server-* && ./ymerctl compose logs --no-color
+
+  windows-setup:
+    name: Windows Setup.exe
+    needs: [version, server-packages]
+    runs-on: windows-2022
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-server
+          path: server
+      - name: Unpack the bundle
+        shell: pwsh
+        run: |
+          Expand-Archive "server/ymer-server-$env:VERSION.zip" -DestinationPath staged
+          Move-Item "staged/ymer-server-$env:VERSION" bundle
+      - name: Check ymerctl.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\bundle\ymerctl.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+          $env:YMER_ENV_FILE = "$env:RUNNER_TEMP\ymer.env"
+          powershell -NoProfile -ExecutionPolicy Bypass -File bundle\ymerctl.ps1 init
+          $text = Get-Content $env:YMER_ENV_FILE -Raw
+          if ($text -notmatch "(?m)^YMER_SECRET_KEY=[0-9a-f]{64}$") { $text; throw "init did not write a secret" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File bundle\ymerctl.ps1 url
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" `
+            "/DBundleDir=$PWD\bundle" "/DOutputDir=$PWD\dist" packaging\windows\ymer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install silently and check the files
+        shell: pwsh
+        run: |
+          Start-Process -Wait -FilePath "dist\Ymer-Setup-$env:VERSION.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          $app = "$env:LOCALAPPDATA\Programs\Ymer"
+          foreach ($f in "compose.yaml", "ymerctl.ps1", "ymer.env", "unins000.exe") {
+            if (-not (Test-Path "$app\$f")) { throw "missing $f after install" }
+          }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Ymer\Start Ymer.lnk")) { throw "no Start menu shortcut" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/
+          retention-days: 7
+
+  desktop:
+    name: Desktop client (${{ matrix.name }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-22.04
+            args: ""
+          - name: Windows
+            os: windows-2022
+            args: ""
+          - name: macOS
+            os: macos-14
+            args: --target universal-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Linux build dependencies
+        if: matrix.name == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Build
+        working-directory: desktop
+        shell: bash
+        run: |
+          npm ci
+          npm run icons
+          npx tauri build --ci ${{ matrix.args }}
+      - name: Collect the installers
+        shell: bash
+        run: |
+          mkdir -p dist
+          find desktop/src-tauri/target -path '*/release/bundle/*' -type f \
+            \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec cp {} dist/ \;
+          # "Ymer Desktop_0.1.0-beta.1_x64-setup.exe" -> "Ymer-Desktop-0.1.0-beta.1_x64-setup.exe"
+          cd dist && for f in *; do mv "$f" "Ymer-Desktop-${f#*_}"; done && ls -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-desktop-${{ matrix.name }}
+          path: dist/
+          retention-days: 7
+
   release:
     name: Draft GitHub release
     if: github.ref_type == 'tag'
-    needs: [version, build]
+    needs: [version, test, build, server-packages, images, smoke, windows-setup, desktop]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

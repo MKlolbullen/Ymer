@@ -1,0 +1,18 @@
+[Unit]
+Description=Ymer (notes, databases, mind maps and the Factory) in Docker Compose
+Documentation=https://github.com/MKlolbullen/Ymer
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=YMER_ENV_FILE=/etc/ymer/ymer.env
+ExecStart=/opt/ymer/ymerctl start
+ExecStop=/opt/ymer/ymerctl stop
+# The first start downloads the images.
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

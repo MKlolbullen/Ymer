@@ -1,0 +1,13 @@
+# Keep build contexts small and free of local state.
+.git
+.env
+.env.*
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+docs
+projects

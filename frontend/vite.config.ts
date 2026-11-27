@@ -115,7 +115,8 @@ const pwa = VitePWA({
       },
     ],
     navigateFallback: "/index.html",
-    navigateFallbackDenylist: [/^\/api\//, /^\/collab/, /^\/excalidraw-assets\//],
+    // /ymer-files/ is the file bucket that the release bundle serves on the same origin.
+    navigateFallbackDenylist: [/^\/api\//, /^\/collab/, /^\/excalidraw-assets\//, /^\/ymer-files\//],
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
