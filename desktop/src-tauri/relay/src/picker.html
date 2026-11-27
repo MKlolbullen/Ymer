@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ymer</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f8fafc; --card: #fff; --text: #18181b; --muted: #71717a; --line: #e4e4e7; --brand: #4f46e5; --brand-text: #fff; --error: #e11d48; --warn: #b45309; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0b1020; --card: #121933; --text: #f4f4f5; --muted: #a1a1aa; --line: #27304d; --brand: #6366f1; --warn: #fbbf24; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+    main { width: min(440px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    p { margin: 0 0 20px; color: var(--muted); }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    input:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+    button { margin-top: 16px; width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--brand); color: var(--brand-text); font: inherit; font-weight: 600; }
+    button:disabled { opacity: .6; }
+    .secondary { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 8px; }
+    .error { color: var(--error); min-height: 1.5em; margin: 8px 0 0; font-size: 14px; }
+    .warn { color: var(--warn); font-size: 14px; margin: 12px 0 0; }
+    .hint { margin: 16px 0 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Connect to Ymer</h1>
+    <p>Enter the address of your Ymer server, the one you open in a browser.</p>
+    <form id="form" novalidate>
+      <label for="url">Server address</label>
+      <input id="url" type="url" inputmode="url" placeholder="https://ymer.example.com" autocomplete="url" autocapitalize="off" spellcheck="false" required>
+      <div class="error" id="error" role="alert"></div>
+      <p class="warn" id="warn" hidden>Changing the server signs you out and removes the offline copies on this device, including edits that have not synced yet.</p>
+      <button type="submit" id="connect">Connect</button>
+      <button type="button" class="secondary" id="back" hidden>Keep the current server</button>
+    </form>
+    <p class="hint" id="version"></p>
+  </main>
+  <script>
+    const input = document.getElementById("url");
+    const error = document.getElementById("error");
+    const connect = document.getElementById("connect");
+    const back = document.getElementById("back");
+    let current = null;
+
+    fetch("/__ymer/server").then((r) => r.json()).then(async (info) => {
+      // A change of server that the app closed in the middle of: finish it first.
+      if (info.reset_pending) return finishReset();
+      current = info.server;
+      document.getElementById("version").textContent = `Ymer app ${info.app_version}`;
+      if (current) {
+        input.value = current.replace(/\/$/, "");
+        back.hidden = false;
+        document.getElementById("warn").hidden = false;
+      }
+    }).catch(() => {});
+
+    back.addEventListener("click", () => location.replace("/"));
+
+    // Offline copies, the remembered user and cached reads belong to the old server.
+    async function forgetOldServer() {
+      try { localStorage.clear(); } catch { /* nothing stored */ }
+      try { sessionStorage.clear(); } catch { /* nothing stored */ }
+      try {
+        const dbs = indexedDB.databases ? await indexedDB.databases() : [];
+        await Promise.all(dbs.filter((d) => d.name && d.name.startsWith("ymer-")).map((d) => new Promise((done) => {
+          const req = indexedDB.deleteDatabase(d.name);
+          req.onsuccess = req.onerror = req.onblocked = () => done();
+        })));
+      } catch { /* not supported */ }
+      try {
+        if (self.caches) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+      } catch { /* not supported */ }
+    }
+
+    async function finishReset() {
+      await forgetOldServer();
+      const done = await fetch("/__ymer/reset-done", { method: "POST" }).catch(() => null);
+      if (done && done.ok) location.replace("/");
+      else error.textContent = "Couldn't finish changing the server. Close and reopen the app.";
+    }
+
+    document.getElementById("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.textContent = "";
+      connect.disabled = true;
+      connect.textContent = "Connecting…";
+      try {
+        const response = await fetch("/__ymer/server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: input.value }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || "Couldn't connect.");
+        // The relay says when another server's data is left over, even if the lookup
+        // above never finished.
+        if (body.reset_pending) return finishReset();
+        location.replace("/");
+      } catch (e) {
+        error.textContent = e.message;
+        connect.disabled = false;
+        connect.textContent = "Connect";
+      }
+    });
+  </script>
+</body>
+</html>

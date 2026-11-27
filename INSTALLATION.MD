@@ -9,6 +9,7 @@ To use Ymer on your own machine, install a **server** and open it in your browse
 | Run the full stack from a folder on Linux or Windows | `ymer-server-<version>.tar.gz` or `.zip` | [Portable Docker bundle](#portable-docker-bundle) |
 | Edit Ymer and see changes locally | Git checkout and `./install.sh` | [Development from source](#development-from-source) |
 | Connect a desktop app to an existing server | `Ymer-Desktop-*` for your OS | [Release downloads](https://github.com/MKlolbullen/Ymer/releases) |
+| Use Ymer on an Android phone or iPhone | `Ymer-Android-<version>.apk` or `Ymer-iOS-<version>.ipa` | [Phone apps](DEVELOPMENT.md#phone-apps-ios-and-android) |
 
 Get the server installer or archive from **Assets** on the release you want. The automatic “Source code” archives contain the repository. If a release has no server assets yet, use the development instructions below. [Ymer releases](https://github.com/MKlolbullen/Ymer/releases)
 

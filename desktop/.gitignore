@@ -1,5 +1,10 @@
 node_modules/
 src-tauri/target/
-src-tauri/gen/
+src-tauri/gen/*
+# The Android project is kept (it has the network and signing set-up); the iOS
+# project is generated on macOS by `tauri ios init` (see release.yml).
+!src-tauri/gen/android/
 # Generated from frontend/public/icons/icon-512.png by `npm run icons`.
 src-tauri/icons/
+# Built by scripts/build-web.mjs for the phone apps.
+mobile-web/

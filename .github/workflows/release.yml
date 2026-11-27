@@ -13,12 +13,26 @@
 #   - ymer_<version>_all.deb: the bundle as a systemd service (Debian, Ubuntu)
 #   - Ymer-Setup-<version>.exe: the bundle for Windows with Docker Desktop
 #   - Ymer desktop client: .msi and -setup.exe (Windows), .dmg (macOS), .AppImage/.deb/.rpm (Linux)
+#   - Ymer for Android: an .apk to install directly and an .aab for Google Play
+#   - Ymer for iOS (opt-in, needs a macOS runner): an .ipa, plus a Simulator build
 #   - the backend wheel and sdist, frontend static files, collab and source tarballs
 #   - SHA256SUMS for all of them
 #
 # Pull requests that touch packaging run every build (images are built but not
 # pushed) plus a smoke test of the bundle. To run manually, start from the current
 # branch and enter the existing version tag to build it and create the draft.
+#
+# Phone apps (desktop/src-tauri with tauri.android.conf.json / tauri.ios.conf.json):
+#   - Android builds on Linux every time. With the ANDROID_KEYSTORE_BASE64,
+#     ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets it is signed with that key
+#     (keep it: Play and installed apps only accept updates signed the same way);
+#     without them it is signed with a throwaway test key so it still installs.
+#   - iOS needs macOS, so it only runs when asked: tick "Build the iOS app" when
+#     running the workflow by hand, or set the repository variable YMER_IOS_BUILD to
+#     true for tag builds. With the APPLE_API_ISSUER, APPLE_API_KEY, APPLE_API_KEY_P8
+#     and APPLE_DEVELOPMENT_TEAM secrets the .ipa is signed for App Store Connect
+#     (TestFlight); without them it is unsigned. A missing or cancelled iOS build
+#     never holds up the release.
 
 name: Release
 
@@ -38,6 +52,11 @@ on:
         description: Existing version tag to build and draft (for example, v0.1.0-beta.2)
         required: true
         type: string
+      ios:
+        description: Build the iOS app (needs a macOS runner)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -377,18 +396,156 @@ jobs:
           path: dist/
           retention-days: 7
 
+  android:
+    name: Android app
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Caches Gradle and its downloaded plugins between runs.
+      - uses: gradle/actions/setup-gradle@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Relay tests
+        working-directory: desktop/src-tauri
+        run: cargo test -p ymer-relay --locked
+      - name: Signing key
+        working-directory: desktop/src-tauri/gen/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            alias="$ANDROID_KEY_ALIAS"; pass="$ANDROID_KEY_PASSWORD"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the Android app is signed with a throwaway test key."
+            alias=ymer-test; pass="$(openssl rand -hex 16)"
+            keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/upload.jks" -alias "$alias" \
+              -keyalg RSA -keysize 2048 -validity 10000 -storepass "$pass" -keypass "$pass" \
+              -dname "CN=Ymer test build"
+          fi
+          printf 'storeFile=%s\nkeyAlias=%s\npassword=%s\n' "$RUNNER_TEMP/upload.jks" "$alias" "$pass" > keystore.properties
+      - name: Build
+        working-directory: desktop
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          npm ci
+          npm run icons
+          # Gradle downloads its plugins from Maven Central, which sometimes answers 429
+          # (rate limited). Rust is already built by then, so a second try is cheap.
+          build() { npx tauri android build --ci --apk --aab --target aarch64 --target armv7 --target x86_64; }
+          build || { echo "::warning::Android build failed, retrying once in 60 s"; sleep 60; build; }
+      - name: Check and collect the packages
+        run: |
+          mkdir -p dist
+          out=desktop/src-tauri/gen/android/app/build/outputs
+          apk=$(find "$out/apk" -name '*-release.apk' | head -n1)
+          aab=$(find "$out/bundle" -name '*-release.aab' | head -n1)
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)
+          "$tools/apksigner" verify --print-certs "$apk"
+          "$tools/aapt2" dump badging "$apk" | tee badging.txt | head -n3
+          grep -q "package: name='app.ymer.mobile'" badging.txt
+          code=$(python3 scripts/version.py android-code)
+          grep -q "versionCode='$code'" badging.txt
+          cp "$apk" "dist/Ymer-Android-$VERSION.apk"
+          cp "$aab" "dist/Ymer-Android-$VERSION.aab"
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-android
+          path: dist/
+          retention-days: 7
+
+  ios:
+    name: iOS app
+    needs: version
+    if: inputs.ios || vars.YMER_IOS_BUILD == 'true'
+    runs-on: macos-15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_REF }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Generate the Xcode project
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri ios init --ci
+          npm run icons
+      - name: Build
+        working-directory: desktop
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          mkdir -p ../dist
+          if [ -n "$APPLE_API_KEY" ]; then
+            export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+            npx tauri ios build --ci --target aarch64 --export-method app-store-connect
+          else
+            echo "::warning::No Apple signing secrets: the iOS app is unsigned (Simulator, or sideloading after re-signing)."
+            # Missing secrets arrive as empty strings, which Tauri reads as incomplete credentials.
+            unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_KEY_PATH APPLE_DEVELOPMENT_TEAM
+            npx tauri ios build --ci --target aarch64 --no-sign
+          fi
+          ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -n1)
+          cp "$ipa" "../dist/Ymer-iOS-$VERSION.ipa"
+          npx tauri ios build --ci --target aarch64-sim --no-sign
+          app=$(find src-tauri/gen/apple/build -maxdepth 3 -path '*arm64-sim*' -name '*.app' | head -n1)
+          (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/dist/Ymer-iOS-Simulator-$VERSION.zip" "$(basename "$app")")
+          ls -l ../dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-ios
+          path: dist/
+          retention-days: 7
+
   release:
     name: Draft GitHub release
     # The desktop builds may be cancelled without failing (macOS runners are not
     # available on every account); the release then ships without those files.
+    # The iOS build is optional too: skipped unless asked for, and a cancelled run
+    # (no macOS runner) does not block the release. A failed one does.
     if: >-
       always() && needs.version.result == 'success' && needs.test.result == 'success'
       && needs.build.result == 'success' && needs.server-packages.result == 'success'
       && needs.images.result == 'success' && needs.smoke.result == 'success'
       && needs.windows-setup.result == 'success'
       && (needs.desktop.result == 'success' || needs.desktop.result == 'cancelled')
+      && needs.android.result == 'success'
+      && needs.ios.result != 'failure'
       && needs.version.outputs.release_tag != ''
-    needs: [version, test, build, server-packages, images, smoke, windows-setup, desktop]
+    needs: [version, test, build, server-packages, images, smoke, windows-setup, desktop, android, ios]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -7,11 +7,20 @@ rust-version = "1.90"
 license = "UNLICENSED"
 publish = false
 
+[lib]
+# The phone apps load the library; the desktop app is the binary in main.rs.
+name = "ymer_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
 tauri = { version = "2.12", features = [] }
+
+# The phone apps bundle the web app and reach the server through a local relay.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+ymer-relay = { path = "relay" }
 
 [profile.release]
 codegen-units = 1
@@ -19,3 +28,6 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[workspace]
+members = [".", "relay"]
