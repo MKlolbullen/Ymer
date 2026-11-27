@@ -450,6 +450,8 @@ frontend/    React app: app shell and page tree, editor (src/editor), databases 
              templates and import (src/templates)
 infra/       Init scripts for the Compose services, and the Factory's sandbox images (infra/factory)
 docs/assets/ Logo, architecture diagram and screenshots used in this README
+scripts/     Release helpers: scripts/version.py keeps every package on the version in VERSION
+.github/     Release workflow: a v<version> tag builds a draft GitHub release (see CHANGELOG.md)
 ```
 
 ## Roadmap
@@ -472,6 +474,7 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
 | **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
 | **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
+| **R. Beta release** | One version for every package (`VERSION`), a changelog, a tag-driven release workflow with checksums; installers next | 🚧 In progress |
 | **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG) | Planned |
 
 ### Data model

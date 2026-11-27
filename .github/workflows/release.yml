@@ -1,0 +1,157 @@
+# Builds a Ymer release when a version tag is pushed.
+#
+#   python scripts/version.py set 0.1.0-beta.1   # bump every manifest
+#   git commit -am "Release 0.1.0-beta.1" && git tag v0.1.0-beta.1 && git push --follow-tags
+#
+# The tag must equal v<VERSION>. Pre-release versions (alpha, beta, rc) become
+# GitHub pre-releases. Every release starts as a draft, so you can read the
+# notes and the assets before publishing it.
+#
+# Run it by hand (workflow_dispatch) to build the artifacts without making a
+# release: they are kept as workflow artifacts for a week.
+#
+# Installer jobs (Docker images, .deb, desktop client) go between "build" and
+# "release" and add their files to the "dist-*" artifacts the release collects.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      pep440: ${{ steps.v.outputs.pep440 }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Manifests match VERSION (and the tag, on a tag push)
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            python scripts/version.py check --tag "$GITHUB_REF_NAME"
+          else
+            python scripts/version.py check
+          fi
+      - id: v
+        run: |
+          echo "version=$(python scripts/version.py)" >> "$GITHUB_OUTPUT"
+          echo "pep440=$(python scripts/version.py pep440)" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$(python scripts/version.py prerelease)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Lint and test
+    needs: version
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ymer
+          POSTGRES_PASSWORD: ymer
+          POSTGRES_DB: ymer
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ymer -d ymer"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Create the test database and extensions
+        env:
+          PGHOST: localhost
+          PGPASSWORD: ymer
+          POSTGRES_USER: ymer
+          POSTGRES_DB: ymer
+        run: sh infra/postgres/init/01-init.sh
+      - name: Install
+        run: |
+          cp .env.example .env
+          cd backend && uv venv --python 3.12 .venv && uv pip install -p .venv -e '.[dev]'
+          cd ../collab && npm ci
+          cd ../frontend && npm ci
+      - run: make lint
+      - run: make test
+
+  build:
+    name: Build artifacts
+    needs: [version, test]
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Backend wheel and source distribution
+        run: uv build backend --out-dir dist
+      - name: Frontend (static files)
+        run: |
+          cd frontend && npm ci && npm run build
+          tar -czf "../dist/ymer-frontend-$VERSION.tar.gz" -C dist --transform "s,^\.,ymer-frontend-$VERSION," .
+      - name: Collaboration server (source, run with Node 22.18+)
+        run: |
+          git archive --format=tar.gz --prefix="ymer-collab-$VERSION/" \
+            -o "dist/ymer-collab-$VERSION.tar.gz" HEAD collab
+      - name: Full source
+        run: git archive --format=tar.gz --prefix="ymer-$VERSION/" -o "dist/ymer-$VERSION-source.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-core
+          path: dist/
+          retention-days: 7
+
+  release:
+    name: Draft GitHub release
+    if: github.ref_type == 'tag'
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            /^## \[/ { if (on) exit; on = index($0, "[" v "]") > 0; next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+      - name: Create the draft release
+        run: |
+          pre=""
+          [ "${{ needs.version.outputs.prerelease }}" = true ] && pre="--prerelease"
+          gh release create "$GITHUB_REF_NAME" dist/* --draft $pre \
+            --title "Ymer $VERSION" --notes-file notes.md

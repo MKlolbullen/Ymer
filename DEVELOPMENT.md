@@ -812,3 +812,27 @@ Assumptions for checks, open to change:
   released. A release made with the gate off is not checked afterwards.
 - Auto-fix is off by default, because each fix build spends tokens.
 
+
+## Releasing
+
+The version lives in `VERSION` as SemVer (`0.1.0-beta.1`). `scripts/version.py` copies it into
+`backend/pyproject.toml` and `ymer.__version__` (in the Python form, `0.1.0b1`) and into the `collab` and
+`frontend` package manifests and lockfiles. A backend test (`tests/test_version.py`) fails when they drift.
+
+```sh
+python scripts/version.py set 0.1.0-beta.2   # bump everywhere
+python scripts/version.py check              # what the test and the workflow run
+```
+
+To cut a release, add a `## [<version>]` section to `CHANGELOG.md`, commit, then tag and push:
+
+```sh
+git tag v0.1.0-beta.2 && git push origin v0.1.0-beta.2
+```
+
+`.github/workflows/release.yml` then checks that the tag matches `VERSION`, runs `make lint` and `make test`
+against Postgres and Redis service containers, builds the backend wheel and sdist, the frontend's static files, a
+collaboration server tarball and a source tarball, and creates a **draft** GitHub release with those files, a
+`SHA256SUMS` file and the changelog section as notes. Alpha, beta and rc versions are marked as pre-releases.
+Publish the draft on GitHub once it looks right. Running the workflow by hand from the Actions tab builds the
+same files as a workflow artifact without making a release.
