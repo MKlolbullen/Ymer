@@ -413,6 +413,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # Caches Gradle and its downloaded plugins between runs.
+      - uses: gradle/actions/setup-gradle@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
@@ -446,7 +448,10 @@ jobs:
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           npm ci
           npm run icons
-          npx tauri android build --ci --apk --aab --target aarch64 --target armv7 --target x86_64
+          # Gradle downloads its plugins from Maven Central, which sometimes answers 429
+          # (rate limited). Rust is already built by then, so a second try is cheap.
+          build() { npx tauri android build --ci --apk --aab --target aarch64 --target armv7 --target x86_64; }
+          build || { echo "::warning::Android build failed, retrying once in 60 s"; sleep 60; build; }
       - name: Check and collect the packages
         run: |
           mkdir -p dist
