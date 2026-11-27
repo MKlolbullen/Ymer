@@ -334,7 +334,15 @@ jobs:
 
   release:
     name: Draft GitHub release
-    if: github.ref_type == 'tag'
+    # The desktop builds may be cancelled without failing (macOS runners are not
+    # available on every account); the release then ships without those files.
+    if: >-
+      always() && github.ref_type == 'tag'
+      && needs.version.result == 'success' && needs.test.result == 'success'
+      && needs.build.result == 'success' && needs.server-packages.result == 'success'
+      && needs.images.result == 'success' && needs.smoke.result == 'success'
+      && needs.windows-setup.result == 'success'
+      && (needs.desktop.result == 'success' || needs.desktop.result == 'cancelled')
     needs: [version, test, build, server-packages, images, smoke, windows-setup, desktop]
     runs-on: ubuntu-24.04
     permissions:
