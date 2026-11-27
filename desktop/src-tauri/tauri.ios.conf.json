@@ -3,7 +3,7 @@
   "productName": "Ymer",
   "identifier": "app.ymer.mobile",
   "build": {
-    "beforeDevCommand": "node scripts/build-web.mjs",
+    "beforeDevCommand": { "script": "node scripts/build-web.mjs", "wait": true },
     "beforeBuildCommand": "node scripts/build-web.mjs",
     "frontendDist": "../mobile-web"
   },
