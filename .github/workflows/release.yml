@@ -335,7 +335,7 @@ jobs:
             os: windows-2022
             args: ""
           - name: macOS
-            os: macos-14
+            os: macos-15
             args: --target universal-apple-darwin
     steps:
       - uses: actions/checkout@v7
