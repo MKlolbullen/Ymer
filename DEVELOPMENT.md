@@ -844,7 +844,8 @@ builds everything in parallel:
 | Desktop client | `desktop/` with Tauri on Linux, Windows and macOS (universal) |
 | Source artifacts | backend wheel and sdist, frontend static files, collab and source tarballs |
 
-Last, it creates a **draft** GitHub release with all files, a `SHA256SUMS` file and the changelog section as notes.
+If a desktop build is cancelled rather than failed (GitHub cancels macOS jobs straight away on accounts without
+macOS runner minutes), the release goes ahead without those files. Last, it creates a **draft** GitHub release with all files, a `SHA256SUMS` file and the changelog section as notes.
 Alpha, beta and rc versions are marked as pre-releases. Publish the draft once it looks right. Pull requests that
 touch `packaging/`, `desktop/` or the workflow run every job except the push and the release.
 
