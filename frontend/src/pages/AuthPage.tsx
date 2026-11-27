@@ -1,8 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { AppearancePicker } from "@/components/AppearancePicker";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 
-import { ApiError } from "@/lib/api";
+import { apiGet, ApiError } from "@/lib/api";
 import { login, register, useSession } from "@/lib/auth";
 
 const input =
@@ -17,9 +18,29 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const registration = useQuery({
+    queryKey: ["public-registration"],
+    queryFn: ({ signal }) => apiGet<{ enabled: boolean }>("/auth/registration", { signal }),
+    enabled: !session,
+    staleTime: 0,
+  });
+
   if (session) {
     const from = (location.state as { from?: string } | null)?.from ?? "/";
     return <Navigate to={from} replace />;
+  }
+
+  if (mode === "register" && !registration.data?.enabled) {
+    const message = registration.data?.enabled === false
+      ? "Account registration is closed on this server."
+      : registration.isError ? "Could not check registration availability." : "Checking registration…";
+    return (
+      <main className="mx-auto max-w-sm space-y-4 px-4 py-12">
+        <p role="status">{message}</p>
+        {registration.isError && <button className="mr-4 underline" onClick={() => void registration.refetch()}>Try again</button>}
+        <Link className="text-brand-600 underline" to="/login">Sign in</Link>
+      </main>
+    );
   }
 
   const submit = async (e: FormEvent) => {
@@ -86,7 +107,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        {(mode === "register" || registration.data?.enabled) && <p className="mt-6 text-center text-sm text-zinc-500">
           {mode === "login" ? (
             <>
               New to Ymer? <Link className="text-brand-600 hover:underline" to="/register">Create an account</Link>
@@ -96,7 +117,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               Already have an account? <Link className="text-brand-600 hover:underline" to="/login">Sign in</Link>
             </>
           )}
-        </p>
+        </p>}
         <div className="mt-5 flex justify-center"><AppearancePicker /></div>
       </div>
     </div>

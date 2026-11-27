@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     jwt_access_ttl: int = 15 * 60
     jwt_refresh_ttl: int = 30 * 24 * 60 * 60
 
+    # Operators can always provision accounts with the local create-user command.
+    registration_enabled: bool = True
+
     # Browser sessions live in httpOnly cookies (ymer.auth.cookies). Secure cookies are only
     # sent over HTTPS; unset means "Secure in production". Leave the domain unset unless the
     # API and the app are on different subdomains of one site (then e.g. ".example.com").

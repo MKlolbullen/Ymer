@@ -1,5 +1,6 @@
 """Authentication endpoints.
 
+- ``GET /api/auth/registration``   public self-registration availability
 - ``POST /api/auth/register``      {email, password, display_name, session?} -> user
 - ``POST /api/auth/login``         {email, password, session?} -> user
 - ``POST /api/auth/refresh``       new tokens (from the refresh cookie, or {refresh_token})
@@ -22,15 +23,15 @@ Sign-in and sign-up are rate limited per address, and failed sign-ins per email
 from typing import Literal
 
 from flask import Blueprint, current_app, g, jsonify, request
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from werkzeug.exceptions import Conflict, Forbidden, HTTPException, Unauthorized
+from werkzeug.exceptions import Forbidden, HTTPException, Unauthorized
 
 from ymer import audit, ratelimit
 from ymer.api.validation import parse_body
 from ymer.app import settings_for
-from ymer.auth import current_user, hash_password, issue_token_pair, login_required
+from ymer.auth import current_user, issue_token_pair, login_required
+from ymer.auth.accounts import AccountDetails, create_account
 from ymer.auth.cookies import (
     REFRESH_COOKIE,
     clear_session_cookies,
@@ -38,7 +39,7 @@ from ymer.auth.cookies import (
     set_session_cookies,
 )
 from ymer.auth.current import authenticate, load_user_and_csrf
-from ymer.auth.passwords import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, verify_password
+from ymer.auth.passwords import MAX_PASSWORD_LENGTH, verify_password
 from ymer.auth.tokens import issue_collab_token, new_csrf_token
 from ymer.db import db_session
 from ymer.models import AuditEvent, User
@@ -46,17 +47,8 @@ from ymer.models import AuditEvent, User
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
-def _normalise_email(value: str) -> str:
-    return value.strip().lower()
-
-
-class RegisterBody(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
-    display_name: str = Field(min_length=1, max_length=120)
+class RegisterBody(AccountDetails):
     session: Literal["cookie", "token"] = "cookie"
-
-    _email = field_validator("email")(_normalise_email)
 
 
 class LoginBody(BaseModel):
@@ -92,9 +84,18 @@ def _signed_in(user: User, mode: str, status: int = 200):
     return response
 
 
+@auth_bp.get("/registration")
+def registration_status():
+    response = jsonify(enabled=settings_for(current_app).registration_enabled)
+    response.cache_control.no_store = True
+    return response
+
+
 @auth_bp.post("/register")
 def register():
     settings = settings_for(current_app)
+    if not settings.registration_enabled:
+        raise Forbidden("Account registration is closed on this server.")
     ratelimit.hit(
         "register",
         ratelimit.client_ip(),
@@ -103,21 +104,7 @@ def register():
         "Too many new accounts from this address. Try again later.",
     )
     body = parse_body(RegisterBody)
-    if db_session.scalar(select(User.id).where(User.email == body.email)):
-        raise Conflict("An account with this email already exists.")
-    user = User(
-        email=body.email,
-        password_hash=hash_password(body.password),
-        display_name=body.display_name.strip(),
-    )
-    db_session.add(user)
-    try:
-        db_session.flush()
-        audit.record("auth.register", actor=user)
-        db_session.commit()
-    except IntegrityError as exc:  # lost a race with a concurrent sign-up
-        db_session.rollback()
-        raise Conflict("An account with this email already exists.") from exc
+    user = create_account(body)
     return _signed_in(user, body.session, 201)
 
 
@@ -135,7 +122,7 @@ def login():
         "Too many sign-in attempts. Wait a minute and try again.",
     )
     body = parse_body(LoginBody)
-    email = _normalise_email(body.email)
+    email = body.email.strip().lower()
     try:
         ratelimit.check(
             "login-failures",

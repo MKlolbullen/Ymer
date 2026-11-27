@@ -9,6 +9,29 @@ from ymer.extensions import get_s3
 
 
 def register_cli(app: Flask) -> None:
+    @app.cli.command("create-user")
+    @click.option("--email", prompt=True)
+    @click.option("--display-name", prompt=True)
+    def create_user(email: str, display_name: str) -> None:
+        """Provision a Ymer account locally, including when registration is closed."""
+        from pydantic import ValidationError
+        from werkzeug.exceptions import Conflict
+
+        from ymer.auth.accounts import AccountDetails, create_account
+
+        password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
+        try:
+            details = AccountDetails(email=email, display_name=display_name, password=password)
+        except ValidationError as exc:
+            errors = exc.errors(include_input=False, include_url=False)
+            message = "; ".join(f"{error['loc'][0]}: {error['msg']}" for error in errors)
+            raise click.ClickException(message) from None
+        try:
+            user = create_account(details, provisioned=True)
+        except Conflict as exc:
+            raise click.ClickException(exc.description) from None
+        click.echo(f"Created account {user.email}.")
+
     @app.cli.command("init-storage")
     def init_storage() -> None:
         """Create the S3 bucket named by YMER_S3_BUCKET if it does not exist."""
