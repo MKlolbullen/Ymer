@@ -198,7 +198,9 @@ def set_version(version: str) -> int:
     android = json.loads(ANDROID_CONF.read_text())
     android["bundle"]["android"]["versionCode"] = android_code(version)
     _write_json(ANDROID_CONF, android)
-    print(f"version: set {version} (Python {py}, MSI {msi(version)}, Android {android_code(version)})")
+    print(
+        f"version: set {version} (Python {py}, MSI {msi(version)}, Android {android_code(version)})"
+    )
     return 0
 
 
