@@ -365,10 +365,12 @@ jobs:
             /^## \[/ { if (on) exit; on = index($0, "[" v "]") > 0; next }
             on { print }
           ' CHANGELOG.md > notes.md
-          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+          grep -q '[^[:space:]]' notes.md || echo "CHANGELOG.md has no notes for $VERSION; GitHub will generate them."
       - name: Create the draft release
         run: |
           pre=""
           [ "${{ needs.version.outputs.prerelease }}" = true ] && pre="--prerelease"
+          notes=(--generate-notes)
+          grep -q '[^[:space:]]' notes.md && notes=(--notes-file notes.md)
           gh release create "$GITHUB_REF_NAME" dist/* --draft $pre \
-            --title "Ymer $VERSION" --notes-file notes.md
+            --title "Ymer $VERSION" "${notes[@]}"
