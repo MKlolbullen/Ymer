@@ -25,12 +25,19 @@ pub fn cacheable(path: &str) -> bool {
     !(path.ends_with("/download") || path.ends_with("/content"))
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub content_type: Option<String>,
     pub content_encoding: Option<String>,
-    #[serde(skip)]
     pub body: Vec<u8>,
+}
+
+/// What precedes the body in a cache file. `body_len` catches a short or long body.
+#[derive(Serialize, Deserialize)]
+struct Header {
+    content_type: Option<String>,
+    content_encoding: Option<String>,
+    body_len: u64,
 }
 
 pub struct ApiCache {
@@ -55,7 +62,7 @@ impl ApiCache {
     }
 
     /// One file per response: a 4-byte little-endian metadata length, the metadata
-    /// as JSON, then the body. Written with one rename, so a body never pairs with
+    /// as JSON (which records the body's length), then the body. Written with one rename, so a body never pairs with
     /// another response's metadata.
     fn path(&self, key: &str) -> PathBuf {
         let name = hex::encode(Sha256::digest(key.as_bytes()));
@@ -68,9 +75,16 @@ impl ApiCache {
         let bytes = fs::read(self.path(key)).ok()?;
         let len = u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?) as usize;
         let meta = bytes.get(4..4 + len)?;
-        let mut entry: Entry = serde_json::from_slice(meta).ok()?;
-        entry.body = bytes[4 + len..].to_vec();
-        Some(entry)
+        let header: Header = serde_json::from_slice(meta).ok()?;
+        let body = &bytes[4 + len..];
+        if body.len() as u64 != header.body_len {
+            return None;
+        }
+        Some(Entry {
+            content_type: header.content_type,
+            content_encoding: header.content_encoding,
+            body: body.to_vec(),
+        })
     }
 
     /// Store a response fetched at `generation`; skipped if the cache was cleared since.
@@ -80,7 +94,11 @@ impl ApiCache {
             return Ok(());
         }
         fs::create_dir_all(&self.dir)?;
-        let meta = serde_json::to_vec(entry)?;
+        let meta = serde_json::to_vec(&Header {
+            content_type: entry.content_type.clone(),
+            content_encoding: entry.content_encoding.clone(),
+            body_len: entry.body.len() as u64,
+        })?;
         let len = u32::try_from(meta.len()).map_err(|_| io::Error::other("metadata too large"))?;
         let mut bytes = Vec::with_capacity(4 + meta.len() + entry.body.len());
         bytes.extend_from_slice(&len.to_le_bytes());
@@ -174,8 +192,11 @@ mod tests {
         assert!(cache.get("/api/c").is_some());
 
         // A damaged file reads as a miss, not as a wrong response.
+        let good = fs::read(cache.path("/api/c")).unwrap();
+        fs::write(cache.path("/api/c"), &good[..good.len() - 1]).unwrap();
+        assert_eq!(cache.get("/api/c"), None, "truncated body");
         fs::write(cache.path("/api/c"), [9, 0, 0, 0, b'{']).unwrap();
-        assert_eq!(cache.get("/api/c"), None);
+        assert_eq!(cache.get("/api/c"), None, "damaged metadata");
 
         cache.clear().unwrap();
         assert_eq!(cache.get("/api/c"), None);
