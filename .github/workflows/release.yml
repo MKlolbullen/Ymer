@@ -80,6 +80,16 @@ jobs:
       image_prefix: ${{ steps.v.outputs.image_prefix }}
       release_tag: ${{ steps.v.outputs.release_tag }}
     steps:
+      - name: Manual run needs an existing tag
+        if: ${{ inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG does not exist. Create and push it first: git tag $TAG && git push origin $TAG"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SOURCE_REF }}
