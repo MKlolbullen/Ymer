@@ -1,6 +1,6 @@
 [project]
 name = "ymer"
-version = "0.1.0"
+version = "0.1.0b1"
 description = "Ymer backend: Flask API for the multi-user creator platform"
 requires-python = ">=3.12"
 dependencies = [
@@ -26,6 +26,8 @@ dependencies = [
 [project.optional-dependencies]
 # Hosted build sandbox for the Factory (YMER_FACTORY_SANDBOX=modal).
 modal = ["modal>=1.6"]
+# Production WSGI server used by the release images (packaging/docker/api.Dockerfile).
+server = ["gunicorn>=23"]
 dev = [
   "pytest>=8.3",
   "ruff>=0.8",

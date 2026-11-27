@@ -404,7 +404,27 @@ back online.
 Deeper notes on each part (routes, settings, the permission rules, how collab storage works) are in
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
-## Quick start
+## Install a release
+
+Releases are on the [Releases page](https://github.com/MKlolbullen/Ymer/releases). All server options run the same
+Docker images (`ghcr.io/mklolbullen/ymer-api`, `-collab`, `-web`) together with PostgreSQL, Redis and MinIO, and serve
+Ymer on port 8080. The first start downloads about 1 GB of images.
+
+| You have | Download | Then |
+|---|---|---|
+| Debian or Ubuntu server | `ymer_<version>_all.deb` | `sudo apt install ./ymer_<version>_all.deb`. It runs as the `ymer` systemd service; settings are in `/etc/ymer/ymer.env`, and `ymerctl status` / `ymerctl logs` help. |
+| Windows PC | `Ymer-Setup-<version>.exe` | Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2). Use **Start Ymer**, **Stop Ymer** and **Ymer settings** in the Start menu. |
+| Any machine with Docker | `ymer-server-<version>.tar.gz` (or `.zip`) | Unpack it and run `./ymerctl start` (`ymerctl.ps1 start` on Windows). |
+| A Ymer server already | `Ymer-Desktop-*` (`.msi`/`-setup.exe`, `.dmg`, `.AppImage`/`.deb`) | The desktop client opens your server in its own window; pick the server on first launch. |
+
+Open http://localhost:8080 (or the server's address) and create an account. To reach Ymer from other machines, set
+`YMER_PUBLIC_URL` to the address people use and `YMER_HTTP_BIND=0.0.0.0` in the settings file, then restart (the
+`.deb` does this for you, using the machine's host name). Put an HTTPS reverse proxy in front for anything beyond a
+trusted network, and set `YMER_COOKIE_SECURE=true`. AI and Factory settings go in the same file; see the bundle's
+README. The bundle's Factory runs builds on Modal or in the demo sandbox; the Docker sandbox needs the development
+setup below.
+
+## Quick start (development)
 
 From the repository root, run the local development installer with Python 3.12+, Node.js 22.18+, npm, curl, and a running Docker engine with Compose v2.
 
@@ -450,6 +470,10 @@ frontend/    React app: app shell and page tree, editor (src/editor), databases 
              templates and import (src/templates)
 infra/       Init scripts for the Compose services, and the Factory's sandbox images (infra/factory)
 docs/assets/ Logo, architecture diagram and screenshots used in this README
+packaging/   Release images (packaging/docker), the Compose bundle and ymerctl, the .deb and the Windows installer
+desktop/     Desktop client (Tauri) that opens a Ymer server in its own window
+scripts/     Release helpers: scripts/version.py keeps every package on the version in VERSION
+.github/     Release workflow: a v<version> tag builds and drafts a GitHub release (see CHANGELOG.md)
 ```
 
 ## Roadmap
@@ -472,6 +496,7 @@ docs/assets/ Logo, architecture diagram and screenshots used in this README
 | **H. Hardening** | Sessions in httpOnly cookies with CSRF protection, rate limits, an audit log with an Activity log page, the Docker sandbox, MinIO uploads and git pushes checked against real services | ✅ Done |
 | **T. Templates and import** | Starter sets for new workspaces, page templates, saving any page as a template, duplicating pages, Notion and Markdown import | ✅ Done |
 | **M. Mobile and offline** | Phone layout, installable app (manifest, service worker), offline editing with local Yjs copies and background resync, offline start-up | ✅ Done |
+| **R. Beta release** | One version for every package, Docker images on GHCR, a Compose bundle with `ymerctl`, a `.deb` with a systemd service, a Windows installer, a desktop client for Windows, macOS and Linux, all built and drafted as a GitHub release from a version tag | ✅ Done |
 | **5. Polish** | Presence everywhere, public sharing links, export (Markdown, PDF, PNG) | Planned |
 
 ### Data model

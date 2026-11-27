@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ "$1" = purge ]; then
+  rm -f /etc/ymer/ymer.env
+  rmdir /etc/ymer 2>/dev/null || true
+  echo "Ymer's data is kept in Docker volumes, locked with the passwords that were just removed."
+  echo "Before installing Ymer again, delete it: docker volume rm ymer_postgres-data ymer_redis-data ymer_minio-data"
+fi
+if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
+exit 0

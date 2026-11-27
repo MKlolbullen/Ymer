@@ -1,0 +1,4 @@
+#!/bin/sh
+# ymerctl for the Debian package: settings live in /etc/ymer/ymer.env.
+export YMER_ENV_FILE="${YMER_ENV_FILE:-/etc/ymer/ymer.env}"
+exec /opt/ymer/ymerctl "$@"

@@ -1,0 +1,145 @@
+# Ymer server bundle: the whole app on one machine with Docker Compose.
+#
+# Settings and secrets come from ymer.env next to this file (created by
+# `ymerctl init`, or set YMER_ENV_FILE to another path). Only the web front is
+# published, on YMER_HTTP_BIND:YMER_HTTP_PORT (default 127.0.0.1:8080).
+# @VERSION@ is replaced with the release version when the bundle is built
+# (packaging/build.sh); set YMER_VERSION to run other images.
+
+name: ymer
+
+x-backend: &backend
+  image: ${YMER_IMAGE_PREFIX:-ghcr.io/mklolbullen/ymer}-api:${YMER_VERSION:-@VERSION@}
+  restart: unless-stopped
+  env_file:
+    - path: ${YMER_ENV_FILE:-ymer.env}
+      required: true
+  environment: &backend-env
+    YMER_ENV: production
+    # The password reaches libpq through PGPASSWORD, so it is not part of a URL.
+    YMER_DATABASE_URL: postgresql+psycopg://ymer@postgres:5432/ymer
+    PGPASSWORD: ${POSTGRES_PASSWORD}
+    YMER_REDIS_URL: redis://redis:6379/0
+    YMER_S3_ENDPOINT_URL: http://minio:9000
+    YMER_S3_PUBLIC_ENDPOINT_URL: ${YMER_PUBLIC_URL:-http://localhost:8080}
+    YMER_S3_ACCESS_KEY: ymer
+    YMER_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?run ymerctl init}
+    YMER_S3_BUCKET: ymer-files
+    YMER_CORS_ORIGINS: ${YMER_PUBLIC_URL:-http://localhost:8080}
+    YMER_TRUSTED_PROXIES: ${YMER_TRUSTED_PROXIES:-1}
+    YMER_AI_INDEX_INLINE: "false"
+    YMER_FACTORY_RUN_INLINE: "false"
+  depends_on: &backend-deps
+    setup:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ymer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ymerctl init}
+      POSTGRES_DB: ymer
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ymer -d ymer"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ymer
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run ymerctl init}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: apply database migrations and create the file bucket, then exit.
+  setup:
+    <<: *backend
+    restart: "no"
+    command: ["sh", "-c", "alembic upgrade head && flask --app wsgi init-storage"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health/ready', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ai-worker:
+    <<: *backend
+    command: ["flask", "--app", "wsgi", "ai-worker"]
+
+  factory-worker:
+    <<: *backend
+    command: ["flask", "--app", "wsgi", "factory-worker"]
+
+  collab:
+    image: ${YMER_IMAGE_PREFIX:-ghcr.io/mklolbullen/ymer}-collab:${YMER_VERSION:-@VERSION@}
+    restart: unless-stopped
+    environment:
+      YMER_ENV: production
+      YMER_COLLAB_PORT: "1234"
+      YMER_COLLAB_BACKEND_URL: http://api:5000
+      YMER_COLLAB_SECRET: ${YMER_COLLAB_SECRET:?run ymerctl init}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:1234/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    image: ${YMER_IMAGE_PREFIX:-ghcr.io/mklolbullen/ymer}-web:${YMER_VERSION:-@VERSION@}
+    restart: unless-stopped
+    ports:
+      - "${YMER_HTTP_BIND:-127.0.0.1}:${YMER_HTTP_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+      collab:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
