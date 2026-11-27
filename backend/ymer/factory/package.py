@@ -10,6 +10,10 @@ already wrote a file with that name:
   one (the Python CLI). Ymer does not build the image: that needs network and a Docker
   daemon, so it is left to the team's own CI or ``docker build``.
 
+- the checks: the ``.ymer-ci/`` scripts Ymer ran before the release, and a CI workflow
+  that runs them (GitHub Actions and/or GitLab CI, see ``ymer.factory.workflows``). The
+  scripts always come from Ymer's templates, so the CI runs exactly what Ymer checked.
+
 These files are written from fixed templates, not by the model.
 """
 
@@ -17,7 +21,9 @@ import io
 import zipfile
 from datetime import datetime
 
+from ymer.factory.ci_scripts import ci_files
 from ymer.factory.stacks import STACKS
+from ymer.factory.workflows import PROVIDERS, workflow_files
 
 GITIGNORE = {
     "static-web": "node_modules/\n.DS_Store\n",
@@ -127,6 +133,12 @@ def release_readme(
         lines = "\n".join(f"- {r}" for r in requests)
         parts.append(f"## Changes requested and built in this release\n\n{lines}\n")
     parts.append(f"## Run it\n\n{RUN.get(stack.key, '')}")
+    parts.append(
+        "## Checks\n\nYmer ran these before the release; your CI runs the same scripts "
+        "(`.github/workflows/ymer-checks.yml` or `.gitlab-ci.yml`):\n\n"
+        "```sh\nsh .ymer-ci/lint.sh\nsh .ymer-ci/build.sh\nsh .ymer-ci/test.sh\n"
+        "sh .ymer-ci/smoke.sh\n```\n"
+    )
     return "\n".join(parts)
 
 
@@ -139,11 +151,14 @@ def package_files(
     notes: str | None,
     when: datetime,
     requests: list[str] | None = None,
+    ci: tuple[str, ...] = PROVIDERS,
 ) -> dict[str, str]:
-    """The release's files plus the standard ones it does not already have."""
+    """The release's files plus the standard ones it does not already have, and the check
+    scripts (always Ymer's own). ``ci`` names the CI systems to write a workflow for."""
     extra = {
         "RELEASE.md": release_readme(app, number, stack, notes, when, requests),
         ".gitignore": GITIGNORE.get(stack, ""),
+        **workflow_files(stack, ci),
     }
     if stack in DOCKERFILES:
         extra["Dockerfile"] = DOCKERFILES[stack]
@@ -151,6 +166,7 @@ def package_files(
     for path, content in extra.items():
         if content and path not in out:
             out[path] = content
+    out.update(ci_files(stack))
     return out
 
 

@@ -4,6 +4,7 @@ Routes, under ``/api/workspaces/<ws>/factories/<factory page id>``:
 
 - ``GET    /releases``                      the releases, newest first
 - ``POST   /releases``                      {notes?}: approve the latest passed build as a release
+                                            (its checks must have passed, see ``factory_ci.py``)
 - ``GET    /releases/<n>/download``         the release as a zip, with packaging files
 - ``POST   /releases/<n>/preview``          a short-lived link to open a web app's release
 - ``POST   /releases/<n>/push``             {remote, branch, token?}: push it to a git repository
@@ -32,6 +33,7 @@ from ymer.api.workspaces import scope_for
 from ymer.app import settings_for
 from ymer.auth import current_user, login_required
 from ymer.db import db_session
+from ymer.factory.ci import release_blocker
 from ymer.factory.git import GitError, check_branch, check_remote, push_files
 from ymer.factory.package import package_files, slug, zip_bytes
 from ymer.factory.releases import (
@@ -43,6 +45,7 @@ from ymer.factory.releases import (
     release_json,
     release_requests,
 )
+from ymer.factory.workflows import PROVIDERS, providers_for
 from ymer.models import (
     FactoryProject,
     FactoryPush,
@@ -87,7 +90,9 @@ def _release(project: FactoryProject, number: int) -> FactoryRelease:
     return release
 
 
-def _delivered_files(page: Page, release: FactoryRelease) -> dict[str, str]:
+def _delivered_files(
+    page: Page, release: FactoryRelease, ci: tuple[str, ...] = PROVIDERS
+) -> dict[str, str]:
     return package_files(
         release.files,
         app=page.title,
@@ -96,6 +101,7 @@ def _delivered_files(page: Page, release: FactoryRelease) -> dict[str, str]:
         notes=release.notes,
         when=release.created_at,
         requests=[f"#{c.number} {c.title}" for c in release_requests(db_session, release)],
+        ci=ci,
     )
 
 
@@ -139,6 +145,10 @@ def release(workspace_id: uuid.UUID, page_id: uuid.UUID):
     previous = latest_release(db_session, project.page_id)
     if previous is not None and previous.files == files:
         raise Conflict(f"Nothing changed since release {previous.number}.")
+    if settings_for(current_app).factory_ci_gate:
+        blocker = release_blocker(db_session, project, files)
+        if blocker is not None:
+            raise Conflict(blocker)
     created = create_release(
         db_session, project, run_id=run.id, notes=body.notes, user_id=current_user().id
     )
@@ -281,7 +291,7 @@ def push(workspace_id: uuid.UUID, page_id: uuid.UUID, number: int):
     )
     try:
         result = push_files(
-            _delivered_files(page, rel),
+            _delivered_files(page, rel, providers_for(remote)),
             remote=remote,
             branch=branch,
             token=body.token,

@@ -744,3 +744,71 @@ Assumptions for F5, open to change:
   requests and are not counted. Two builds started at the same moment can each use what
   was left, so a month can go slightly over.
 
+### Checks (CI) on built apps
+
+Migration `0016` adds `factory_ci_runs` (numbered per factory: status
+`queued → running → passed | failed | error`, trigger `build` or `manual`, the build it
+followed, the hash and count of the files checked, each step's result and output, the fix
+request and fix build it led to) and three columns on `factory_projects`:
+`checks_page_id`, `ci_auto_fix` and `ci_fix_streak`. Routes: `ymer/api/factory_ci.py`;
+logic: `ymer/factory/ci.py` (run, record, gate, repair), `ci_scripts.py` (what each step
+means per stack) and `workflows.py` (the delivered CI files).
+
+- **Steps**: lint, build, tests, smoke run, each `sh .ymer-ci/<step>.sh` in its own
+  sandbox call with the app's files plus Ymer's `.ymer-ci/` scripts, which come from
+  fixed templates and always replace any the build wrote. Every step runs even after a
+  failure, so the report is complete. Per stack:
+
+  | Stack | Lint | Build | Smoke run |
+  |---|---|---|---|
+  | static-web | `node --check` on every .js/.mjs | index.html and every local file it loads exist | every module in `src/` loads (ones that need a browser are reported, not failed) |
+  | node-cli | `node --check` | package.json has a name and a bin that exists | `node <bin> --help` exits 0 (or refuses `--help` with `ERR_PARSE_ARGS`) |
+  | python-cli | ruff `E9,F63,F7,F82` | every file compiles; pyproject.toml has `[project] name` | `app.cli.main(["--help"])` exits 0 |
+  | python-api | ruff | as python-cli | `/openapi.json` answers 200 and the first GET routes do not 500 |
+  | flask-react | ruff on `backend/` | backend compiles; `frontend/package.json` is valid | `create_app()` starts; `/` and a few `/api` routes do not 500 |
+
+  Tests are the stack's `sandbox_test`. Lint selects errors only (syntax, undefined
+  names, broken comparisons), not style. The Python images carry ruff 0.8.4; on an image
+  built before that, lint falls back to compiling every file and says so. The demo
+  sandbox recognises the scripts: lint, build and smoke pass when every Python file parses.
+- **When**: `runner.run_now` runs a build, then (if it passed) its checks in the same
+  thread, then any fix build they started, and so on. The worker claims queued builds
+  first, then queued checks. `POST /checks` (editor, no build or checks running) queues a
+  manual run, run inline with `YMER_FACTORY_RUN_INLINE`. The build's log gets a `checks`
+  event, and the factory page polls while checks are queued or running.
+- **History**: each finished run adds a row (newest first) to a **Checks** database
+  under the factory, created on the first run: Run, Status, Trigger, Date, one select per
+  step, Seconds, Files, Summary; a table, a board by status and a chart view (passes and
+  failures per day). If someone deletes it, the next run makes a new one.
+- **Gate** (`YMER_FACTORY_CI_GATE`, on by default): `POST /releases` needs the newest
+  check run whose `files_hash` matches the current files to have passed, and no checks
+  running. The factory's `checks.release_blocker` says why not, and the review step
+  disables the release button with that text.
+- **Repair**: a failure opens a change request of origin `ci` ("Fix failing checks:
+  Lint, Smoke run") or refreshes the newest one not yet built, and adds a To do task
+  "Fix failing checks (checks #n)" whose detail holds the failing steps' output (last
+  2,500 characters each) and how to rerun them. The factory moves back to `planned`.
+  Checking again before a build updates that task instead of adding another. A passed
+  build marks the request built, like any planned change.
+- **Auto-fix**: `PUT /checks/settings {auto_fix}` (editor). With it on, a failure queues a
+  build at once, reusing the last build's brief, architecture, model and starter, within
+  the workspace budget. At most `YMER_FACTORY_CI_MAX_AUTO_FIXES` (3) in a row; passing
+  checks reset the count, and so does switching auto-fix on again.
+- **Delivery**: zips and pushes include `.ymer-ci/` and CI files: a push to github.com
+  gets `.github/workflows/ymer-checks.yml`, a GitLab host gets `.gitlab-ci.yml`, anything
+  else (and a download) gets both. They install the same pinned tools as the sandbox
+  images and run the same four scripts; Flask + React also builds its front end there,
+  which the offline sandbox cannot. A workflow file the build wrote is kept.
+- **Tests**: `tests/test_factory_ci.py` runs the real scripts on this machine against the
+  demo agent's apps (and broken ones), and covers the API with stand-in sandboxes. The
+  live Docker test (`pytest -m live`) builds every stack, checks it in the real images,
+  and pushes it with its CI files.
+
+Assumptions for checks, open to change:
+
+- The sandbox has no network, so checks cannot install packages; the front end of the
+  Flask + React stack is built only by the delivered workflow.
+- Checks run on the working files, not on a release, so they gate what is about to be
+  released. A release made with the gate off is not checked afterwards.
+- Auto-fix is off by default, because each fix build spends tokens.
+

@@ -129,6 +129,11 @@ def test_release_download_and_changes(app, client, team):
         db_session.commit()
     pending = client.get(team.url, headers=h).get_json()["factory"]["delivery"]["unreleased"]
     assert pending["changed"] == ["src/app/cli.py"]
+    # Files nobody checked cannot be released; once the checks pass on them, they can.
+    blocked = client.post(f"{team.url}/releases", json={}, headers=h)
+    assert blocked.status_code == 409 and "Run the checks" in blocked.get_json()["message"]
+    assert client.post(f"{team.url}/checks", headers=h).status_code == 202
+    assert work_once(app) is True
     second = client.post(f"{team.url}/releases", json={}, headers=h).get_json()["release"]
     assert second["number"] == 2 and second["changes"]["changed"] == ["src/app/cli.py"]
     listed = client.get(f"{team.url}/releases", headers=team.viewer.headers).get_json()["releases"]

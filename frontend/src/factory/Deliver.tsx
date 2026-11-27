@@ -10,10 +10,12 @@ import { apiOrigin, downloadFromApi } from "@/lib/api";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Page } from "@/lib/types";
 
+import { Checks } from "./Checks";
 import {
   canBuild,
   previewLink,
   readyForReview,
+  releaseBlocked,
   releaseDownloadPath,
   runActive,
   useFactoryMutations,
@@ -85,10 +87,11 @@ export function Review({ page, factory: f }: { page: Page; factory: Factory }) {
       title="Review"
       hint={
         open
-          ? "Look over what the build changed, then approve it as a release. A release is a frozen copy: later builds do not change it."
+          ? "Look over what the build changed and how its checks went, then approve it as a release. A release is a frozen copy: later builds do not change it."
           : "Opens once there is a build."
       }
     >
+      {open && (run || f.checks.latest) && <Checks page={page} factory={f} />}
       {open &&
         (ready && pending ? (
           <div className="space-y-3">
@@ -122,11 +125,12 @@ export function Review({ page, factory: f }: { page: Page; factory: Factory }) {
                 </label>
                 <button
                   onClick={() => release.mutate(notes, { onSuccess: () => setNotes("") })}
-                  disabled={release.isPending}
+                  disabled={release.isPending || releaseBlocked(f)}
                   className={primary}
                 >
                   {release.isPending ? "Releasing…" : `Approve as release ${next}`}
                 </button>
+                {releaseBlocked(f) && <p className="text-sm text-zinc-500">{f.checks.release_blocker}</p>}
               </>
             )}
             {release.isError && (

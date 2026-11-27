@@ -190,7 +190,8 @@ def test_a_build_runs_every_task_and_writes_files(app, client, team):
     assert "checked, not run" in data["run"]["summary"]
     assert data["stage"] == "built"
     kinds = [e["kind"] for e in data["events"]]
-    assert kinds[0] == "start" and kinds[-1] == "finish"
+    # The build finishes, then its checks run and report into the same log.
+    assert kinds[0] == "start" and kinds[-2:] == ["finish", "checks"]
     assert kinds.count("task") == run["tasks_total"] == kinds.count("done")
     assert "tests" in kinds and "file" in kinds
     seqs = [e["seq"] for e in data["events"]]

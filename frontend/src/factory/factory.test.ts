@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Page } from "@/lib/types";
 
+import { passRateText, stepRows } from "./Checks";
 import {
   briefApproved,
   budgetShare,
@@ -12,10 +13,12 @@ import {
   openChanges,
   plannedChanges,
   readyForReview,
+  releaseBlocked,
   runActive,
   stepStates,
   tokens,
   type ChangeRequest,
+  type CiRun,
   type Factory,
   type RunEvent,
 } from "./api";
@@ -70,6 +73,17 @@ const factory = (extra: Partial<Factory> = {}): Factory => ({
     custom: false,
     default_limit: 20_000_000,
     can_edit: false,
+  },
+  checks: {
+    latest: null,
+    recent: [],
+    pass_rate: null,
+    page_id: null,
+    auto_fix: false,
+    fix_streak: 0,
+    max_auto_fixes: 3,
+    gate: true,
+    release_blocker: null,
   },
   ...extra,
 });
@@ -191,5 +205,63 @@ describe("iterating", () => {
     expect(budgetShare({ ...b, used: 5_000_000 })).toBe(0.25);
     expect(budgetShare({ ...b, used: 50_000_000 })).toBe(1);
     expect(budgetShare({ ...b, limit: 0, used: 5 })).toBe(0);
+  });
+});
+
+const ciRun = (extra: Partial<CiRun> = {}): CiRun => ({
+  id: "ci1",
+  number: 1,
+  status: "running",
+  trigger: "build",
+  run_id: "r1",
+  stack: "python-cli",
+  sandbox: "fake",
+  simulated: true,
+  summary: null,
+  file_count: 4,
+  steps: [],
+  change: null,
+  fix_run_id: null,
+  started_by: null,
+  created_at: "2026-11-27T10:00:00Z",
+  started_at: "2026-11-27T10:00:01Z",
+  finished_at: null,
+  ...extra,
+});
+
+describe("checks", () => {
+  it("shows the steps that ran and the ones still to come", () => {
+    const lint = { key: "lint", name: "Lint", command: "sh .ymer-ci/lint.sh", status: "passed" as const };
+    const step = { ...lint, exit_code: 0, timed_out: false, seconds: 1.2, output: "ok" };
+    const rows = stepRows(ciRun({ steps: [step] }));
+    expect(rows.map((r) => [r.key, r.state])).toEqual([
+      ["lint", "passed"],
+      ["build", "running"],
+      ["test", "waiting"],
+      ["smoke", "waiting"],
+    ]);
+    // A finished run shows only what ran.
+    expect(stepRows(ciRun({ status: "error", steps: [step] })).map((r) => r.key)).toEqual(["lint"]);
+  });
+
+  it("summarises the pass rate over finished runs", () => {
+    const recent = [
+      { number: 3, status: "passed" as const, created_at: "" },
+      { number: 2, status: "failed" as const, created_at: "" },
+      { number: 1, status: "error" as const, created_at: "" },
+    ];
+    const f = factory();
+    expect(passRateText(f)).toBeNull();
+    expect(passRateText(factory({ checks: { ...f.checks, recent, pass_rate: 0.5 } }))).toBe(
+      "50% pass rate (1 of 2 recent runs)",
+    );
+  });
+
+  it("blocks the release only while the gate is on", () => {
+    const f = factory();
+    const blocked = { ...f.checks, release_blocker: "Run the checks on this build before releasing it." };
+    expect(releaseBlocked(factory({ checks: blocked }))).toBe(true);
+    expect(releaseBlocked(factory({ checks: { ...blocked, gate: false } }))).toBe(false);
+    expect(releaseBlocked(f)).toBe(false);
   });
 });

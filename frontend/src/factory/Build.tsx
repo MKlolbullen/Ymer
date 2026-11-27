@@ -2,7 +2,19 @@
  * Stage F3: build the approved plan. Start (or continue) a build, follow its log while
  * the agent works task by task, stop it, and browse the files it wrote.
  */
-import { CircleCheck, Dot, FilePen, Flag, FlaskConical, ListTodo, MessageSquare, OctagonX, Play, Terminal } from "lucide-react";
+import {
+  CircleCheck,
+  Dot,
+  FilePen,
+  Flag,
+  FlaskConical,
+  ListTodo,
+  MessageSquare,
+  OctagonX,
+  Play,
+  ShieldCheck,
+  Terminal,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Icon, type LucideIcon } from "@/components/icons";
@@ -58,6 +70,7 @@ const EVENT_ICON: Record<string, LucideIcon> = {
   file: FilePen,
   tests: FlaskConical,
   command: Terminal,
+  checks: ShieldCheck,
   done: CircleCheck,
   blocked: OctagonX,
   finish: Flag,
