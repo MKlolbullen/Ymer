@@ -6,7 +6,7 @@
 //! device's loopback), redirects to the server become relative, and HSTS is dropped
 //! so 127.0.0.1 is never pinned to https.
 
-use axum::http::{header, HeaderMap, HeaderName, HeaderValue};
+use axum::http::{header, HeaderMap, HeaderValue};
 use url::Url;
 
 /// The cookie that proves a request comes from the app's own web view.
@@ -24,8 +24,16 @@ const HOP_BY_HOP: [&str; 9] = [
     "upgrade",
 ];
 
-fn hop_by_hop(name: &HeaderName) -> bool {
-    HOP_BY_HOP.contains(&name.as_str())
+/// Fields that must not be forwarded: the fixed hop-by-hop ones plus any that the
+/// message's `Connection` header names (RFC 9110, section 7.6.1).
+fn hop_by_hop_fields(headers: &HeaderMap) -> Vec<String> {
+    let mut names: Vec<String> = HOP_BY_HOP.iter().map(|s| s.to_string()).collect();
+    for value in headers.get_all(header::CONNECTION) {
+        if let Ok(v) = value.to_str() {
+            names.extend(v.split(',').map(|n| n.trim().to_ascii_lowercase()).filter(|n| !n.is_empty()));
+        }
+    }
+    names
 }
 
 /// `https://ymer.example.com:8443` without a trailing slash.
@@ -48,9 +56,10 @@ pub fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
 /// Headers to send upstream for a request the web view made to the relay.
 pub fn to_upstream(incoming: &HeaderMap, server: &Url) -> HeaderMap {
     let server_origin = origin(server);
+    let skip = hop_by_hop_fields(incoming);
     let mut out = HeaderMap::new();
     for (name, value) in incoming {
-        if hop_by_hop(name) || name == header::HOST || name.as_str().starts_with("sec-websocket") {
+        if skip.iter().any(|s| s == name.as_str()) || name == header::HOST || name.as_str().starts_with("sec-websocket") {
             continue;
         }
         if name == header::COOKIE {
@@ -113,9 +122,10 @@ pub fn rewrite_set_cookie(value: &str) -> String {
 /// Headers to return to the web view for a server response.
 pub fn from_upstream(upstream: &HeaderMap, server: &Url) -> HeaderMap {
     let server_origin = origin(server);
+    let skip = hop_by_hop_fields(upstream);
     let mut out = HeaderMap::new();
     for (name, value) in upstream {
-        if hop_by_hop(name) || name == header::STRICT_TRANSPORT_SECURITY || name == "alt-svc" {
+        if skip.iter().any(|s| s == name.as_str()) || name == header::STRICT_TRANSPORT_SECURITY || name == "alt-svc" {
             continue;
         }
         if name == header::SET_COOKIE {
@@ -130,7 +140,8 @@ pub fn from_upstream(upstream: &HeaderMap, server: &Url) -> HeaderMap {
             let loc = value.to_str().unwrap_or("");
             let local = match loc.strip_prefix(&server_origin) {
                 Some("") => "/".to_string(),
-                Some(rest) if rest.starts_with('/') => rest.to_string(),
+                // "//x" would name another host; keep such redirects pointing at the server.
+                Some(rest) if rest.starts_with('/') && !rest.starts_with("//") => rest.to_string(),
                 _ => loc.to_string(),
             };
             if let Ok(v) = HeaderValue::from_str(&local) {
@@ -210,5 +221,21 @@ mod tests {
         let mut other = HeaderMap::new();
         other.insert(header::LOCATION, "https://elsewhere.example/".parse().unwrap());
         assert_eq!(from_upstream(&other, &server())[header::LOCATION], "https://elsewhere.example/");
+
+        let mut double = HeaderMap::new();
+        double.insert(header::LOCATION, "https://ymer.example.com//help".parse().unwrap());
+        assert_eq!(from_upstream(&double, &server())[header::LOCATION], "https://ymer.example.com//help");
+    }
+
+    #[test]
+    fn drops_fields_named_by_connection() {
+        let mut h = HeaderMap::new();
+        h.insert(header::CONNECTION, "X-Hop-Token, keep-alive".parse().unwrap());
+        h.insert("x-hop-token", "secret".parse().unwrap());
+        h.insert("x-other", "kept".parse().unwrap());
+        for out in [to_upstream(&h, &server()), from_upstream(&h, &server())] {
+            assert!(out.get("x-hop-token").is_none());
+            assert_eq!(out["x-other"], "kept");
+        }
     }
 }

@@ -514,6 +514,8 @@ jobs:
             npx tauri ios build --ci --target aarch64 --export-method app-store-connect
           else
             echo "::warning::No Apple signing secrets: the iOS app is unsigned (Simulator, or sideloading after re-signing)."
+            # Missing secrets arrive as empty strings, which Tauri reads as incomplete credentials.
+            unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_KEY_PATH APPLE_DEVELOPMENT_TEAM
             npx tauri ios build --ci --target aarch64 --no-sign
           fi
           ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -n1)

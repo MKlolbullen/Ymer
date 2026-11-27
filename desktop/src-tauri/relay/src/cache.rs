@@ -9,7 +9,8 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -36,11 +37,21 @@ pub struct ApiCache {
     dir: PathBuf,
     max_entries: usize,
     writes: AtomicUsize,
+    /// Bumped by every [`ApiCache::clear`]. A response fetched before a clear (an
+    /// earlier server or account) carries an older generation and is not stored.
+    generation: AtomicU64,
+    /// Serializes reads, writes and clears, so a body and its metadata stay paired.
+    lock: Mutex<()>,
 }
 
 impl ApiCache {
     pub fn new(dir: PathBuf, max_entries: usize) -> Self {
-        Self { dir, max_entries, writes: AtomicUsize::new(0) }
+        Self { dir, max_entries, writes: AtomicUsize::new(0), generation: AtomicU64::new(0), lock: Mutex::new(()) }
+    }
+
+    /// Take this before sending a request whose response may be stored with [`ApiCache::put`].
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
     }
 
     fn paths(&self, key: &str) -> (PathBuf, PathBuf) {
@@ -50,13 +61,19 @@ impl ApiCache {
 
     /// `key` is the request's path and query.
     pub fn get(&self, key: &str) -> Option<Entry> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let (meta, body) = self.paths(key);
         let mut entry: Entry = serde_json::from_slice(&fs::read(meta).ok()?).ok()?;
         entry.body = fs::read(body).ok()?;
         Some(entry)
     }
 
-    pub fn put(&self, key: &str, entry: &Entry) -> io::Result<()> {
+    /// Store a response fetched at `generation`; skipped if the cache was cleared since.
+    pub fn put(&self, key: &str, entry: &Entry, generation: u64) -> io::Result<()> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        if generation != self.generation() {
+            return Ok(());
+        }
         fs::create_dir_all(&self.dir)?;
         let (meta, body) = self.paths(key);
         write_atomic(&body, &entry.body)?;
@@ -68,14 +85,16 @@ impl ApiCache {
     }
 
     pub fn clear(&self) -> io::Result<()> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        self.generation.fetch_add(1, Ordering::SeqCst);
         match fs::remove_dir_all(&self.dir) {
             Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
             _ => Ok(()),
         }
     }
 
-    /// Keep the newest `max_entries` responses.
-    pub fn prune(&self) -> io::Result<()> {
+    /// Keep the newest `max_entries` responses. Called by `put`, which holds the lock.
+    fn prune(&self) -> io::Result<()> {
         let mut metas: Vec<_> = fs::read_dir(&self.dir)?
             .filter_map(Result::ok)
             .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
@@ -95,7 +114,10 @@ impl ApiCache {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let tmp = path.with_extension("tmp");
+    // Distinct per file: x.json -> x.json.tmp, x.body -> x.body.tmp.
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
     fs::write(&tmp, bytes)?;
     fs::rename(tmp, path)
 }
@@ -128,21 +150,30 @@ mod tests {
             body: b.as_bytes().to_vec(),
         };
         assert_eq!(cache.get("/api/a"), None);
-        cache.put("/api/a", &entry("1")).unwrap();
+        let g = cache.generation();
+        cache.put("/api/a", &entry("1"), g).unwrap();
         assert_eq!(cache.get("/api/a"), Some(entry("1")));
-        cache.put("/api/a", &entry("2")).unwrap();
+        cache.put("/api/a", &entry("2"), g).unwrap();
         assert_eq!(cache.get("/api/a").unwrap().body, b"2");
 
         for key in ["/api/b", "/api/c"] {
             std::thread::sleep(std::time::Duration::from_millis(20));
-            cache.put(key, &entry(key)).unwrap();
+            cache.put(key, &entry(key), g).unwrap();
         }
+        let _guard = cache.lock.lock().unwrap();
         cache.prune().unwrap();
+        drop(_guard);
         assert_eq!(cache.get("/api/a"), None, "oldest entry pruned");
         assert!(cache.get("/api/c").is_some());
 
         cache.clear().unwrap();
         assert_eq!(cache.get("/api/c"), None);
         cache.clear().unwrap();
+
+        // A response fetched before a clear (old server or account) is not stored.
+        cache.put("/api/late", &entry("old"), g).unwrap();
+        assert_eq!(cache.get("/api/late"), None);
+        cache.put("/api/late", &entry("new"), cache.generation()).unwrap();
+        assert_eq!(cache.get("/api/late").unwrap().body, b"new");
     }
 }

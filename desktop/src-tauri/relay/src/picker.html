@@ -44,7 +44,9 @@
     const back = document.getElementById("back");
     let current = null;
 
-    fetch("/__ymer/server").then((r) => r.json()).then((info) => {
+    fetch("/__ymer/server").then((r) => r.json()).then(async (info) => {
+      // A change of server that the app closed in the middle of: finish it first.
+      if (info.reset_pending) return finishReset();
       current = info.server;
       document.getElementById("version").textContent = `Ymer app ${info.app_version}`;
       if (current) {
@@ -72,6 +74,13 @@
       } catch { /* not supported */ }
     }
 
+    async function finishReset() {
+      await forgetOldServer();
+      const done = await fetch("/__ymer/reset-done", { method: "POST" }).catch(() => null);
+      if (done && done.ok) location.replace("/");
+      else error.textContent = "Couldn't finish changing the server. Close and reopen the app.";
+    }
+
     document.getElementById("form").addEventListener("submit", async (event) => {
       event.preventDefault();
       error.textContent = "";
@@ -85,7 +94,9 @@
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.message || "Couldn't connect.");
-        if (body.changed && current) await forgetOldServer();
+        // The relay says when another server's data is left over, even if the lookup
+        // above never finished.
+        if (body.reset_pending) return finishReset();
         location.replace("/");
       } catch (e) {
         error.textContent = e.message;

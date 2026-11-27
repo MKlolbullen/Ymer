@@ -26,6 +26,9 @@ alpha/beta/rc + N, or + 900 for a final release (0.1.0-beta.1 is 0.1.201,
 The phone apps share desktop/src-tauri. Android needs a growing whole number per
 release, so tauri.android.conf.json carries a version code built the same way:
 major * 10000000 + minor * 100000 + the MSI build number (0.1.0-beta.3 is 100203).
+iOS build numbers (CFBundleVersion) take at most three integers, so
+tauri.ios.conf.json carries the MSI form as bundleVersion, which keeps every
+beta of a version distinct for TestFlight.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ CARGO_TOML = TAURI_DIR / "Cargo.toml"
 CARGO_LOCK = TAURI_DIR / "Cargo.lock"
 TAURI_CONF = TAURI_DIR / "tauri.conf.json"
 ANDROID_CONF = TAURI_DIR / "tauri.android.conf.json"
+IOS_CONF = TAURI_DIR / "tauri.ios.conf.json"
 # The first version line of Cargo.toml is the [package] one.
 CARGO_TOML_RE = re.compile(r'^version = "([^"]*)"$', re.M)
 CARGO_LOCK_RE = re.compile(r'^name = "ymer-desktop"\nversion = "([^"]*)"$', re.M)
@@ -130,6 +134,10 @@ def found_versions() -> dict[str, str]:
     found["desktop/src-tauri/tauri.android.conf.json (versionCode)"] = str(
         android["bundle"]["android"].get("versionCode")
     )
+    ios = json.loads(IOS_CONF.read_text())
+    found["desktop/src-tauri/tauri.ios.conf.json (bundleVersion)"] = str(
+        ios["bundle"]["iOS"].get("bundleVersion")
+    )
     return found
 
 
@@ -138,6 +146,7 @@ def expected_versions(version: str) -> dict[str, str]:
     expected = {key: py if key.startswith("backend/") else version for key in found_versions()}
     expected["desktop/src-tauri/tauri.conf.json (MSI)"] = msi(version)
     expected["desktop/src-tauri/tauri.android.conf.json (versionCode)"] = str(android_code(version))
+    expected["desktop/src-tauri/tauri.ios.conf.json (bundleVersion)"] = msi(version)
     return expected
 
 
@@ -198,6 +207,9 @@ def set_version(version: str) -> int:
     android = json.loads(ANDROID_CONF.read_text())
     android["bundle"]["android"]["versionCode"] = android_code(version)
     _write_json(ANDROID_CONF, android)
+    ios = json.loads(IOS_CONF.read_text())
+    ios["bundle"]["iOS"]["bundleVersion"] = msi(version)
+    _write_json(IOS_CONF, ios)
     print(
         f"version: set {version} (Python {py}, MSI {msi(version)}, Android {android_code(version)})"
     )

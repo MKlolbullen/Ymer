@@ -75,6 +75,12 @@ pub struct Options {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Settings {
     server: Option<String>,
+    /// Set when the server changes until the web view has removed the old server's
+    /// cookies and offline copies (`/__ymer/reset-done`). Kept on disk so a switch cut
+    /// short by the app closing is finished on the next launch, before anything
+    /// reaches the new server.
+    #[serde(default)]
+    reset_pending: bool,
 }
 
 struct Relay {
@@ -83,6 +89,7 @@ struct Relay {
     app_version: String,
     settings_path: PathBuf,
     server: RwLock<Option<Url>>,
+    reset_pending: std::sync::atomic::AtomicBool,
     cache: ApiCache,
     client: reqwest::Client,
 }
@@ -92,8 +99,12 @@ impl Relay {
         self.server.read().unwrap().clone()
     }
 
-    fn save_server(&self, url: &Url) -> io::Result<()> {
-        let settings = Settings { server: Some(url.to_string()) };
+    fn reset_pending(&self) -> bool {
+        self.reset_pending.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn save_server(&self, url: &Url, reset_pending: bool) -> io::Result<()> {
+        let settings = Settings { server: Some(url.to_string()), reset_pending };
         if let Some(dir) = self.settings_path.parent() {
             std::fs::create_dir_all(dir)?;
         }
@@ -101,6 +112,7 @@ impl Relay {
         std::fs::write(&tmp, serde_json::to_vec_pretty(&settings)?)?;
         std::fs::rename(tmp, &self.settings_path)?;
         *self.server.write().unwrap() = Some(url.clone());
+        self.reset_pending.store(reset_pending, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 }
@@ -181,6 +193,7 @@ pub fn start(listener: TcpListener, options: Options) -> io::Result<Handle> {
         app_version: options.app_version,
         settings_path,
         server: RwLock::new(server),
+        reset_pending: settings.reset_pending.into(),
         cache: ApiCache::new(options.data_dir.join("api-cache"), CACHE_ENTRIES),
         client,
     });
@@ -229,6 +242,7 @@ fn router(relay: Arc<Relay>) -> Router {
         .route("/__ymer", get(|| async { Redirect::to("/__ymer/") }))
         .route("/__ymer/", get(picker))
         .route("/__ymer/server", get(server_info).post(choose_server))
+        .route("/__ymer/reset-done", axum::routing::post(reset_done))
         .route("/collab", any(collab))
         .route("/collab/{*rest}", any(collab))
         .route("/api/{*rest}", any(forward))
@@ -259,7 +273,7 @@ async fn start_page(State(relay): State<Arc<Relay>>, Query(q): Query<StartQuery>
     if q.t != relay.token {
         return message(StatusCode::FORBIDDEN, "Open Ymer from the app.");
     }
-    let to = if relay.server().is_some() { "/" } else { "/__ymer/" };
+    let to = if relay.server().is_some() && !relay.reset_pending() { "/" } else { "/__ymer/" };
     let cookie = format!("{APP_COOKIE}={}; Path=/; HttpOnly; SameSite=Strict", relay.token);
     ([(header::SET_COOKIE, cookie)], Redirect::to(to)).into_response()
 }
@@ -275,6 +289,8 @@ struct ServerInfo {
     app_version: String,
     server_version: Option<String>,
     changed: bool,
+    /// The web view must remove the old server's data, then POST /__ymer/reset-done.
+    reset_pending: bool,
 }
 
 async fn server_info(State(relay): State<Arc<Relay>>) -> Json<ServerInfo> {
@@ -283,6 +299,7 @@ async fn server_info(State(relay): State<Arc<Relay>>) -> Json<ServerInfo> {
         app_version: relay.app_version.clone(),
         server_version: None,
         changed: false,
+        reset_pending: relay.reset_pending(),
     })
 }
 
@@ -324,25 +341,52 @@ async fn choose_server(State(relay): State<Arc<Relay>>, Json(body): Json<ChooseS
     if service != "ymer-api" {
         return message(StatusCode::BAD_GATEWAY, &format!("{origin} answered, but it isn't a Ymer server."));
     }
-    let changed = relay.server().as_ref() != Some(&url);
-    if let Err(e) = relay.save_server(&url) {
+    let previous = relay.server();
+    let changed = previous.as_ref() != Some(&url);
+    // Switching away from a server leaves its data behind until the web view clears it.
+    let reset_pending = relay.reset_pending() || (changed && previous.is_some());
+    if changed {
+        if let Err(e) = relay.cache.clear() {
+            return message(StatusCode::INTERNAL_SERVER_ERROR, &format!("Couldn't clear the old server's data: {e}"));
+        }
+    }
+    if let Err(e) = relay.save_server(&url, reset_pending) {
         return message(StatusCode::INTERNAL_SERVER_ERROR, &format!("Couldn't save the server: {e}"));
     }
-    let mut response = Json(ServerInfo {
+    Json(ServerInfo {
         server: Some(url.to_string()),
         app_version: relay.app_version.clone(),
         server_version: version,
         changed,
+        reset_pending,
     })
-    .into_response();
-    if changed {
-        let _ = relay.cache.clear();
-        // The old server's session means nothing to the new one.
-        for cookie in ["ymer_access=; Max-Age=0; Path=/api", "ymer_refresh=; Max-Age=0; Path=/api/auth"] {
-            response.headers_mut().append(header::SET_COOKIE, HeaderValue::from_static(cookie));
-        }
+    .into_response()
+}
+
+/// The web view has removed the old server's offline copies; drop its session too.
+async fn reset_done(State(relay): State<Arc<Relay>>) -> Response {
+    let Some(server) = relay.server() else {
+        return message(StatusCode::CONFLICT, "Choose a Ymer server first.");
+    };
+    if let Err(e) = relay.save_server(&server, false) {
+        return message(StatusCode::INTERNAL_SERVER_ERROR, &format!("Couldn't save the server: {e}"));
+    }
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    for cookie in ["ymer_access=; Max-Age=0; Path=/api", "ymer_refresh=; Max-Age=0; Path=/api/auth"] {
+        response.headers_mut().append(header::SET_COOKIE, HeaderValue::from_static(cookie));
     }
     response
+}
+
+/// While a server change is unfinished, nothing may reach the new server.
+fn blocked(relay: &Relay) -> Option<Response> {
+    if relay.server().is_none() {
+        return Some(message(StatusCode::SERVICE_UNAVAILABLE, "Choose a Ymer server first."));
+    }
+    if relay.reset_pending() {
+        return Some(message(StatusCode::SERVICE_UNAVAILABLE, "Finishing the change of server."));
+    }
+    None
 }
 
 fn path_and_query(uri: &Uri) -> String {
@@ -363,9 +407,11 @@ fn cached_response(entry: Entry) -> Response {
 
 /// Forward an HTTP request to the server.
 async fn forward(State(relay): State<Arc<Relay>>, request: Request) -> Response {
-    let Some(server) = relay.server() else {
-        return message(StatusCode::SERVICE_UNAVAILABLE, "Choose a Ymer server first.");
-    };
+    if let Some(response) = blocked(&relay) {
+        return response;
+    }
+    let Some(server) = relay.server() else { unreachable!("checked by blocked()") };
+    let generation = relay.cache.generation();
     let (parts, body) = request.into_parts();
     let key = path_and_query(&parts.uri);
     let target = match server.join(&key) {
@@ -414,7 +460,7 @@ async fn forward(State(relay): State<Arc<Relay>>, request: Request) -> Response 
                 }
             }
         };
-        let _ = relay.cache.put(&key, &Entry { content_type, content_encoding, body: body.to_vec() });
+        let _ = relay.cache.put(&key, &Entry { content_type, content_encoding, body: body.to_vec() }, generation);
         return build(status, out_headers, Body::from(body));
     }
     build(status, out_headers, Body::from_stream(reply.bytes_stream()))
@@ -433,9 +479,10 @@ fn build(status: StatusCode, headers: HeaderMap, body: Body) -> Response {
 
 /// Forward the collaboration WebSocket.
 async fn collab(State(relay): State<Arc<Relay>>, ws: WebSocketUpgrade, uri: Uri, incoming: HeaderMap) -> Response {
-    let Some(server) = relay.server() else {
-        return message(StatusCode::SERVICE_UNAVAILABLE, "Choose a Ymer server first.");
-    };
+    if let Some(response) = blocked(&relay) {
+        return response;
+    }
+    let Some(server) = relay.server() else { unreachable!("checked by blocked()") };
     let mut target = match server.join(&path_and_query(&uri)) {
         Ok(url) => url,
         Err(_) => return message(StatusCode::BAD_REQUEST, "Bad path."),
@@ -525,7 +572,7 @@ async fn bundled(State(relay): State<Arc<Relay>>, method: Method, uri: Uri) -> R
     let path = uri.path().trim_start_matches('/');
     let last = path.rsplit('/').next().unwrap_or("");
     let is_page = path.is_empty() || path == "index.html" || !last.contains('.');
-    if is_page && relay.server().is_none() {
+    if is_page && (relay.server().is_none() || relay.reset_pending()) {
         return Redirect::to("/__ymer/").into_response();
     }
     let asset = if is_page { relay.assets.get("index.html") } else { relay.assets.get(path) };

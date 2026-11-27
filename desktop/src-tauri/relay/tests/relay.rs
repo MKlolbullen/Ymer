@@ -177,12 +177,11 @@ async fn checks_the_server_before_saving_it() {
 
     let ok = app.choose(&server.replace("http://", "")).await;
     assert_eq!(ok.status(), StatusCode::OK);
-    let cookies: Vec<_> = ok.headers().get_all(header::SET_COOKIE).iter().map(|v| v.to_str().unwrap().to_string()).collect();
-    assert!(cookies.iter().any(|c| c.starts_with("ymer_access=;")), "old session cleared: {cookies:?}");
     let info: serde_json::Value = ok.json().await.unwrap();
     assert_eq!(info["server"], format!("{server}/"));
     assert_eq!(info["server_version"], "9.9.9");
     assert_eq!(info["changed"], true);
+    assert_eq!(info["reset_pending"], false, "nothing to clean up on the first choice");
 
     let again: serde_json::Value = app.choose(&server).await.json().await.unwrap();
     assert_eq!(again["changed"], false);
@@ -324,4 +323,42 @@ async fn forwards_the_collab_websocket() {
     let mut no_cookie = app.url("/collab").replace("http://", "ws://").into_client_request().unwrap();
     no_cookie.headers_mut().remove(header::COOKIE);
     assert!(tokio_tungstenite::connect_async(no_cookie).await.is_err());
+}
+
+#[tokio::test]
+async fn a_change_of_server_is_finished_before_anything_reaches_the_new_one() {
+    let (first, _a) = upstream().await;
+    let (second, _b) = upstream().await;
+    let keep = tempfile::tempdir().unwrap();
+    let keep_path = keep.path().to_path_buf();
+    let app = App::start_in(keep).await;
+    app.choose(&first).await;
+    app.get("/api/workspaces").send().await.unwrap();
+
+    let switched: serde_json::Value = app.choose(&second).await.json().await.unwrap();
+    assert_eq!(switched["changed"], true);
+    assert_eq!(switched["reset_pending"], true);
+
+    // The app closes here, before the web view cleaned up. Next launch:
+    std::mem::forget(app);
+    let listener = ymer_relay::bind(&[0]).await.unwrap();
+    let relay = ymer_relay::start(listener, Options { data_dir: keep_path, assets: assets(), app_version: "1.2.3".into() }).unwrap();
+    let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
+    let start = client.get(relay.start_url()).send().await.unwrap();
+    assert_eq!(start.headers()[header::LOCATION], "/__ymer/", "the picker finishes the switch");
+    let cookie = start.headers()[header::SET_COOKIE].to_str().unwrap().split(';').next().unwrap().to_string();
+    let get = |path: &str| client.get(format!("{}{path}", relay.origin())).header(header::COOKIE, &cookie);
+
+    let info: serde_json::Value = get("/__ymer/server").send().await.unwrap().json().await.unwrap();
+    assert_eq!(info["reset_pending"], true);
+    assert_eq!(get("/").send().await.unwrap().headers()[header::LOCATION], "/__ymer/");
+    let api = get("/api/workspaces").header(header::COOKIE, format!("{cookie}; ymer_access=old")).send().await.unwrap();
+    assert_eq!(api.status(), StatusCode::SERVICE_UNAVAILABLE, "old cookies never reach the new server");
+
+    let done = client.post(format!("{}/__ymer/reset-done", relay.origin())).header(header::COOKIE, &cookie).send().await.unwrap();
+    assert_eq!(done.status(), StatusCode::NO_CONTENT);
+    let expired: Vec<_> = done.headers().get_all(header::SET_COOKIE).iter().map(|v| v.to_str().unwrap().to_string()).collect();
+    assert!(expired.iter().any(|c| c.starts_with("ymer_access=;")) && expired.iter().any(|c| c.starts_with("ymer_refresh=;")));
+    let body: serde_json::Value = get("/api/workspaces").send().await.unwrap().json().await.unwrap();
+    assert_eq!(body["seen"]["host"], second.trim_start_matches("http://"));
 }
