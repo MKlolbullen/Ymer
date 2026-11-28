@@ -3,7 +3,10 @@
   "productName": "Ymer",
   "identifier": "app.ymer.mobile",
   "build": {
-    "beforeDevCommand": { "script": "node scripts/build-web.mjs", "wait": true },
+    "beforeDevCommand": {
+      "script": "node scripts/build-web.mjs",
+      "wait": true
+    },
     "beforeBuildCommand": "node scripts/build-web.mjs",
     "frontendDist": "../mobile-web"
   },
@@ -13,7 +16,7 @@
   "bundle": {
     "iOS": {
       "minimumSystemVersion": "15.0",
-      "bundleVersion": "0.1.203"
+      "bundleVersion": "0.1.900"
     }
   }
 }

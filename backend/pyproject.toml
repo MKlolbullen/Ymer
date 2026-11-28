@@ -1,6 +1,6 @@
 [project]
 name = "ymer"
-version = "0.1.0b3"
+version = "0.1.0"
 description = "Ymer backend: Flask API for the multi-user creator platform"
 requires-python = ">=3.12"
 dependencies = [
