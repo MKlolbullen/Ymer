@@ -35,6 +35,8 @@ backup and monitoring sections below apply there too.
 
 ## 2. Install and configure
 
+**Quickest:** on a fresh Debian or Ubuntu VM, `install-ymer.sh` does everything in this section and in [section 1](#1-the-machine)'s firewall part in one go. See [One command on a fresh VM](../INSTALLATION.MD#one-command-on-a-fresh-vm). The steps below are what it does, for doing it by hand.
+
 With the `.deb` package (settings in `/etc/ymer/ymer.env`, backups in `/var/backups/ymer`):
 
 ```bash

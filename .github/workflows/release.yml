@@ -193,6 +193,13 @@ jobs:
         with:
           ref: ${{ env.SOURCE_REF }}
       - run: packaging/build.sh bundle && packaging/build.sh deb
+      - name: One-file VM installer
+        run: |
+          bash -n packaging/vm/install-ymer.sh
+          VERSION=$(python3 scripts/version.py)
+          sed "s/^RELEASE_VERSION=\"\"/RELEASE_VERSION=\"$VERSION\"/" packaging/vm/install-ymer.sh > dist/install-ymer.sh
+          chmod 755 dist/install-ymer.sh
+          grep -q "^RELEASE_VERSION=\"$VERSION\"" dist/install-ymer.sh
       - name: Check the .deb
         run: |
           dpkg-deb --info dist/*.deb

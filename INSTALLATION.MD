@@ -109,6 +109,40 @@ Docker named volumes store the database, uploaded files and Redis data. `ymerctl
 
 The **Update Ymer** shortcut and `ymerctl update` pull the images selected by the installed bundle. Install a newer package or bundle to change release versions.
 
+## One command on a fresh VM
+
+`install-ymer.sh` sets up a whole server on a fresh Debian or Ubuntu VM (Vultr, Hetzner, DigitalOcean and the like). It installs:
+
+- Docker;
+- a firewall;
+- swap on small machines;
+- automatic security updates;
+- the Ymer server package, which brings the systemd service and daily encrypted backups.
+
+It then configures HTTPS and starts Ymer. Download it from the release's **Assets**, or the latest version from the repository. Then run one of these as root:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/MKlolbullen/Ymer/main/packaging/vm/install-ymer.sh
+
+# Public: point an A record at the VM first
+sudo bash install-ymer.sh --domain ymer.example.com --email you@example.com --no-signups
+
+# Private: only your Tailscale devices can reach it, and no public ports are opened
+sudo bash install-ymer.sh --tailscale --no-signups
+```
+
+**Options**
+
+- `--no-signups` closes sign-ups and asks you to create the first account.
+- `--anthropic-key-file FILE` turns on Claude.
+- `--alert-email` or `--alert-webhook` sends monitoring alerts somewhere.
+- `--set KEY=VALUE` sets any other setting, such as the `YMER_BACKUP_S3_*` settings for off-site backups.
+- `--build` builds Ymer from source when no published release has the production tools yet.
+
+Run it again with other options to change settings or upgrade; data and secrets are kept. `bash install-ymer.sh --help` lists everything, and the [production guide](docs/production.md) explains what it set up.
+
+**For Tailscale,** turn on MagicDNS and HTTPS certificates on the DNS page of the Tailscale admin console first. The script then sets up the same private HTTPS as the manual steps below. Restrict who can reach the VM with the grants described in step 2.
+
 ## Private Vultr VM for two workspace owners
 
 Use a fresh VM and the portable server bundle from a release containing `flask --app wsgi create-user`. Older images ignore the registration setting. Complete the registration check below before granting access to either client device.
