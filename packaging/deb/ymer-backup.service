@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up Ymer's database and files (ymerctl backup)
+Documentation=https://github.com/MKlolbullen/Ymer/blob/main/docs/production.md
+Requires=docker.service
+After=docker.service ymer.service
+
+[Service]
+Type=oneshot
+Environment=YMER_ENV_FILE=/etc/ymer/ymer.env
+Environment=YMER_BACKUP_DIR=/var/backups/ymer
+ExecStart=/opt/ymer/ymerctl backup
+Nice=10
+IOSchedulingClass=idle

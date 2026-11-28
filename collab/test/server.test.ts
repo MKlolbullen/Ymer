@@ -74,6 +74,7 @@ before(async () => {
     debounce: 50,
     maxDebounce: 200,
     quiet: true,
+    version: "test",
   });
   await collab.listen();
   wsUrl = `ws://127.0.0.1:${collab.address.port}`;
@@ -169,4 +170,19 @@ test("relayable() filter", () => {
   assert.equal(relayable("not json"), false);
   assert.equal(relayable('{"type":"x"}'), false);
   assert.equal(relayable(JSON.stringify({ type: "comments-changed", pad: "x".repeat(600) })), false);
+});
+
+test("/metrics reports connections, saves and refusals in the Prometheus format", async () => {
+  const alice = await connect("alice-token");
+  const refused = await connect("nobody");
+  assert.ok(refused.failed);
+  refused.provider.destroy();
+  const response = await fetch(`http://127.0.0.1:${collab.address.port}/metrics`);
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.match(text, /^ymer_collab_info\{version="test"\} 1$/m);
+  assert.match(text, /^ymer_collab_connections [1-9]\d*$/m);
+  assert.match(text, /^ymer_collab_auth_denied_total [1-9]\d*$/m);
+  assert.match(text, /^ymer_collab_stores_total [1-9]\d*$/m);
+  alice.provider.destroy();
 });

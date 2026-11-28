@@ -101,7 +101,7 @@ The first start creates `ymer.env` beside `compose.yaml` with random secrets. Th
 
 For access through your own HTTPS reverse proxy on the same host, keep the bundle on loopback, forward HTTP and WebSocket traffic to it, and set `YMER_PUBLIC_URL` to the external HTTPS origin and `YMER_COOKIE_SECURE=true`. With one proxy in front of the bundled web server, set `YMER_TRUSTED_PROXIES=2`. [Bundle settings](packaging/bundle/README.md)
 
-Docker named volumes store the database, uploaded files and Redis data. Before an upgrade, back up the database, file storage and the matching private `ymer.env`. Keep existing database and storage passwords when reusing volumes. **`docker compose down -v` deletes the project’s named volumes.** Use the stop commands above for normal shutdown.
+Docker named volumes store the database, uploaded files and Redis data. `ymerctl backup` writes the database and every stored file into one archive, and `ymerctl update` takes one before upgrading. Keep the matching private `ymer.env` too. For HTTPS on a public name, backups that leave the machine, monitoring and alerts, follow the [production guide](docs/production.md). Keep existing database and storage passwords when reusing volumes. **`docker compose down -v` deletes the project’s named volumes.** Use the stop commands above for normal shutdown.
 
 - **Portable bundle:** Stop the old bundle, unpack the new release, copy the existing `ymer.env` into the new bundle, and run its `ymerctl update` (PowerShell equivalent on Windows). Use the same Docker engine and Compose project so the volumes are reused.
 - **Windows installer:** Stop Ymer, run the new server installer in the same location, then choose **Start Ymer**.
@@ -142,7 +142,7 @@ Use a fresh VM and the portable server bundle from a release containing `flask -
 
 **Acceptance checks.** Sign in separately over private HTTPS, open **Members** from both accounts, edit the same page together, and upload an attachment from one device and download it on the other. From a device outside the private network, verify that Ymer cannot be reached at the VM’s public addresses. Verify an unrelated tailnet identity cannot reach the private HTTPS service either.
 
-**Recovery.** Schedule encrypted off-VM backups of PostgreSQL, the MinIO file data, and the matching private configuration and encryption secrets. Take a consistent backup by pausing writes across both stores. On a separate private test VM restore the matching data and secrets, then verify that both owners can sign in and retrieve an attachment. Keep backup recovery available to both people if both will operate the service.
+**Recovery.** Schedule encrypted off-VM backups with `ymerctl backup` (set `YMER_BACKUP_PASSPHRASE` and `YMER_BACKUP_S3_*`; see [Backups](docs/production.md#3-backups)), and keep the matching private configuration and encryption secrets with them. On a separate private test VM restore the matching data and secrets, then verify that both owners can sign in and retrieve an attachment. Keep backup recovery available to both people if both will operate the service.
 
 ## Development from source
 

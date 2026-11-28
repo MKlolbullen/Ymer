@@ -273,7 +273,25 @@ jobs:
           cd "run/ymer-server-$VERSION"
           ./ymerctl start
           ./ymerctl status
-      - run: python3 packaging/smoke.py http://localhost:8080
+      - run: python3 packaging/smoke.py http://localhost:8080 --save-state smoke-state.json
+      - name: Back up, wipe all data, restore and check it came back
+        run: |
+          cd "run/ymer-server-$VERSION"
+          echo 'YMER_BACKUP_PASSPHRASE=ci passphrase' >> ymer.env
+          ./ymerctl backup
+          ./ymerctl compose down -v
+          ./ymerctl start
+          ./ymerctl restore backups/ymer-backup-*.tar.gz.enc --yes
+          cd "$GITHUB_WORKSPACE"
+          python3 packaging/smoke.py http://localhost:8080 --expect-restored smoke-state.json
+          ls -l "run/ymer-server-$VERSION/backups"
+      - name: Check the monitoring rules and config
+        run: |
+          m="$PWD/packaging/bundle/monitoring"
+          docker run --rm -v "$m:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 check rules /m/alerts.yml
+          sed 's#/etc/prometheus/alerts.yml#/m/alerts.yml#' "$m/prometheus.yml" > prometheus-ci.yml
+          docker run --rm -v "$m:/m:ro" -v "$PWD/prometheus-ci.yml:/p.yml:ro" --entrypoint promtool prom/prometheus:v3.5.0 check config --syntax-only /p.yml
+          python3 -c "import json; json.load(open('$m/grafana/dashboards/ymer.json'))"
       - run: ./run/ymer-server-"$VERSION"/ymerctl stop
       - name: Start fresh private bundle and verify both owners
         env:

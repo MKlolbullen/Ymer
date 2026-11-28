@@ -7,6 +7,8 @@ through the presigned link (which goes through the bundled nginx to MinIO).
 
     python3 packaging/smoke.py [http://localhost:8080]
     python3 packaging/smoke.py --private-bundle /path/to/extracted/bundle
+    python3 packaging/smoke.py --save-state state.json        # remember what it made
+    python3 packaging/smoke.py --expect-restored state.json   # after ymerctl restore
 """
 
 import argparse
@@ -22,6 +24,12 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("url", nargs="?", default="http://localhost:8080")
 parser.add_argument(
     "--private-bundle", type=Path, help="Directory containing the running bundle's ymerctl"
+)
+parser.add_argument("--save-state", type=Path, help="Write the account and file it made here")
+parser.add_argument(
+    "--expect-restored",
+    type=Path,
+    help="Only check that the account and file from an earlier --save-state run are back",
 )
 args = parser.parse_args()
 base = args.url.rstrip("/")
@@ -109,6 +117,21 @@ def private_workspace(bundle):
 
 ready = call("GET", "/health/ready")
 assert ready["status"] == "ok", ready
+
+if args.expect_restored:
+    state = json.loads(args.expect_restored.read_text())
+    token = call(
+        "POST",
+        "/auth/login",
+        {"email": state["email"], "password": state["password"], "session": "token"},
+    )["access_token"]
+    file = call("GET", state["file_path"], token=token)["file"]
+    with opener.open(file["url"], timeout=30) as resp:
+        assert resp.read() == b"hello from the smoke test\n", "the restored file differs"
+    print(f"smoke: ok ({base}, account and file restored from the backup)")
+    raise SystemExit(0)
+
+account = None
 if args.private_bundle:
     workspace, token = private_workspace(args.private_bundle)
 else:
@@ -131,6 +154,10 @@ uploaded = call(
 )
 with opener.open(uploaded["file"]["url"], timeout=30) as resp:
     assert resp.read() == b"hello from the smoke test\n"
+if args.save_state:
+    assert account, "--save-state needs open registration"
+    file_path = f"/workspaces/{workspace}/pages/{page_id}/files/{uploaded['file']['id']}"
+    args.save_state.write_text(json.dumps({**account, "file_path": file_path}))
 with opener.open(base + "/w/anything", timeout=30) as resp:
     assert b'id="root"' in resp.read(), "the app shell is not served for client routes"
 print(f"smoke: ok ({base}, {'private' if args.private_bundle else 'open'} registration)")

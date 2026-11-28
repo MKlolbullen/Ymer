@@ -1,0 +1,141 @@
+# Alerts for a Ymer server. Alertmanager sends them to the receivers set with the
+# YMER_ALERT_* settings in ymer.env. Severity "critical" means people cannot use Ymer;
+# "warning" means something needs a look today.
+groups:
+  - name: ymer-availability
+    rules:
+      - alert: YmerApiDown
+        expr: up{job="ymer-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The Ymer API is not answering
+          description: Prometheus could not scrape api:5000 for 2 minutes. Check `ymerctl status` and `ymerctl logs api`.
+
+      - alert: YmerCollabDown
+        expr: up{job="ymer-collab"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Live editing is down
+          description: The collab service has not answered for 2 minutes. Documents cannot be opened or saved. Check `ymerctl logs collab`.
+
+      - alert: YmerDependencyDown
+        expr: ymer_dependency_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "The API cannot reach {{ $labels.dependency }}"
+          description: "/api/health/ready has failed its {{ $labels.dependency }} check for 2 minutes."
+
+      - alert: YmerTargetDown
+        expr: up{job=~"minio|postgres|node"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Monitoring target {{ $labels.job }} is down"
+          description: "Prometheus has not reached {{ $labels.instance }} for 5 minutes."
+
+  - name: ymer-traffic
+    rules:
+      - alert: YmerHighErrorRate
+        expr: |
+          sum(rate(ymer_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(ymer_http_requests_total[5m])) > 0.05
+          and sum(rate(ymer_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 5% of API requests are failing
+          description: "{{ $value | humanizePercentage }} of requests returned a 5xx in the last 5 minutes. Look for the request ids in `ymerctl logs api`."
+
+      - alert: YmerSlowRequests
+        # AI and Factory requests are slow by nature, so they are left out.
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(ymer_http_request_duration_seconds_bucket{endpoint!~".*/(ai|factory|factories).*"}[10m]))) > 2
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: API requests are slow
+          description: "95% of requests take under {{ $value | humanizeDuration }}; normally well under a second."
+
+  - name: ymer-workers
+    rules:
+      - alert: YmerWorkerStalled
+        expr: time() - ymer_worker_heartbeat_timestamp_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "The {{ $labels.worker }} has stopped"
+          description: "It last reported in {{ $value | humanizeDuration }} ago. Check `ymerctl logs {{ $labels.worker }}`."
+
+      - alert: YmerSearchIndexBacklog
+        expr: ymer_ai_index_queue_oldest_seconds > 1800
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: Pages are waiting more than 30 minutes to be indexed for search
+          description: "{{ with query \"ymer_ai_index_queue_depth\" }}{{ . | first | value }}{{ end }} pages are queued. Check the ai-worker and the embedding provider."
+
+      - alert: YmerFactoryBuildsWaiting
+        expr: ymer_factory_runs{status="queued"} > 0 and ymer_factory_runs{status="running"} == 0
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: Factory builds are queued but none is running
+          description: Check `ymerctl logs factory-worker` and the sandbox settings.
+
+  - name: ymer-data
+    rules:
+      - alert: YmerBackupMissing
+        expr: |
+          (time() - ymer_backup_last_success_timestamp_seconds > 26 * 3600)
+          or absent(ymer_backup_last_success_timestamp_seconds)
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: No successful backup in the last 26 hours
+          description: Run `ymerctl backup` and check the backup timer (`systemctl list-timers ymer-backup`) or cron job.
+
+      - alert: YmerBackupFailed
+        expr: ymer_backup_last_failure_timestamp_seconds > ymer_backup_last_success_timestamp_seconds
+        labels: {severity: warning}
+        annotations:
+          summary: The latest backup failed
+          description: The last `ymerctl backup` run failed after the last successful one. Run it by hand to see why.
+
+      - alert: YmerPostgresConnectionsHigh
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Postgres is close to its connection limit
+          description: "{{ $value | humanizePercentage }} of max_connections are in use."
+
+  - name: ymer-host
+    rules:
+      - alert: YmerDiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs",mountpoint="/"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs",mountpoint="/"} < 0.10
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: Less than 10% disk space left
+          description: "{{ $value | humanizePercentage }} free on {{ $labels.mountpoint }}. Postgres and MinIO stop writing when the disk is full; old backups in the backup folder can go."
+
+      - alert: YmerMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Less than 10% memory available
+          description: "{{ $value | humanizePercentage }} of memory is available."
+
+      - alert: YmerHighLoad
+        expr: avg(rate(node_cpu_seconds_total{mode!="idle"}[5m])) > 0.9
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: CPU has been above 90% for 15 minutes
+          description: Factory builds or a busy AI worker can cause this; consider a bigger machine.

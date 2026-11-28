@@ -6,6 +6,7 @@ from flask import Flask, current_app
 
 from ymer.app import settings_for
 from ymer.extensions import get_s3
+from ymer.observability import heartbeat
 
 
 def register_cli(app: Flask) -> None:
@@ -60,6 +61,7 @@ def register_cli(app: Flask) -> None:
             raise click.ClickException("Embeddings are off (YMER_AI_EMBEDDING_PROVIDER=off).")
         click.echo(f"AI worker started ({embedder.name}: {embedder.model}).")
         while True:
+            heartbeat("ai-worker")
             done = process_queue(db_session, embedder)
             if done:
                 click.echo(f"Indexed {done} page(s).")
@@ -86,6 +88,7 @@ def register_cli(app: Flask) -> None:
             raise click.ClickException("Builds are off (YMER_FACTORY_SANDBOX=off).")
         click.echo(f"Factory worker started (sandbox: {sandbox.name}).")
         while True:
+            heartbeat("factory-worker")
             worked = work_once(flask_app)
             if once and not worked:
                 return

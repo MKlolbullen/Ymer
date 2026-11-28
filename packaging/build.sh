@@ -18,7 +18,9 @@ stage_bundle() {
   mkdir -p "$dir"
   sed "s/:-@VERSION@}/:-$version}/" packaging/bundle/compose.yaml > "$dir/compose.yaml"
   install -m 755 packaging/bundle/ymerctl "$dir/ymerctl"
-  install -m 644 packaging/bundle/ymerctl.ps1 packaging/bundle/README.md "$dir/"
+  install -m 644 packaging/bundle/ymerctl.ps1 packaging/bundle/README.md packaging/bundle/Caddyfile "$dir/"
+  cp -R packaging/bundle/monitoring "$dir/monitoring"
+  find "$dir/monitoring" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
   echo "$version" > "$dir/VERSION"
 }
 
@@ -37,6 +39,8 @@ deb() {
   stage_bundle "$root/opt/ymer"
   install -D -m 755 packaging/deb/ymerctl-wrapper "$root/usr/bin/ymerctl"
   install -D -m 644 packaging/deb/ymer.service "$root/lib/systemd/system/ymer.service"
+  install -D -m 644 packaging/deb/ymer-backup.service "$root/lib/systemd/system/ymer-backup.service"
+  install -D -m 644 packaging/deb/ymer-backup.timer "$root/lib/systemd/system/ymer-backup.timer"
   install -d -m 755 "$root/DEBIAN" "$root/etc/ymer"
   install -m 755 packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm "$root/DEBIAN/"
   cat > "$root/DEBIAN/control" <<CONTROL
@@ -48,6 +52,7 @@ Homepage: https://github.com/MKlolbullen/Ymer
 Section: web
 Priority: optional
 Depends: docker.io (>= 20.10) | docker-ce, docker-compose-v2 | docker-compose-plugin | docker-compose (>= 2), coreutils
+Recommends: openssl, curl
 Installed-Size: $(du -sk "$root" | cut -f1)
 Description: Ymer server: collaborative documents, databases, mind maps and the Factory
  Runs the Ymer web app, API, realtime collaboration server, workers, PostgreSQL,

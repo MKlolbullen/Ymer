@@ -4,6 +4,7 @@ import { Server } from "@hocuspocus/server";
 
 import { AccessDenied, Backend } from "./backend.ts";
 import type { Config } from "./config.ts";
+import { newCounters, renderMetrics } from "./metrics.ts";
 
 /** What each connection carries after authentication. */
 export type Context = {
@@ -29,6 +30,7 @@ export function relayable(payload: string): boolean {
 }
 
 export function createServer(config: Config, backend = new Backend(config.backendUrl, config.collabSecret)) {
+  const counters = newCounters();
   return new Server<Context>({
     port: config.port,
     name: "ymer-collab",
@@ -40,9 +42,23 @@ export function createServer(config: Config, backend = new Backend(config.backen
     extensions: [
       ...(config.quiet ? [] : [new Logger({ onChange: false, onLoadDocument: false })]),
       new Database({
-        fetch: ({ documentName }) => backend.fetchDocument(documentName),
-        store: ({ documentName, state, lastContext }) =>
-          backend.storeDocument(documentName, state, lastContext?.user?.id),
+        fetch: async ({ documentName }) => {
+          try {
+            return await backend.fetchDocument(documentName);
+          } catch (error) {
+            counters.loadErrors += 1;
+            throw error;
+          }
+        },
+        store: async ({ documentName, state, lastContext }) => {
+          counters.stores += 1;
+          try {
+            await backend.storeDocument(documentName, state, lastContext?.user?.id);
+          } catch (error) {
+            counters.storeErrors += 1;
+            throw error;
+          }
+        },
       }),
     ],
 
@@ -53,7 +69,11 @@ export function createServer(config: Config, backend = new Backend(config.backen
         connectionConfig.readOnly = auth.read_only;
         return { user: { id: auth.user.id, name: auth.user.display_name }, role: auth.role };
       } catch (error) {
-        if (error instanceof AccessDenied) throw new Error("Permission denied");
+        if (error instanceof AccessDenied) {
+          counters.authDenied += 1;
+          throw new Error("Permission denied");
+        }
+        counters.authErrors += 1;
         throw error;
       }
     },
@@ -63,7 +83,16 @@ export function createServer(config: Config, backend = new Backend(config.backen
       document.broadcastStateless(payload, (other) => other !== connection);
     },
 
-    async onRequest({ request, response }) {
+    async onRequest({ request, response, instance }) {
+      if (request.url === "/metrics") {
+        const gauges = {
+          connections: instance.getConnectionsCount(),
+          documents: instance.getDocumentsCount(),
+        };
+        response.writeHead(200, { "Content-Type": "text/plain; version=0.0.4" });
+        response.end(renderMetrics(counters, gauges, config.version));
+        throw null;
+      }
       if (request.url === "/health") {
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ status: "ok", service: "ymer-collab" }));

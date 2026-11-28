@@ -1,0 +1,25 @@
+# HTTPS for Ymer (compose profile "tls"). Caddy gets and renews a Let's Encrypt
+# certificate for YMER_DOMAIN by itself; ports 80 and 443 must reach this machine and
+# the name must point at it. Set YMER_DOMAIN and YMER_ACME_EMAIL in ymer.env.
+{
+	email {$YMER_ACME_EMAIL}
+}
+
+{$YMER_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# nginx in the web service routes /api, /collab (WebSocket) and /ymer-files.
+	reverse_proxy web:8080 {
+		header_up X-Request-ID {http.request.uuid}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

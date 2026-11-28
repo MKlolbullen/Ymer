@@ -7,9 +7,12 @@ if [ "$1" = configure ]; then
     YMER_HTTP_BIND=0.0.0.0 YMER_PUBLIC_URL="http://$host:8080" /usr/bin/ymerctl init
   fi
   chmod 600 /etc/ymer/ymer.env
+  install -d -m 700 /var/backups/ymer
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
     systemctl enable ymer.service >/dev/null
+    # Daily backups to /var/backups/ymer (see: systemctl list-timers ymer-backup).
+    systemctl enable --now ymer-backup.timer >/dev/null 2>&1 || true
     echo "Starting Ymer. The first start downloads about 1 GB of images..."
     if systemctl restart ymer.service; then
       echo "Ymer is running at $(/usr/bin/ymerctl url)"
@@ -18,5 +21,6 @@ if [ "$1" = configure ]; then
     fi
   fi
   echo "Settings: /etc/ymer/ymer.env (then: sudo systemctl restart ymer)"
+  echo "Going public? See https://github.com/MKlolbullen/Ymer/blob/main/docs/production.md and run: sudo ymerctl check"
 fi
 exit 0

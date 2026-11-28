@@ -3,6 +3,12 @@
 # Settings and secrets come from ymer.env next to this file (created by
 # `ymerctl init`, or set YMER_ENV_FILE to another path). Only the web front is
 # published, on YMER_HTTP_BIND:YMER_HTTP_PORT (default 127.0.0.1:8080).
+#
+# Two optional profiles, switched on by ymerctl from ymer.env (see docs/production.md):
+#   tls         YMER_DOMAIN set: Caddy serves https://YMER_DOMAIN on ports 80 and 443
+#               with an automatic Let's Encrypt certificate.
+#   monitoring  YMER_MONITORING=true: Prometheus, Alertmanager, Grafana (on
+#               127.0.0.1:3000), node and Postgres exporters.
 # @VERSION@ is replaced with the release version when the bundle is built
 # (packaging/build.sh); set YMER_VERSION to run other images.
 
@@ -29,6 +35,7 @@ x-backend: &backend
     YMER_TRUSTED_PROXIES: ${YMER_TRUSTED_PROXIES:-1}
     YMER_AI_INDEX_INLINE: "false"
     YMER_FACTORY_RUN_INLINE: "false"
+    YMER_LOG_FORMAT: ${YMER_LOG_FORMAT:-text}
   depends_on: &backend-deps
     setup:
       condition: service_completed_successfully
@@ -68,6 +75,9 @@ services:
     environment:
       MINIO_ROOT_USER: ymer
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run ymerctl init}
+      # Prometheus reads /minio/v2/metrics/cluster over the Docker network; nginx only
+      # forwards /ymer-files/ to MinIO, so the metrics are not public.
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     volumes:
       - minio-data:/data
     healthcheck:
@@ -114,6 +124,7 @@ services:
       YMER_COLLAB_PORT: "1234"
       YMER_COLLAB_BACKEND_URL: http://api:5000
       YMER_COLLAB_SECRET: ${YMER_COLLAB_SECRET:?run ymerctl init}
+      YMER_VERSION: ${YMER_VERSION:-@VERSION@}
     depends_on:
       api:
         condition: service_healthy
@@ -139,7 +150,109 @@ services:
       timeout: 5s
       retries: 12
 
+  # --- Profile "tls": HTTPS in front of the web service ---------------------------
+  caddy:
+    image: caddy:2.10.2-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      YMER_DOMAIN: ${YMER_DOMAIN:-}
+      YMER_ACME_EMAIL: ${YMER_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # --- Profile "monitoring" -------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${YMER_METRICS_RETENTION:-30d}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      # Written by ymerctl from the YMER_ALERT_* settings on every start.
+      - ${YMER_ALERTMANAGER_CONFIG:-./alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    # Local only: open it through an SSH tunnel (ssh -L 3000:127.0.0.1:3000 server).
+    ports:
+      - "${YMER_GRAFANA_BIND:-127.0.0.1}:${YMER_GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${YMER_GRAFANA_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/ymer.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      # `ymerctl backup` writes ymer_backup_* metrics here.
+      - --collector.textfile.directory=/textfile
+    pid: host
+    volumes:
+      - /:/host:ro
+      - ${YMER_BACKUP_DIR:-./backups}/.metrics:/textfile:ro
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: postgres:5432/ymer?sslmode=disable
+      DATA_SOURCE_USER: ymer
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:
   minio-data:
+  caddy-data:
+  caddy-config:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
