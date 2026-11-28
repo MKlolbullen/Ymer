@@ -6,7 +6,7 @@ release (see [Releasing](DEVELOPMENT.md#releasing)). The release workflow takes
 its notes from the section below whose heading names that version, so add one
 before tagging. If the section is missing or empty, GitHub generates the notes.
 
-## [0.1.0-beta.3] - unreleased
+## [0.1.0] - 2026-11-28
 
 - **Production on one Linux VM** ([guide](docs/production.md)):
   - HTTPS with automatic Let's Encrypt certificates through Caddy: `ymerctl https <domain> <email>`, or `YMER_DOMAIN` with `ymerctl init`.
