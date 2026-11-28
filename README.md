@@ -4,6 +4,7 @@
     <img src="docs/assets/logo-light.svg" alt="Ymer" width="360">
   </picture>
 </p>
+[![Release](https://github.com/MKlolbullen/Ymer/actions/workflows/release.yml/badge.svg?branch=main&event=status)](https://github.com/MKlolbullen/Ymer/actions/workflows/release.yml)
 
 <p align="center">
   <b>A self-hostable, multi-user workspace for writing, planning and thinking together.</b><br>
