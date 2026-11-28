@@ -11,6 +11,8 @@ export type Config = {
   /** Longest a document may stay unsaved while edits keep coming. */
   maxDebounce: number;
   quiet: boolean;
+  /** Reported by /metrics; the release images set YMER_VERSION. */
+  version: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -26,5 +28,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     debounce: Number(env.YMER_COLLAB_DEBOUNCE_MS ?? 2000),
     maxDebounce: Number(env.YMER_COLLAB_MAX_DEBOUNCE_MS ?? 10000),
     quiet: env.YMER_ENV === "test",
+    version: env.YMER_VERSION ?? "dev",
   };
 }

@@ -40,10 +40,19 @@ random secrets. Edit it and run `ymerctl restart`:
 - AI (`YMER_AI_PROVIDER`, `ANTHROPIC_API_KEY`, ...) and Factory (`YMER_FACTORY_SANDBOX`)
   settings, listed in the file. Any `YMER_*` setting from the project's DEVELOPMENT.md works.
 
+## Production
+
+`ymerctl https ymer.example.com you@example.com` serves Ymer on that name with an
+automatic certificate. `ymerctl backup` / `ymerctl restore <file>` back up and restore
+the database and files, and `YMER_MONITORING=true` adds Prometheus, alerts and Grafana.
+`ymerctl check` says what is still missing. Full guide:
+[docs/production.md](https://github.com/MKlolbullen/Ymer/blob/main/docs/production.md).
+These commands are in the Linux `ymerctl`; on Windows use WSL for them.
+
 ## Update
 
 Download the newer bundle, copy your `ymer.env` into it, then run
-`ymerctl update`. Migrations run on start.
+`ymerctl update`. It takes a backup first; migrations run on start.
 
 ## Remove
 

@@ -1,4 +1,6 @@
 #!/bin/sh
-# ymerctl for the Debian package: settings live in /etc/ymer/ymer.env.
+# ymerctl for the Debian package: settings live in /etc/ymer/ymer.env and backups in
+# /var/backups/ymer (YMER_BACKUP_DIR in the settings file wins).
 export YMER_ENV_FILE="${YMER_ENV_FILE:-/etc/ymer/ymer.env}"
+export YMER_BACKUP_DIR="${YMER_BACKUP_DIR:-/var/backups/ymer}"
 exec /opt/ymer/ymerctl "$@"

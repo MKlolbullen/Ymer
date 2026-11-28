@@ -21,6 +21,7 @@ dependencies = [
   "pycrdt>=0.12",
   "anthropic>=2.13",
   "markdown-it-py>=3.0",
+  "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]

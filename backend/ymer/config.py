@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     # Seconds each dependency check in /api/health/ready may take.
     health_check_timeout: float = 2.0
 
+    # --- Logs and metrics (ymer.observability) ----------------------------------------
+    # "text" for people reading a terminal, "json" for a log pipeline (one object per line).
+    log_format: Literal["text", "json"] = "text"
+    log_level: str = "INFO"
+    # Prometheus metrics at GET /metrics (outside /api, so the bundled nginx never serves
+    # it publicly). With a token set, scrapers must send "Authorization: Bearer <token>".
+    metrics_enabled: bool = True
+    metrics_token: str | None = None
+
     # --- AI layer (ymer.ai) -----------------------------------------------------------
     # Which model answers chat-style requests (assist, Q&A, generation):
     #   fake       deterministic stand-in, no network, no key; for development and tests

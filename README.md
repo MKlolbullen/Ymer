@@ -423,8 +423,9 @@ Ymer on port 8080. The first start downloads about 1 GB of images.
 
 Open http://localhost:8080 (or the server's address) and create an account. To reach Ymer from other machines, set
 `YMER_PUBLIC_URL` to the address people use and `YMER_HTTP_BIND=0.0.0.0` in the settings file, then restart (the
-`.deb` does this for you, using the machine's host name). Put an HTTPS reverse proxy in front for anything beyond a
-trusted network, and set `YMER_COOKIE_SECURE=true`. AI and Factory settings go in the same file; see the bundle's
+`.deb` does this for you, using the machine's host name). For a public server, `ymerctl https ymer.example.com
+you@example.com` adds HTTPS with an automatic certificate; the [production guide](docs/production.md) covers that,
+backups with `ymerctl backup` / `restore`, monitoring and alerts, and `ymerctl check` before launch. AI and Factory settings go in the same file; see the bundle's
 README. The bundle's Factory runs builds on Modal or in the demo sandbox; the Docker sandbox needs the development
 setup below.
 

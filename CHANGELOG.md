@@ -8,6 +8,13 @@ before tagging. If the section is missing or empty, GitHub generates the notes.
 
 ## [0.1.0-beta.3] - unreleased
 
+- **Production on one Linux VM** ([guide](docs/production.md)):
+  - HTTPS with automatic Let's Encrypt certificates through Caddy: `ymerctl https <domain> <email>`, or `YMER_DOMAIN` with `ymerctl init`.
+  - `ymerctl backup` puts a database dump and every stored file in one archive, optionally encrypted (`YMER_BACKUP_PASSPHRASE`) and copied to any S3-compatible bucket (`YMER_BACKUP_S3_*`). `ymerctl restore` checks the archive, takes a safety backup and replaces all data. The `.deb` backs up daily with `ymer-backup.timer`; `ymerctl update` backs up first.
+  - Monitoring (`YMER_MONITORING=true`): Prometheus metrics from the API (`/metrics`, internal only) and collab service, Postgres, MinIO and host exporters, 15 alert rules sent through Alertmanager to Slack, a webhook or email, and a Grafana "Ymer overview" dashboard.
+  - JSON logs (`YMER_LOG_FORMAT=json`) with an `X-Request-ID` that follows each request from Caddy to the API.
+  - `ymerctl check` lists what still stands between a server and production.
+
 - **Phone apps:** Ymer for Android (`.apk`, `.aab`) and iOS (`.ipa`, opt-in build on macOS). They bundle the web app and reach your server through a small relay inside the app, so they start and edit offline, even after a restart. Pick the server on first launch; **Change server** is in the sidebar.
 
 - Private installations can disable public sign-ups with `YMER_REGISTRATION_ENABLED=false` and create individual accounts with `flask --app wsgi create-user`. Registration stays open by default.

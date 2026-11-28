@@ -6,23 +6,32 @@ here=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
 compose_file="$here/compose.yaml"
 env_file=${YMER_ENV_FILE:-$here/ymer.env}
 export YMER_ENV_FILE="$env_file"
+state_dir=$(dirname -- "$env_file")
 
 usage() {
   cat <<'HELP'
 Usage: ymerctl <command>
 
-  init      Create the settings file with fresh secrets (kept if it exists)
+  init      Create the settings file with fresh secrets (kept if it exists).
+            For a public server: YMER_DOMAIN=ymer.example.com YMER_ACME_EMAIL=you@example.com ymerctl init
   start     Start Ymer (pulls images the first time) and wait until it is ready
   stop      Stop Ymer; data is kept
   restart   Stop, then start
   status    Show the services and their health
   logs      Follow the logs (ymerctl logs api, for one service)
-  update    Pull the images for this version, then restart
+  update    Take a backup, pull the images for this version, then restart
   url       Print the address Ymer is served on
+  https     Serve Ymer publicly over HTTPS: ymerctl https ymer.example.com you@example.com
+  check     Check the settings and the running server for production readiness
+  backup    Back up the database and stored files (to YMER_BACKUP_DIR, and off-site
+            when YMER_BACKUP_S3_* is set)
+  backups   List the backups in YMER_BACKUP_DIR
+  restore   Replace all data with a backup: ymerctl restore <file> [--yes]
   help      Show this help
 
 Settings: $YMER_ENV_FILE, default ymer.env next to compose.yaml
 (the .deb package uses /etc/ymer/ymer.env). Edit it, then run ymerctl restart.
+Production guide: https://github.com/MKlolbullen/Ymer/blob/main/docs/production.md
 HELP
 }
 
@@ -45,6 +54,49 @@ setting() {
   sed -n "s/^$1=//p" "$env_file" | tail -n 1
 }
 
+is_true() { case $(printf %s "${1:-}" | tr '[:upper:]' '[:lower:]') in true|1|yes|on) return 0 ;; *) return 1 ;; esac; }
+
+# Add KEY=VALUE to the settings file when KEY is not set yet (for secrets that newer
+# versions need on installations made by older ones).
+ensure_setting() {
+  if [ -z "$(setting "$1")" ]; then
+    printf '\n%s=%s\n' "$1" "$2" >>"$env_file"
+  fi
+}
+
+# Set KEY=VALUE in the settings file, replacing an existing (or commented-out) line.
+set_setting() {
+  tmp="$env_file.tmp.$$"
+  awk -v key="$1" -v value="$2" '
+    BEGIN { done = 0 }
+    $0 ~ "^#? ?" key "=" { if (!done) { print key "=" value; done = 1 }; next }
+    { print }
+    END { if (!done) print key "=" value }
+  ' "$env_file" >"$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$env_file"
+}
+
+# Switch an existing installation to public HTTPS through Caddy, keeping its secrets.
+https() {
+  domain=${1:-}
+  email=${2:-}
+  [ -n "$domain" ] && [ -n "$email" ] || fail "Usage: ymerctl https <domain> <email for Let's Encrypt>"
+  case $domain in *://*|*/*) fail "Give the name only, like ymer.example.com" ;; esac
+  init >/dev/null
+  set_setting YMER_DOMAIN "$domain"
+  set_setting YMER_ACME_EMAIL "$email"
+  set_setting YMER_PUBLIC_URL "https://$domain"
+  set_setting YMER_HTTP_BIND 127.0.0.1
+  set_setting YMER_COOKIE_SECURE true
+  set_setting YMER_TRUSTED_PROXIES 2
+  set_setting YMER_LOG_FORMAT json
+  set_setting YMER_MONITORING true
+  echo "Ymer will be served at https://$domain, with monitoring on (YMER_MONITORING)."
+  echo "Point its DNS record here and open ports 80 and 443,"
+  echo "then run: ymerctl restart && ymerctl check"
+}
+
 init() {
   if [ -f "$env_file" ]; then
     echo "Settings already exist: $env_file"
@@ -52,25 +104,47 @@ init() {
   fi
   mkdir -p "$(dirname -- "$env_file")"
   umask 077
-  bind=${YMER_HTTP_BIND:-127.0.0.1}
+  domain=${YMER_DOMAIN:-}
   port=${YMER_HTTP_PORT:-8080}
-  url=${YMER_PUBLIC_URL:-http://localhost:$port}
+  if [ -n "$domain" ]; then
+    # Public server: Caddy serves HTTPS on 80/443 and the plain port stays local.
+    [ -n "${YMER_ACME_EMAIL:-}" ] || fail "Set YMER_ACME_EMAIL too: Let's Encrypt sends certificate notices there."
+    bind=127.0.0.1
+    url=https://$domain
+    proxies=2
+    log_format=json
+    monitoring=${YMER_MONITORING:-true}
+  else
+    bind=${YMER_HTTP_BIND:-127.0.0.1}
+    url=${YMER_PUBLIC_URL:-http://localhost:$port}
+    proxies=1
+    log_format=text
+    monitoring=${YMER_MONITORING:-false}
+  fi
   case $url in https://*) secure=true ;; *) secure=false ;; esac
   tmp="$env_file.tmp.$$"
   cat >"$tmp" <<ENV
 # Ymer server settings. Restart after changing them: ymerctl restart
 # Keep this file private: it holds the secrets below.
+# Before going live, run: ymerctl check
 
 # Where people open Ymer. File downloads are signed for this address, so set it to the
 # name or IP they use (for example http://ymer.lan:8080 or https://ymer.example.com).
 YMER_PUBLIC_URL=$url
-# Network interface and port to serve on. 0.0.0.0 makes Ymer reachable from other machines.
+# Network interface and port to serve plain HTTP on. 0.0.0.0 makes Ymer reachable from
+# other machines. With YMER_DOMAIN set, keep 127.0.0.1: people come in through HTTPS.
 YMER_HTTP_BIND=$bind
 YMER_HTTP_PORT=$port
-# true when people reach Ymer over HTTPS (through your own reverse proxy).
+# true when people reach Ymer over HTTPS.
 YMER_COOKIE_SECURE=$secure
-# When behind your own reverse proxy, count it too: 2 = your proxy + the bundled one.
-# YMER_TRUSTED_PROXIES=2
+# Proxies in front of the API: 1 = the bundled nginx, 2 = Caddy (YMER_DOMAIN) or your own
+# HTTPS proxy, plus nginx.
+YMER_TRUSTED_PROXIES=$proxies
+
+# HTTPS with an automatic Let's Encrypt certificate. The name must point at this machine
+# and ports 80 and 443 must be open. Leave empty to serve plain HTTP only.
+YMER_DOMAIN=$domain
+YMER_ACME_EMAIL=${YMER_ACME_EMAIL:-}
 
 # Generated secrets. Changing the database or storage password after the first start
 # needs the same change inside those services, so leave them as they are.
@@ -78,6 +152,10 @@ POSTGRES_PASSWORD=$(secret)
 MINIO_ROOT_PASSWORD=$(secret)
 YMER_SECRET_KEY=$(secret)
 YMER_COLLAB_SECRET=$(secret)
+
+# Accounts: set false to stop sign-ups; then add people with
+#   ymerctl compose exec api flask --app wsgi create-user
+# YMER_REGISTRATION_ENABLED=false
 
 # AI: fake = offline demo, anthropic = Claude, openai = any OpenAI-compatible server, off.
 YMER_AI_PROVIDER=fake
@@ -91,6 +169,33 @@ YMER_AI_EMBEDDING_PROVIDER=fake
 YMER_FACTORY_SANDBOX=fake
 # MODAL_TOKEN_ID=
 # MODAL_TOKEN_SECRET=
+
+# Logs: text for reading in a terminal, json for a log pipeline.
+YMER_LOG_FORMAT=$log_format
+
+# Monitoring: Prometheus, Alertmanager and Grafana (http://127.0.0.1:3000, user admin,
+# password below; from elsewhere use ssh -L 3000:127.0.0.1:3000 this-server).
+YMER_MONITORING=$monitoring
+YMER_GRAFANA_PASSWORD=$(secret)
+# Where alerts go (any or all of them):
+# YMER_ALERT_SLACK_WEBHOOK=https://hooks.slack.com/services/...
+# YMER_ALERT_WEBHOOK_URL=https://ntfy.sh/your-topic
+# YMER_ALERT_EMAIL_TO=ops@example.com
+# YMER_SMTP_HOST=smtp.example.com:587
+# YMER_SMTP_FROM=ymer@example.com
+# YMER_SMTP_USER=
+# YMER_SMTP_PASSWORD=
+
+# Backups (ymerctl backup): where archives go, how many to keep there, and an optional
+# passphrase to encrypt them (keep a copy of it somewhere else, or they cannot be read).
+# YMER_BACKUP_DIR=/var/backups/ymer
+YMER_BACKUP_KEEP=7
+# YMER_BACKUP_PASSPHRASE=
+# Off-site copy to any S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, ...):
+# YMER_BACKUP_S3_URL=https://s3.eu-central-1.amazonaws.com
+# YMER_BACKUP_S3_BUCKET=my-bucket/ymer
+# YMER_BACKUP_S3_ACCESS_KEY=
+# YMER_BACKUP_S3_SECRET_KEY=
 ENV
   mv "$tmp" "$env_file"
   echo "Created $env_file"
@@ -101,13 +206,404 @@ url() {
   echo "${u:-http://localhost:8080}"
 }
 
+backup_dir() {
+  d=$(setting YMER_BACKUP_DIR)
+  d=${d:-${YMER_BACKUP_DIR:-$here/backups}}
+  case $d in /*) ;; *) d="$here/$d" ;; esac
+  echo "$d"
+}
+
+yaml_quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
+
+# Alertmanager has no environment variables in its config, so write it from ymer.env.
+render_alertmanager() {
+  file="$state_dir/alertmanager.yml"
+  slack=$(setting YMER_ALERT_SLACK_WEBHOOK)
+  hook=$(setting YMER_ALERT_WEBHOOK_URL)
+  mail=$(setting YMER_ALERT_EMAIL_TO)
+  tmp="$file.tmp.$$"
+  (
+    umask 027
+    {
+      echo "# Written by ymerctl from the YMER_ALERT_* settings in ymer.env; edits are replaced."
+      if [ -n "$mail" ]; then
+        echo "global:"
+        echo "  smtp_smarthost: $(yaml_quote "$(setting YMER_SMTP_HOST)")"
+        echo "  smtp_from: $(yaml_quote "$(setting YMER_SMTP_FROM)")"
+        echo "  smtp_auth_username: $(yaml_quote "$(setting YMER_SMTP_USER)")"
+        echo "  smtp_auth_password: $(yaml_quote "$(setting YMER_SMTP_PASSWORD)")"
+      fi
+      echo "route:"
+      echo "  receiver: ymer"
+      echo "  group_by: [alertname]"
+      echo "  group_wait: 30s"
+      echo "  group_interval: 5m"
+      echo "  repeat_interval: 4h"
+      echo "receivers:"
+      echo "  - name: ymer"
+      if [ -n "$slack" ]; then
+        echo "    slack_configs:"
+        echo "      - api_url: $(yaml_quote "$slack")"
+        echo "        send_resolved: true"
+        echo "        title: '{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'"
+        echo "        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ \"\\n\" }}{{ end }}'"
+      fi
+      if [ -n "$hook" ]; then
+        echo "    webhook_configs:"
+        echo "      - url: $(yaml_quote "$hook")"
+        echo "        send_resolved: true"
+      fi
+      if [ -n "$mail" ]; then
+        echo "    email_configs:"
+        echo "      - to: $(yaml_quote "$mail")"
+        echo "        send_resolved: true"
+      fi
+    } >"$tmp"
+  )
+  # Alertmanager runs as nobody (65534); let it read the file without making it public.
+  if chgrp 65534 "$tmp" 2>/dev/null; then chmod 640 "$tmp"; else chmod 644 "$tmp"; fi
+  mv "$tmp" "$file"
+  export YMER_ALERTMANAGER_CONFIG="$file"
+}
+
+# Work out the compose profiles and paths from the settings, before any compose call.
+prepare() {
+  profiles=""
+  [ -n "$(setting YMER_DOMAIN)" ] && profiles="tls"
+  if is_true "$(setting YMER_MONITORING)"; then
+    profiles="${profiles:+$profiles,}monitoring"
+  fi
+  export COMPOSE_PROFILES="$profiles"
+  YMER_BACKUP_DIR=$(backup_dir)
+  export YMER_BACKUP_DIR
+  mkdir -p "$YMER_BACKUP_DIR/.metrics" 2>/dev/null || true
+  export YMER_ALERTMANAGER_CONFIG="$state_dir/alertmanager.yml"
+  if is_true "$(setting YMER_MONITORING)"; then
+    ensure_setting YMER_GRAFANA_PASSWORD "$(secret)"
+    render_alertmanager
+  fi
+}
+
+profile_on() { case ",$COMPOSE_PROFILES," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+
+app_services() {
+  s="web api collab ai-worker factory-worker"
+  profile_on tls && s="caddy $s"
+  echo "$s"
+}
+
 start() {
   need_docker
   init >/dev/null
+  prepare
   echo "Starting Ymer (the first start downloads about 1 GB of images)..."
   compose up -d --wait --wait-timeout 600 web
-  compose up -d ai-worker factory-worker
+  extra="ai-worker factory-worker"
+  profile_on tls && extra="$extra caddy"
+  profile_on monitoring && extra="$extra prometheus alertmanager grafana node-exporter postgres-exporter"
+  # shellcheck disable=SC2086
+  compose up -d $extra
+  if profile_on monitoring; then
+    # Pick up changed alert receivers and rules without a restart.
+    compose kill -s HUP alertmanager prometheus >/dev/null 2>&1 || true
+  fi
   echo "Ymer is running at $(url)"
+  if profile_on monitoring; then
+    echo "Grafana: http://127.0.0.1:$(setting YMER_GRAFANA_PORT | grep . || echo 3000) (user admin, password YMER_GRAFANA_PASSWORD in $env_file)"
+  fi
+}
+
+# --- Backups ------------------------------------------------------------------------
+
+write_backup_metric() { # success|failure, [bytes], [seconds]
+  mdir="$YMER_BACKUP_DIR/.metrics"
+  mfile="$mdir/ymer_backup.prom"
+  mkdir -p "$mdir"
+  ok=$(sed -n 's/^ymer_backup_last_success_timestamp_seconds //p' "$mfile" 2>/dev/null || true)
+  bad=$(sed -n 's/^ymer_backup_last_failure_timestamp_seconds //p' "$mfile" 2>/dev/null || true)
+  size=$(sed -n 's/^ymer_backup_last_size_bytes //p' "$mfile" 2>/dev/null || true)
+  took=$(sed -n 's/^ymer_backup_last_duration_seconds //p' "$mfile" 2>/dev/null || true)
+  now=$(date +%s)
+  if [ "$1" = success ]; then ok=$now; size=$2; took=$3; else bad=$now; fi
+  {
+    echo "# HELP ymer_backup_last_success_timestamp_seconds When ymerctl backup last succeeded."
+    echo "# TYPE ymer_backup_last_success_timestamp_seconds gauge"
+    [ -n "$ok" ] && echo "ymer_backup_last_success_timestamp_seconds $ok"
+    echo "# HELP ymer_backup_last_failure_timestamp_seconds When ymerctl backup last failed."
+    echo "# TYPE ymer_backup_last_failure_timestamp_seconds gauge"
+    echo "ymer_backup_last_failure_timestamp_seconds ${bad:-0}"
+    echo "# HELP ymer_backup_last_size_bytes Size of the latest backup archive."
+    echo "# TYPE ymer_backup_last_size_bytes gauge"
+    echo "ymer_backup_last_size_bytes ${size:-0}"
+    echo "# HELP ymer_backup_last_duration_seconds How long the latest backup took."
+    echo "# TYPE ymer_backup_last_duration_seconds gauge"
+    echo "ymer_backup_last_duration_seconds ${took:-0}"
+  } >"$mfile.tmp"
+  chmod 644 "$mfile.tmp"
+  mv "$mfile.tmp" "$mfile"
+}
+
+# Run mc (the MinIO client in the MinIO image) on the Docker network.
+mc_run() { # extra docker args..., -- script
+  compose run --rm --no-deps -T "$@"
+}
+
+backup() {
+  need_docker
+  [ -f "$env_file" ] || fail "No settings at $env_file: nothing to back up yet."
+  prepare
+  dir=$YMER_BACKUP_DIR
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  name="ymer-backup-$stamp"
+  work="$dir/.$name"
+  started=$(date +%s)
+  passphrase=$(setting YMER_BACKUP_PASSPHRASE)
+  if [ -n "$passphrase" ]; then
+    command -v openssl >/dev/null || fail "YMER_BACKUP_PASSPHRASE is set but openssl is not installed."
+  fi
+  rm -rf "$work"
+  mkdir -p "$work"
+  trap 'rm -rf "$work" "$dir/$name.tar.gz.partial"; write_backup_metric failure; echo "ymerctl: backup failed" >&2' EXIT
+
+  echo "Backing up to $dir ..."
+  compose up -d --wait --wait-timeout 300 postgres minio
+  # The database first: a file deleted during the backup can be missing from the copy,
+  # but no file the copied database points at was uploaded after the copy started.
+  compose exec -T postgres pg_dump -U ymer -d ymer --format=custom --compress=6 >"$work/postgres.dump"
+  [ -s "$work/postgres.dump" ] || fail "pg_dump wrote nothing."
+  mkdir -p "$work/files"
+  chmod 777 "$work/files"
+  mc_run -v "$work/files:/backup/files" --entrypoint sh minio -c \
+    'mc alias set ymer http://minio:9000 ymer "$MINIO_ROOT_PASSWORD" >/dev/null && mc mirror --quiet --overwrite ymer/ymer-files /backup/files'
+  files=$(find "$work/files" -type f | wc -l | tr -d ' ')
+  sum=$(sha256sum "$work/postgres.dump" | cut -d' ' -f1)
+  version=$(cat "$here/VERSION" 2>/dev/null || echo unknown)
+  cat >"$work/manifest.json" <<JSON
+{"format": 1, "created": "$stamp", "ymer_version": "$version", "postgres_dump_sha256": "$sum", "files": $files}
+JSON
+  tar -C "$work" -czf "$dir/$name.tar.gz.partial" manifest.json postgres.dump files
+  archive="$dir/$name.tar.gz"
+  if [ -n "$passphrase" ]; then
+    archive="$archive.enc"
+    YMER_BACKUP_PASSPHRASE=$passphrase openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+      -pass env:YMER_BACKUP_PASSPHRASE -in "$dir/$name.tar.gz.partial" -out "$archive.partial"
+    rm -f "$dir/$name.tar.gz.partial"
+    mv "$archive.partial" "$archive"
+  else
+    mv "$dir/$name.tar.gz.partial" "$archive"
+  fi
+  chmod 600 "$archive"
+  rm -rf "$work"
+
+  s3_url=$(setting YMER_BACKUP_S3_URL)
+  if [ -n "$s3_url" ]; then
+    echo "Copying $(basename "$archive") off-site ..."
+    YMER_BACKUP_S3_URL=$s3_url \
+    YMER_BACKUP_S3_BUCKET=$(setting YMER_BACKUP_S3_BUCKET) \
+    YMER_BACKUP_S3_ACCESS_KEY=$(setting YMER_BACKUP_S3_ACCESS_KEY) \
+    YMER_BACKUP_S3_SECRET_KEY=$(setting YMER_BACKUP_S3_SECRET_KEY) \
+    YMER_BACKUP_FILE=$(basename "$archive") \
+    mc_run -v "$dir:/backups:ro" -e YMER_BACKUP_S3_URL -e YMER_BACKUP_S3_BUCKET \
+      -e YMER_BACKUP_S3_ACCESS_KEY -e YMER_BACKUP_S3_SECRET_KEY -e YMER_BACKUP_FILE \
+      --entrypoint sh minio -c \
+      'mc alias set offsite "$YMER_BACKUP_S3_URL" "$YMER_BACKUP_S3_ACCESS_KEY" "$YMER_BACKUP_S3_SECRET_KEY" >/dev/null && mc cp --quiet "/backups/$YMER_BACKUP_FILE" "offsite/$YMER_BACKUP_S3_BUCKET/$YMER_BACKUP_FILE"'
+  fi
+
+  keep=$(setting YMER_BACKUP_KEEP)
+  keep=${keep:-7}
+  # shellcheck disable=SC2012
+  ls -1t "$dir"/ymer-backup-*.tar.gz "$dir"/ymer-backup-*.tar.gz.enc 2>/dev/null \
+    | tail -n "+$((keep + 1))" | while IFS= read -r old; do rm -f -- "$old"; done
+
+  trap - EXIT
+  size=$(wc -c <"$archive" | tr -d ' ')
+  write_backup_metric success "$size" "$(($(date +%s) - started))"
+  echo "Backup written: $archive ($files files, $size bytes)"
+}
+
+list_backups() {
+  prepare
+  # shellcheck disable=SC2012
+  ls -lt "$YMER_BACKUP_DIR"/ymer-backup-* 2>/dev/null || echo "No backups in $YMER_BACKUP_DIR yet."
+}
+
+restore() {
+  archive=""
+  yes=false
+  safety=true
+  for arg in "$@"; do
+    case $arg in
+      --yes|-y) yes=true ;;
+      --no-safety-backup) safety=false ;;
+      -*) fail "Unknown option $arg" ;;
+      *) archive=$arg ;;
+    esac
+  done
+  [ -n "$archive" ] || fail "Usage: ymerctl restore <backup file> [--yes] [--no-safety-backup]"
+  [ -f "$archive" ] || fail "No such file: $archive"
+  archive=$(readlink -f -- "$archive")
+  need_docker
+  prepare
+  if ! $yes; then
+    echo "This replaces ALL of Ymer's data (database and files) with the backup"
+    echo "  $archive"
+    printf 'Type "restore" to continue: '
+    read -r answer
+    [ "$answer" = restore ] || fail "Cancelled."
+  fi
+  work=$(mktemp -d "$YMER_BACKUP_DIR/.restore.XXXXXX")
+  trap 'rm -rf "$work"' EXIT
+  case $archive in
+    *.enc)
+      passphrase=$(setting YMER_BACKUP_PASSPHRASE)
+      [ -n "$passphrase" ] || fail "The backup is encrypted: set YMER_BACKUP_PASSPHRASE in $env_file."
+      YMER_BACKUP_PASSPHRASE=$passphrase openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+        -pass env:YMER_BACKUP_PASSPHRASE -in "$archive" | tar -C "$work" -xzf -
+      ;;
+    *) tar -C "$work" -xzf "$archive" ;;
+  esac
+  [ -s "$work/postgres.dump" ] && [ -f "$work/manifest.json" ] || fail "Not a Ymer backup: $archive"
+  want=$(sed -n 's/.*"postgres_dump_sha256": "\([0-9a-f]*\)".*/\1/p' "$work/manifest.json")
+  have=$(sha256sum "$work/postgres.dump" | cut -d' ' -f1)
+  [ "$want" = "$have" ] || fail "The database dump in $archive is damaged (checksum mismatch)."
+  mkdir -p "$work/files"
+  chmod -R a+rX "$work"
+
+  if $safety && [ -n "$(compose ps -q postgres 2>/dev/null)" ]; then
+    echo "Taking a safety backup of the current data first ..."
+    (backup)
+  fi
+
+  echo "Stopping Ymer ..."
+  # shellcheck disable=SC2046
+  compose stop $(app_services) >/dev/null 2>&1 || true
+  compose up -d --wait --wait-timeout 300 postgres minio
+
+  echo "Restoring the database ..."
+  compose exec -T postgres sh -c 'dropdb -U ymer --if-exists --force ymer && createdb -U ymer -O ymer ymer'
+  compose exec -T postgres pg_restore -U ymer -d ymer --no-owner --exit-on-error <"$work/postgres.dump"
+
+  echo "Restoring the files ..."
+  mc_run -v "$work/files:/backup/files:ro" --entrypoint sh minio -c \
+    'mc alias set ymer http://minio:9000 ymer "$MINIO_ROOT_PASSWORD" >/dev/null && mc mb --ignore-existing ymer/ymer-files >/dev/null && mc mirror --quiet --overwrite --remove /backup/files ymer/ymer-files'
+
+  rm -rf "$work"
+  trap - EXIT
+  echo "Restored. Starting Ymer (migrations bring an older backup up to date) ..."
+  start
+}
+
+# --- Production readiness ----------------------------------------------------------
+
+check() {
+  [ -f "$env_file" ] || fail "No settings at $env_file. Run ymerctl init first."
+  problems=0
+  warnings=0
+  ok() { printf '  ok    %s\n' "$*"; }
+  warn() { printf '  WARN  %s\n' "$*"; warnings=$((warnings + 1)); }
+  bad() { printf '  FAIL  %s\n' "$*"; problems=$((problems + 1)); }
+
+  echo "Settings ($env_file)"
+  perms=$(stat -c %a "$env_file" 2>/dev/null || echo "?")
+  case $perms in 600|400) ok "settings file is private ($perms)" ;; *) bad "settings file is mode $perms: run chmod 600 $env_file" ;; esac
+  public=$(setting YMER_PUBLIC_URL)
+  domain=$(setting YMER_DOMAIN)
+  case $public in
+    https://*) ok "served over HTTPS ($public)" ;;
+    *) bad "YMER_PUBLIC_URL is $public: set YMER_DOMAIN (and YMER_ACME_EMAIL) for HTTPS, or put your own HTTPS proxy in front" ;;
+  esac
+  if [ -n "$domain" ]; then
+    [ "$public" = "https://$domain" ] || bad "YMER_PUBLIC_URL should be https://$domain"
+    [ -n "$(setting YMER_ACME_EMAIL)" ] && ok "Let's Encrypt contact set" || bad "YMER_ACME_EMAIL is empty"
+    [ "$(setting YMER_HTTP_BIND)" = 127.0.0.1 ] && ok "plain HTTP port is local only" \
+      || warn "YMER_HTTP_BIND is $(setting YMER_HTTP_BIND): port $(setting YMER_HTTP_PORT) also serves plain HTTP to the network"
+    if command -v getent >/dev/null; then
+      getent hosts "$domain" >/dev/null && ok "$domain resolves" || bad "$domain does not resolve in DNS yet"
+    fi
+    [ "$(setting YMER_TRUSTED_PROXIES)" = 2 ] && ok "trusts Caddy and nginx for client addresses" \
+      || warn "YMER_TRUSTED_PROXIES should be 2 behind Caddy (rate limits and the audit log see the wrong address)"
+  fi
+  is_true "$(setting YMER_COOKIE_SECURE)" && ok "secure cookies" || bad "YMER_COOKIE_SECURE is not true"
+  for key in POSTGRES_PASSWORD MINIO_ROOT_PASSWORD YMER_SECRET_KEY YMER_COLLAB_SECRET; do
+    value=$(setting "$key")
+    [ ${#value} -ge 32 ] || bad "$key is shorter than 32 characters"
+  done
+  ok "secrets are set"
+  is_true "$(setting YMER_REGISTRATION_ENABLED | grep . || echo true)" \
+    && warn "anyone who can open the site may sign up (YMER_REGISTRATION_ENABLED=false closes it)" \
+    || ok "sign-ups are closed"
+
+  provider=$(setting YMER_AI_PROVIDER)
+  case $provider in
+    anthropic)
+      if [ -n "$(setting ANTHROPIC_API_KEY)$(setting YMER_AI_API_KEY)" ]; then ok "AI uses Claude"; else bad "YMER_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty"; fi ;;
+    fake|"") warn "AI is the offline demo (YMER_AI_PROVIDER=fake)" ;;
+    *) ok "AI provider: $provider" ;;
+  esac
+  sandbox=$(setting YMER_FACTORY_SANDBOX)
+  case $sandbox in
+    fake|"") warn "Factory builds are simulated (YMER_FACTORY_SANDBOX=fake)" ;;
+    *) ok "Factory sandbox: $sandbox" ;;
+  esac
+  [ "$(setting YMER_LOG_FORMAT)" = json ] && ok "JSON logs" || warn "YMER_LOG_FORMAT is not json (fine if nobody ships the logs)"
+
+  echo "Backups"
+  prepare
+  [ -n "$(setting YMER_BACKUP_S3_URL)" ] && ok "off-site copies to $(setting YMER_BACKUP_S3_URL)" \
+    || warn "no off-site copy (YMER_BACKUP_S3_*): a lost disk loses the backups too"
+  [ -n "$(setting YMER_BACKUP_PASSPHRASE)" ] && ok "backups are encrypted" || warn "backups are not encrypted (YMER_BACKUP_PASSPHRASE)"
+  # shellcheck disable=SC2012
+  latest=$(ls -1t "$YMER_BACKUP_DIR"/ymer-backup-* 2>/dev/null | head -n 1 || true)
+  if [ -z "$latest" ]; then
+    bad "no backup in $YMER_BACKUP_DIR yet: run ymerctl backup, and schedule it"
+  else
+    age=$(( ($(date +%s) - $(stat -c %Y "$latest")) / 3600 ))
+    [ "$age" -le 26 ] && ok "latest backup is ${age}h old" || bad "latest backup is ${age}h old"
+  fi
+
+  echo "Monitoring"
+  if is_true "$(setting YMER_MONITORING)"; then
+    ok "Prometheus, Alertmanager and Grafana are on"
+    [ -n "$(setting YMER_ALERT_SLACK_WEBHOOK)$(setting YMER_ALERT_WEBHOOK_URL)$(setting YMER_ALERT_EMAIL_TO)" ] \
+      && ok "alerts have somewhere to go" || bad "alerts go nowhere: set YMER_ALERT_SLACK_WEBHOOK, YMER_ALERT_WEBHOOK_URL or YMER_ALERT_EMAIL_TO"
+  else
+    warn "monitoring is off (YMER_MONITORING=true turns it on)"
+  fi
+
+  echo "Running server"
+  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+    unhealthy=$(compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | awk '$2 == "unhealthy" {print $1}' | tr '\n' ' ')
+    running=$(compose ps --services --status running 2>/dev/null | tr '\n' ' ')
+    if [ -n "$running" ]; then
+      missing=""
+      for service in $(app_services); do
+        case " $running " in *" $service "*) ;; *) missing="$missing $service" ;; esac
+      done
+      [ -z "$missing" ] && ok "all Ymer services are running" || bad "not running:$missing"
+    else
+      warn "Ymer is not running"
+    fi
+    [ -z "$unhealthy" ] || bad "unhealthy: $unhealthy"
+    if [ -n "$running" ]; then
+      ready=$(compose exec -T api python -c "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:5000/api/health/ready', timeout=5); sys.stdout.write(r.read().decode())" 2>/dev/null || true)
+      case $ready in *'"status":"ok"'*) ok "API ready (database, Redis and storage reachable)" ;; *) bad "API is not ready: ${ready:-no answer}" ;; esac
+    fi
+    if [ -n "$domain" ] && command -v curl >/dev/null; then
+      curl -fsS -o /dev/null --max-time 10 "https://$domain/api/health" 2>/dev/null && ok "https://$domain answers with a valid certificate" \
+        || bad "https://$domain/api/health did not answer (DNS, firewall or certificate)"
+    fi
+  else
+    warn "Docker is not reachable from this user; skipped the live checks"
+  fi
+
+  echo
+  if [ "$problems" -gt 0 ]; then
+    echo "$problems problem(s) and $warnings warning(s). Fix the FAIL lines before going live."
+    return 1
+  fi
+  echo "Ready for production ($warnings warning(s))."
 }
 
 cmd=${1:-help}
@@ -115,13 +611,25 @@ cmd=${1:-help}
 case $cmd in
   init) init ;;
   start|up) start ;;
-  stop|down) need_docker; compose stop ;;
-  restart) need_docker; compose stop; start ;;
-  status|ps) need_docker; compose ps --all ;;
-  logs) need_docker; compose logs --follow --tail 200 "$@" ;;
-  update) need_docker; init >/dev/null; compose pull; start ;;
+  stop|down) need_docker; prepare; compose stop ;;
+  restart) need_docker; prepare; compose stop; start ;;
+  status|ps) need_docker; prepare; compose ps --all ;;
+  logs) need_docker; prepare; compose logs --follow --tail 200 "$@" ;;
+  update)
+    need_docker
+    init >/dev/null
+    prepare
+    if [ -n "$(compose ps -q postgres 2>/dev/null)" ]; then backup; fi
+    compose pull
+    start
+    ;;
   url) url ;;
-  compose) need_docker; compose "$@" ;;
+  https) https "$@" ;;
+  check) check ;;
+  backup) backup ;;
+  backups) list_backups ;;
+  restore) restore "$@" ;;
+  compose) need_docker; prepare; compose "$@" ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

@@ -55,6 +55,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
     )
 
+    from ymer.observability import init_observability
+
+    init_observability(app, settings)
+
     from ymer.api import api_bp
 
     app.register_blueprint(api_bp)
