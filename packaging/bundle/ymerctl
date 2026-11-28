@@ -276,7 +276,8 @@ prepare() {
   export COMPOSE_PROFILES="$profiles"
   YMER_BACKUP_DIR=$(backup_dir)
   export YMER_BACKUP_DIR
-  mkdir -p "$YMER_BACKUP_DIR/.metrics" 2>/dev/null || true
+  # node-exporter (nobody) reads the backup metrics from here.
+  mkdir -p "$YMER_BACKUP_DIR/.metrics" 2>/dev/null && chmod 755 "$YMER_BACKUP_DIR/.metrics" 2>/dev/null || true
   export YMER_ALERTMANAGER_CONFIG="$state_dir/alertmanager.yml"
   if is_true "$(setting YMER_MONITORING)"; then
     ensure_setting YMER_GRAFANA_PASSWORD "$(secret)"
@@ -319,6 +320,7 @@ write_backup_metric() { # success|failure, [bytes], [seconds]
   mdir="$YMER_BACKUP_DIR/.metrics"
   mfile="$mdir/ymer_backup.prom"
   mkdir -p "$mdir"
+  chmod 755 "$mdir"
   ok=$(sed -n 's/^ymer_backup_last_success_timestamp_seconds //p' "$mfile" 2>/dev/null || true)
   bad=$(sed -n 's/^ymer_backup_last_failure_timestamp_seconds //p' "$mfile" 2>/dev/null || true)
   size=$(sed -n 's/^ymer_backup_last_size_bytes //p' "$mfile" 2>/dev/null || true)
@@ -344,8 +346,10 @@ write_backup_metric() { # success|failure, [bytes], [seconds]
 }
 
 # Run mc (the MinIO client in the MinIO image) on the Docker network.
-mc_run() { # extra docker args..., -- script
-  compose run --rm --no-deps -T "$@"
+# It runs as the calling user, so files it writes to the backup folder stay deletable
+# by that user (Docker users are often not root).
+mc_run() {
+  compose run --rm --no-deps -T --user "$(id -u):$(id -g)" -e MC_CONFIG_DIR=/tmp/.mc "$@"
 }
 
 backup() {
@@ -374,7 +378,6 @@ backup() {
   compose exec -T postgres pg_dump -U ymer -d ymer --format=custom --compress=6 >"$work/postgres.dump"
   [ -s "$work/postgres.dump" ] || fail "pg_dump wrote nothing."
   mkdir -p "$work/files"
-  chmod 777 "$work/files"
   mc_run -v "$work/files:/backup/files" --entrypoint sh minio -c \
     'mc alias set ymer http://minio:9000 ymer "$MINIO_ROOT_PASSWORD" >/dev/null && mc mirror --quiet --overwrite ymer/ymer-files /backup/files'
   files=$(find "$work/files" -type f | wc -l | tr -d ' ')
